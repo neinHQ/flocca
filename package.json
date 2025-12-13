@@ -6,10 +6,10 @@
   "publisher": "flocca",
   "repository": {
     "type": "git",
-    "url": "https://github.com/flocca-vscode"
+    "url": "https://github.com/neinHQ/flocca-vscode"
   },
   "bugs": {
-    "url": "https://github.com/flocca-vscode/issues"
+    "url": "https://github.com/neinHQ/flocca-vscode/issues"
   },
   "engines": {
     "vscode": "^1.90.0"

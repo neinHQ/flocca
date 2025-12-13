@@ -946,3 +946,28 @@ Result: "Shared Vault" and "Collaborative Workflows" are impossible right now. T
 ### 4. AWS Proxy
 - [x] Install `aws4`
 - [x] Implement SigV4 Signing in `proxy.js`
+
+
+- Reduce the content of github and bitbucket in the server resgistry so that when they connected, the button is still well aligned and not cut off wrongly with the check mark at the top and the connected text at the bottom. 
+- Write documentation for the server registry.
+- Write documentation for every agents and how to use them. Including how to set them up and where to get the credentials from their providers.
+- Put an information icon next to each agent in the server registry to show the documentation.
+- Make sure the documentation is easy to read and understand.
+- Make sure the documentation is easy to navigate.
+- Make sure the documentation is easy to update.
+- Make sure the documentation is easy to maintain.
+- Make sure the documentation is translated to all the languages with the largest number of vscode downloads. including:
+- English (default)
+- Chinese (Simplified & Traditional)
+- Japanese
+- Korean
+- French
+- German
+- Spanish
+- Portuguese
+- Russian
+- Italian
+- Polish
+- Turkish
+
+Now implement this on the website.
