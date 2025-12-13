@@ -1,0 +1,8 @@
+{
+    "name": "mcp-stripe-server",
+    "version": "1.0.0",
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^0.6.0",
+        "axios": "^1.6.0"
+    }
+}

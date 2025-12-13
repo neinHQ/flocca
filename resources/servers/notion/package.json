@@ -1,0 +1,15 @@
+{
+    "name": "notion-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP Server for Notion",
+    "main": "server.js",
+    "scripts": {
+        "test": "jest"
+    },
+    "dependencies": {
+        "@notionhq/client": "^2.2.14"
+    },
+    "devDependencies": {
+        "jest": "^29.7.0"
+    }
+}

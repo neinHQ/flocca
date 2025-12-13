@@ -1,0 +1,15 @@
+{
+    "name": "github-actions-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP Server for GitHub Actions",
+    "main": "server.js",
+    "scripts": {
+        "test": "jest"
+    },
+    "dependencies": {
+        "@octokit/rest": "^20.0.0"
+    },
+    "devDependencies": {
+        "jest": "^30.2.0"
+    }
+}

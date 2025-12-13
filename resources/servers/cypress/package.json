@@ -1,0 +1,10 @@
+{
+    "name": "cypress-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP Server for Cypress execution",
+    "main": "server.js",
+    "dependencies": {
+        "glob": "^10.3.10",
+        "cross-spawn": "^7.0.3"
+    }
+}

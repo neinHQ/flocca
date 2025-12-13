@@ -1,0 +1,15 @@
+{
+    "name": "sentry-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP Server for Sentry",
+    "main": "server.js",
+    "dependencies": {
+        "axios": "^1.6.0"
+    },
+    "scripts": {
+        "test": "jest"
+    },
+    "devDependencies": {
+        "jest": "^30.2.0"
+    }
+}

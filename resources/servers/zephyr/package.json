@@ -1,0 +1,12 @@
+{
+    "name": "zephyr-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP Server for Zephyr Scale",
+    "main": "server.js",
+    "scripts": {
+        "test": "jest"
+    },
+    "devDependencies": {
+        "jest": "^29.7.0"
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "name": "azure-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP Server for Azure Cloud Management",
+    "scripts": {
+        "test": "jest"
+    },
+    "dependencies": {
+        "@azure/arm-appservice": "latest",
+        "@azure/arm-compute": "latest",
+        "@azure/arm-containerservice": "latest",
+        "@azure/arm-monitor": "latest",
+        "@azure/arm-resources": "latest",
+        "@azure/core-auth": "latest",
+        "@azure/identity": "latest",
+        "@azure/monitor-query": "latest",
+        "@azure/storage-blob": "latest",
+        "@azure/storage-queue": "latest"
+    },
+    "devDependencies": {
+        "jest": "^30.2.0"
+    }
+}

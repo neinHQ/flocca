@@ -1,0 +1,40 @@
+{
+    "name": "Start Feature from Jira",
+    "description": "Fetches a Jira issue, creates a git branch, and scaffolding.",
+    "steps": [
+        {
+            "id": "get_issue",
+            "serverName": "jira",
+            "toolName": "get_issue",
+            "arguments": {
+                "issueKey": "PROJ-1"
+            }
+        },
+        {
+            "id": "checkout",
+            "serverName": "codebase",
+            "toolName": "git.checkout",
+            "arguments": {
+                "branch": "feature/${get_issue.result.key}",
+                "create": true
+            }
+        },
+        {
+            "id": "scaffold",
+            "serverName": "codebase",
+            "toolName": "code.writeFile",
+            "arguments": {
+                "path": "src/features/${get_issue.result.key}/README.md",
+                "content": "# Feature ${get_issue.result.key}\n\n${get_issue.result.fields.summary}"
+            }
+        },
+        {
+            "id": "commit",
+            "serverName": "codebase",
+            "toolName": "git.commit",
+            "arguments": {
+                "message": "feat: init scaffold for ${get_issue.result.key}"
+            }
+        }
+    ]
+}

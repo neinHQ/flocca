@@ -1,0 +1,12 @@
+{
+    "name": "bitbucket-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP Server for Bitbucket Cloud & Server",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js"
+    },
+    "dependencies": {
+        "axios": "^1.6.0"
+    }
+}

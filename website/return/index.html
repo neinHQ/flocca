@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Flocca - Payment Status</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { "primary": "#f9f506", "background-light": "#f8f8f5" },
+                    fontFamily: { "display": ["Spline Sans", "sans-serif"] }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-background-light font-display min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center" id="status-card">
+        <!-- Loading State -->
+        <div id="loading">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
+            <h2 class="text-xl font-bold mb-2">Verifying Payment...</h2>
+            <p class="text-gray-500">Please wait while we confirm your subscription.</p>
+        </div>
+
+        <!-- Success State -->
+        <div id="success" class="hidden">
+            <div
+                class="h-16 w-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">Payment Successful!</h2>
+            <p class="text-gray-500 mb-6">Your Flocca Pro subscription is now active.</p>
+            <p class="text-sm font-bold text-black bg-gray-100 p-3 rounded-lg mb-6">
+                You can now close this window and return to VS Code.
+            </p>
+            <button onclick="window.close()"
+                class="w-full py-3 bg-black text-white rounded-lg font-bold hover:bg-gray-800 transition">Close
+                Window</button>
+        </div>
+
+        <!-- Error State -->
+        <div id="error" class="hidden">
+            <div class="h-16 w-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
+                </svg>
+            </div>
+            <h2 class="text-xl font-bold mb-2">Something went wrong</h2>
+            <div id="error-message" class="text-gray-500 mb-6">We couldn't verify your payment.</div>
+            <a href="/pricing"
+                class="block w-full py-3 bg-gray-200 text-black rounded-lg font-bold hover:bg-gray-300 transition">Try
+                Again</a>
+        </div>
+    </div>
+
+    <script>
+        async function checkStatus() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('session_id');
+
+            if (!sessionId) {
+                showError("No session ID found.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`http://localhost:3000/billing/session-status?session_id=${sessionId}`);
+                const data = await res.json();
+
+                if (data.status === 'open') {
+                    // Payment exists but not paid? Maybe redirect back
+                    window.location.href = `/pricing?userId=${getUrlParam('userId')}`; // Assuming userId persisted or simple error
+                } else if (data.status === 'complete') {
+                    showSuccess();
+                } else {
+                    showError("Status: " + data.status)
+                }
+            } catch (e) {
+                console.error(e);
+                // Fallback: If backend check fails (user closed local server?), 
+                // we can just say "If you paid, check VS Code".
+                // But for now, let's assume local server is up.
+                showError("Connection failed. Check if Backend is running.");
+            }
+        }
+
+        function showSuccess() {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('success').classList.remove('hidden');
+        }
+
+        function showError(msg) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.remove('hidden');
+            document.getElementById('error-message').innerText = msg;
+        }
+
+        checkStatus();
+    </script>
+</body>
+
+</html>

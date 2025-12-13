@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String       @id @default(uuid())
+  email     String?      @unique
+  password  String?      // Hashed
+  githubId  String?      @unique
+  gitlabId  String?      @unique
+  createdAt DateTime     @default(now())
+
+  // Billing
+  stripeCustomerId   String?
+  subscriptionStatus String       @default("free") // "free", "active", "pro", "past_due"
+  stripeSubscriptionId String?
+
+  connections Connection[]
+  teams       TeamMember[]
+}
+
+model Connection {
+  id          String   @id @default(uuid())
+  provider    String   // e.g. "zephyr", "jira"
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  teamId      String?
+  team        Team?    @relation(fields: [teamId], references: [id])
+  
+  // Encrypted Data
+  encryptedData String // JSON string of { token, site_url, ... }
+  iv            String // Initialization Vector
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, provider])
+}
+
+model Team {
+  id          String       @id @default(uuid())
+  name        String
+  createdAt   DateTime     @default(now())
+  
+  members     TeamMember[]
+  connections Connection[] // Shared vault items
+  invites     InviteCode[]
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  userId    String
+  teamId    String
+  role      String   @default("MEMBER") // OWNER, ADMIN, MEMBER
+  
+  user      User     @relation(fields: [userId], references: [id])
+  team      Team     @relation(fields: [teamId], references: [id])
+
+  @@unique([userId, teamId])
+}
+
+model InviteCode {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+  expiresAt DateTime
+}

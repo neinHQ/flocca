@@ -1,0 +1,495 @@
+## UI Mockups
+
+
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Flocca - VS Code Dev Tools Orchestrator</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f9f506",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#23220f",
+                        "dark-text": "#181811",
+                        "slate-accent": "#e2e2dc"
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-dark-text font-display antialiased overflow-x-hidden">
+<div class="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-accent">
+<div class="px-6 md:px-10 py-4 max-w-7xl mx-auto flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-8 bg-black rounded-lg flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">terminal</span>
+</div>
+<h2 class="text-xl font-bold tracking-tight">Flocca</h2>
+</div>
+<div class="hidden md:flex items-center gap-8">
+<a class="text-sm font-semibold hover:text-black/70 transition-colors" href="#how-it-works">How It Works</a>
+<a class="text-sm font-semibold hover:text-black/70 transition-colors" href="#features">Features</a>
+<a class="text-sm font-semibold hover:text-black/70 transition-colors" href="#integrations">Integrations</a>
+<a class="text-sm font-semibold hover:text-black/70 transition-colors" href="#pricing">Pricing</a>
+</div>
+<button class="hidden sm:flex h-10 px-6 items-center justify-center rounded-full bg-primary hover:bg-[#e6e205] transition-colors text-black text-sm font-bold tracking-wide shadow-sm hover:shadow-md">
+            Get Started
+        </button>
+<button class="md:hidden p-2">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</div>
+</div>
+<section class="relative pt-32 pb-20 px-6 md:px-10 overflow-hidden">
+<div class="absolute top-20 right-0 -mr-20 w-96 h-96 bg-primary/20 rounded-full blur-3xl -z-10"></div>
+<div class="absolute bottom-0 left-0 -ml-20 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl -z-10"></div>
+<div class="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16">
+<div class="flex-1 flex flex-col gap-4 lg:max-w-xl">
+<div class="inline-flex items-center gap-2 px-3 py-1 bg-white border border-slate-accent rounded-full w-fit mb-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="text-xs font-bold uppercase tracking-wider text-gray-500">Built for Developers, DevOps, and QA teams</span>
+</div>
+<h1 class="text-5xl md:text-6xl lg:text-7xl font-black leading-[0.95] tracking-tighter mb-2">
+                Orchestrate Your Dev Tools from <span class="relative inline-block px-2">VS Code<span class="absolute bottom-2 left-0 w-full h-4 bg-primary/40 -z-10 -rotate-2"></span></span>
+</h1>
+<h2 class="text-xl md:text-2xl font-bold text-gray-800 leading-tight">
+                Flocca bridges local environments, cloud infrastructure, and AI agents using MCP.
+            </h2>
+<p class="text-lg text-gray-600 font-medium leading-relaxed max-w-lg">
+                Copilot, Cursor, Codex, and other AI agents use Flocca’s MCP servers to work across Jira, Figma, GitHub, CI/CD, and cloud platforms like AWS, Azure, and GCP — all without leaving VS Code.
+            </p>
+<div class="w-full bg-[#1e1e1e] border border-gray-800 rounded-lg p-3 shadow-sm overflow-x-auto my-2">
+<code class="font-mono text-xs md:text-sm text-green-400 whitespace-nowrap">Jira → Figma → Code → Tests → CI → Cloud → Slack / Teams</code>
+</div>
+<div class="flex flex-wrap gap-4 pt-2">
+<button class="h-12 px-8 flex items-center gap-2 rounded-full bg-black text-white hover:bg-gray-800 transition-all font-bold shadow-lg hover:shadow-xl hover:-translate-y-1">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span>Install for VS Code</span>
+</button>
+<button class="h-12 px-8 flex items-center gap-2 rounded-full bg-white border-2 border-slate-accent hover:border-black transition-all font-bold text-black">
+<span class="material-symbols-outlined text-[20px]">visibility</span>
+<span>See How It Works</span>
+</button>
+</div>
+<div class="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wide mt-2">
+<span class="material-symbols-outlined text-sm text-primary">lock</span>
+<p>MCP-native. Secure Vault. No secrets pasted into your IDE.</p>
+</div>
+</div>
+<div class="flex-1 w-full relative group perspective-1000">
+<div class="relative z-10 bg-[#1e1e1e] rounded-xl shadow-2xl border border-gray-800 overflow-hidden transform transition-transform duration-700 hover:rotate-y-2 hover:scale-[1.01]">
+<div class="bg-[#2d2d2d] px-4 py-3 flex items-center justify-between border-b border-black">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+<div class="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+<div class="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+</div>
+<div class="text-xs text-gray-400 font-mono">index.ts — Flocca</div>
+<div class="w-10"></div>
+</div>
+<div class="aspect-video w-full bg-[#1e1e1e] relative">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="VS Code extension interface screenshot showing code and sidebar tools" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCh9yLBud-r4QNg5GSYpWuQGLM4EAXGpuL3prvySIRQSnP7gftT3EVAxvsPKkzZn8AklWlU0X6PBpEEs6z5WfqOk1TRAimpBDkS5FeQC_pZ-YGJE4Vz4130AcHtX4Wh5bDTNbWtnJ24KvOHmJkp7pWlOlBWnBP_J8sJ5Ff9VzluZxU_PEkhol1VQj_bZl3ib_ygOoc_b70NRsiHiGSo9_wzXGjmu4emCq8EzUKTOa39iGCYWxes0X2x1LX685M8YcKL1VezDxVdTjg'); opacity: 0.8;"></div>
+<div class="absolute right-0 top-0 bottom-0 w-80 bg-[#252526] border-l border-[#3e3e42] p-4 flex flex-col gap-4 shadow-xl">
+<div class="text-white font-bold text-sm uppercase tracking-wider mb-2 border-b border-gray-700 pb-2">Flocca Tools</div>
+<div class="bg-[#37373d] p-3 rounded text-xs text-gray-300 border-l-2 border-primary">
+<div class="flex justify-between mb-1">
+<span class="font-bold text-white">JIRA-1024</span>
+<span class="text-primary">In Progress</span>
+</div>
+                            Fix auth token expiration bug
+                        </div>
+<div class="bg-[#37373d] p-3 rounded text-xs text-gray-300">
+<div class="flex justify-between mb-1">
+<span class="font-bold text-white">AWS ECS</span>
+<span class="text-green-400">Healthy</span>
+</div>
+                            us-east-1a prod-cluster
+                        </div>
+<div class="bg-primary/20 p-3 rounded text-xs text-primary border border-primary/30 mt-auto">
+<div class="flex items-center gap-2 font-bold mb-1">
+<span class="material-symbols-outlined text-[16px]">lock</span>
+                                Vault Unlocked
+                            </div>
+                            Credentials active for session
+                        </div>
+</div>
+</div>
+</div>
+<div class="absolute -inset-4 bg-gradient-to-tr from-primary to-purple-500 opacity-20 blur-2xl -z-10 rounded-[3rem]"></div>
+</div>
+</div>
+</section>
+<section class="bg-black py-12 border-y border-white/10 relative overflow-hidden">
+<div class="max-w-7xl mx-auto px-6 md:px-10">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-8">
+<h3 class="text-white text-xl md:text-2xl font-bold whitespace-nowrap">Built for Modern Engineering Teams</h3>
+<div class="h-px bg-white/20 flex-1 hidden md:block mx-8"></div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 w-full md:w-auto">
+<div class="flex flex-col gap-1">
+<span class="text-primary font-bold uppercase tracking-wider text-sm">Developers</span>
+<p class="text-gray-400 text-sm">Ship features faster</p>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-purple-400 font-bold uppercase tracking-wider text-sm">DevOps</span>
+<p class="text-gray-400 text-sm">Automate CI/CD &amp; cloud</p>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-teal-400 font-bold uppercase tracking-wider text-sm">QA / SDET</span>
+<p class="text-gray-400 text-sm">Validate designs &amp; tests</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="py-20 border-b border-white/5 bg-[#0B0C15] relative overflow-hidden" id="integrations">
+<div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/10 via-[#0B0C15]/0 to-transparent pointer-events-none"></div>
+<div class="max-w-7xl mx-auto px-6 md:px-10 text-center mb-12 relative z-10">
+<h3 class="text-sm font-bold uppercase tracking-[0.25em] text-gray-500">Powering the tools you trust</h3>
+</div>
+<div class="w-full overflow-hidden relative z-10">
+<div class="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-[#0B0C15] to-transparent z-20 pointer-events-none"></div>
+<div class="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#0B0C15] to-transparent z-20 pointer-events-none"></div>
+<div class="flex items-center gap-8 animate-marquee w-max py-4">
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-blue-400 group-hover:drop-shadow-[0_0_8px_rgba(96,165,250,0.5)] transition-all">dataset</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Jira</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-white group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)] transition-all">code_blocks</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">GitHub</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-orange-400 group-hover:drop-shadow-[0_0_8px_rgba(251,146,60,0.5)] transition-all">cloud</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">AWS</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-purple-400 group-hover:drop-shadow-[0_0_8px_rgba(192,132,252,0.5)] transition-all">forum</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Slack</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-orange-600 group-hover:drop-shadow-[0_0_8px_rgba(234,88,12,0.5)] transition-all">deployed_code</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">GitLab</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-indigo-400 group-hover:drop-shadow-[0_0_8px_rgba(129,140,248,0.5)] transition-all">payments</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Stripe</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-green-500 group-hover:drop-shadow-[0_0_8px_rgba(34,197,94,0.5)] transition-all">database</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Mongo</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-blue-500 group-hover:drop-shadow-[0_0_8px_rgba(59,130,246,0.5)] transition-all">layers</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Docker</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-blue-400 group-hover:drop-shadow-[0_0_8px_rgba(96,165,250,0.5)] transition-all">dataset</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Jira</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-white group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)] transition-all">code_blocks</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">GitHub</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-orange-400 group-hover:drop-shadow-[0_0_8px_rgba(251,146,60,0.5)] transition-all">cloud</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">AWS</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-purple-400 group-hover:drop-shadow-[0_0_8px_rgba(192,132,252,0.5)] transition-all">forum</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Slack</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-orange-600 group-hover:drop-shadow-[0_0_8px_rgba(234,88,12,0.5)] transition-all">deployed_code</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">GitLab</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-indigo-400 group-hover:drop-shadow-[0_0_8px_rgba(129,140,248,0.5)] transition-all">payments</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Stripe</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-green-500 group-hover:drop-shadow-[0_0_8px_rgba(34,197,94,0.5)] transition-all">database</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Mongo</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-teal-400 rounded-full opacity-20 group-hover:opacity-100 blur transition duration-500"></div>
+<div class="relative flex items-center gap-3 px-8 py-3 bg-[#13131a] rounded-full ring-1 ring-white/10 group-hover:ring-transparent transition-all">
+<span class="material-symbols-outlined text-2xl text-blue-500 group-hover:drop-shadow-[0_0_8px_rgba(59,130,246,0.5)] transition-all">layers</span>
+<span class="text-lg font-bold text-gray-400 group-hover:text-white transition-colors">Docker</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="py-24 bg-[#0B0C15] text-white relative overflow-hidden" id="how-it-works">
+<div class="absolute inset-0 bg-gradient-to-b from-[#0B0C15] to-[#12131F] pointer-events-none"></div>
+<div class="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-900/10 rounded-full blur-[100px] pointer-events-none"></div>
+<div class="max-w-7xl mx-auto px-6 md:px-10 relative z-10">
+<div class="mb-16 max-w-3xl">
+<h2 class="text-4xl md:text-5xl font-black mb-6 tracking-tight">How Flocca Works</h2>
+<p class="text-xl text-gray-400">Flocca turns your toolchain into MCP-enabled tools that AI agents can safely use.</p>
+</div>
+<div class="grid md:grid-cols-3 gap-12">
+<div class="group relative">
+<div class="absolute -inset-4 bg-gradient-to-b from-white/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="relative">
+<div class="text-6xl font-black text-white/5 group-hover:text-primary/20 transition-colors mb-6 select-none">01</div>
+<h3 class="text-2xl font-bold mb-4 text-white group-hover:text-primary transition-colors">Connect Your Toolchain</h3>
+<p class="text-gray-400 mb-6 leading-relaxed">Install Flocca in VS Code and connect your tools.</p>
+<ul class="text-sm text-gray-500 space-y-3 mb-6">
+<li class="flex items-start gap-2"><span class="text-gray-300 font-semibold min-w-[100px]">Issue tracking:</span> Jira, Linear</li>
+<li class="flex items-start gap-2"><span class="text-gray-300 font-semibold min-w-[100px]">Design:</span> Figma</li>
+<li class="flex items-start gap-2"><span class="text-gray-300 font-semibold min-w-[100px]">Repos &amp; CI:</span> GitHub, Actions</li>
+<li class="flex items-start gap-2"><span class="text-gray-300 font-semibold min-w-[100px]">Cloud:</span> AWS, Azure, GCP</li>
+<li class="flex items-start gap-2"><span class="text-gray-300 font-semibold min-w-[100px]">Messaging:</span> Slack, Teams</li>
+</ul>
+<div class="text-xs text-primary bg-primary/10 border border-primary/20 p-3 rounded inline-block">
+                        All credentials are managed through a secure Vault.
+                    </div>
+</div>
+</div>
+<div class="group relative">
+<div class="absolute -inset-4 bg-gradient-to-b from-white/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="relative">
+<div class="text-6xl font-black text-white/5 group-hover:text-purple-400/20 transition-colors mb-6 select-none">02</div>
+<h3 class="text-2xl font-bold mb-4 text-white group-hover:text-purple-400 transition-colors">AI Agents Use MCP</h3>
+<p class="text-gray-400 mb-6 leading-relaxed">AI agents consume real context — not guesses.</p>
+<ul class="text-sm text-gray-500 space-y-3 mb-6">
+<li class="flex items-start gap-2"><span class="material-symbols-outlined text-purple-400 text-sm mt-0.5">smart_toy</span> Read Jira tickets &amp; criteria</li>
+<li class="flex items-start gap-2"><span class="material-symbols-outlined text-purple-400 text-sm mt-0.5">smart_toy</span> Understand Figma designs</li>
+<li class="flex items-start gap-2"><span class="material-symbols-outlined text-purple-400 text-sm mt-0.5">smart_toy</span> Inspect repositories &amp; tests</li>
+<li class="flex items-start gap-2"><span class="material-symbols-outlined text-purple-400 text-sm mt-0.5">smart_toy</span> Trigger CI &amp; cloud workflows</li>
+</ul>
+<div class="p-3 rounded bg-white/5 text-xs text-gray-400 font-mono border-l-2 border-purple-500">
+                        Agent reads requirements → plans work → calls MCP tools
+                    </div>
+</div>
+</div>
+<div class="group relative">
+<div class="absolute -inset-4 bg-gradient-to-b from-white/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="relative">
+<div class="text-6xl font-black text-white/5 group-hover:text-teal-400/20 transition-colors mb-6 select-none">03</div>
+<h3 class="text-2xl font-bold mb-4 text-white group-hover:text-teal-400 transition-colors">Ship, Deploy, Report</h3>
+<p class="text-gray-400 mb-6 leading-relaxed">End-to-end execution, automatically.</p>
+<ul class="text-sm text-gray-500 space-y-3 mb-6">
+<li class="flex items-start gap-2"><span class="material-symbols-outlined text-teal-400 text-sm mt-0.5">rocket_launch</span> Implement features &amp; Open PRs</li>
+<li class="flex items-start gap-2"><span class="material-symbols-outlined text-teal-400 text-sm mt-0.5">rocket_launch</span> Run tests and CI</li>
+<li class="flex items-start gap-2"><span class="material-symbols-outlined text-teal-400 text-sm mt-0.5">rocket_launch</span> Deploy to AWS / Azure / GCP</li>
+<li class="flex items-start gap-2"><span class="material-symbols-outlined text-teal-400 text-sm mt-0.5">rocket_launch</span> Notify Slack/Teams with results</li>
+</ul>
+<div class="p-3 rounded bg-white/5 text-xs text-gray-400 font-mono border-l-2 border-teal-500">
+                        PR opened → CI green → deployed → team notified.
+                    </div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="py-24 px-6 md:px-10 bg-background-light" id="features">
+<div class="max-w-7xl mx-auto">
+<div class="text-center max-w-3xl mx-auto mb-20">
+<h2 class="text-4xl md:text-5xl font-black mb-6 tracking-tight">Everything you need,<br/>right where you type.</h2>
+<p class="text-xl text-gray-600">Stop context switching. Flocca brings your entire DevOps pipeline into your editor.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<div class="group bg-white p-8 rounded-[2rem] border border-slate-accent hover:border-black/20 transition-all hover:shadow-xl flex flex-col h-full">
+<div class="w-14 h-14 rounded-full bg-black text-primary flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">lock_person</span>
+</div>
+<h3 class="text-2xl font-bold mb-3">The Vault</h3>
+<p class="text-gray-600 mb-8 leading-relaxed">End-to-end encrypted credential storage. Never commit an .env file again. Sync secrets across your team securely.</p>
+<div class="mt-auto bg-gray-50 rounded-xl p-4 border border-gray-100 overflow-hidden relative">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-green-600 text-sm">check_circle</span>
+<span class="text-xs font-mono text-gray-500">AES-256 Encryption</span>
+</div>
+<div class="font-mono text-xs text-gray-400 bg-white p-2 rounded border border-gray-100">
+                        DB_PASS=****************
+                    </div>
+</div>
+</div>
+<div class="group bg-white p-8 rounded-[2rem] border border-slate-accent hover:border-black/20 transition-all hover:shadow-xl flex flex-col h-full">
+<div class="w-14 h-14 rounded-full bg-primary text-black flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">account_tree</span>
+</div>
+<h3 class="text-2xl font-bold mb-3">Visual Workflows</h3>
+<p class="text-gray-600 mb-8 leading-relaxed">Automate your day. Trigger pipelines, update tickets, and notify Slack channels on every git push visually.</p>
+<div class="mt-auto bg-gray-50 rounded-xl p-4 border border-gray-100 flex items-center justify-center">
+<div class="flex items-center gap-1">
+<div class="size-8 rounded bg-gray-200 flex items-center justify-center"><span class="material-symbols-outlined text-xs">commit</span></div>
+<div class="h-0.5 w-4 bg-gray-300"></div>
+<div class="size-8 rounded bg-blue-100 flex items-center justify-center"><span class="material-symbols-outlined text-xs text-blue-600">rocket_launch</span></div>
+<div class="h-0.5 w-4 bg-gray-300"></div>
+<div class="size-8 rounded bg-green-100 flex items-center justify-center"><span class="material-symbols-outlined text-xs text-green-600">check</span></div>
+</div>
+</div>
+</div>
+<div class="group bg-white p-8 rounded-[2rem] border border-slate-accent hover:border-black/20 transition-all hover:shadow-xl flex flex-col h-full">
+<div class="w-14 h-14 rounded-full bg-gray-100 text-black flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">group_add</span>
+</div>
+<h3 class="text-2xl font-bold mb-3">Team Sync</h3>
+<p class="text-gray-600 mb-8 leading-relaxed">Onboard new devs in minutes, not days. Share workspace configurations and toolchains instantly.</p>
+<div class="mt-auto relative h-24">
+<div class="absolute bottom-2 left-4 w-10 h-10 rounded-full bg-white border-2 border-primary z-30 shadow-md" data-alt="Team member 1" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAo8YoIOTdW6Hrn6f_VA7V8XKb6QvNnrVMgZ4natGk0_HBOfeU2l-vI29F66zcTGRSA6NSUoHyGpyPrkVVNWDSiNQlkUHCXlSCbs7PmUnL_I2G_tg52G0hgSYGRta7lxFPlH2ZeDW2dZ4ipgWv0SkPaVXWyR8FdeK7ntlVpsBHIHZRIfvMsd5iLMI1oiAOe_GseuwGG48bo1DWh7ESv2oUS0Gia3a-1bT4S_JMA_oagLrzhuMmxsc4l4eoj1fgmQO3mvRpCOHST6Dg'); background-size: cover;"></div>
+<div class="absolute bottom-2 left-10 w-10 h-10 rounded-full bg-white border-2 border-gray-200 z-20 shadow-md" data-alt="Team member 2" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDsNsDrgwpb3hgASo0xrWNicCdbp_u8enkPcOTU9RMgr3ECSUHrds9YvYT6ZPpgxjdBzT0kv2xTC1-OYk4TZ0pENudB7R33ToBJIp3gYiyx-cQiKY9kwCRqF3KOBIEASQfDmYk1Pcd8TiSfRcCoucSwpn352yokLLFnys2DUDoiT8IJRrI3I02Nat9MD_wSqC22DZV5olEhbLdHziECvwUZ4ARDOwFeZWx-DURw_B9gqypFqyWv0G9p90s_1pYnk7HdHeA3gtI5Z_M'); background-size: cover;"></div>
+<div class="absolute bottom-2 left-16 w-10 h-10 rounded-full bg-white border-2 border-gray-200 z-10 shadow-md" data-alt="Team member 3" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDXXzMZD3RCMsXtGDtzWd-lg5GZde84fzTxswrvA1dWSIrT4FHhU5hJgH9eAILsEoO65uwEVHhk-ziSuRIKQtqAnBfh1ffPvOsaYZuDiq5PLxEBvpDb2cIaPO0GYUMsyixGrLH7Gy6z3xLifamlU4YKTgZtO5yf1P5ehbbDeuNMV7SkBLFc_gAg3iYZrlQLKA2wvCHkSkkbFyLOpgB6YSIiaJpIm5U8W41dEmMHN0eUN8YYsPip3cBSxAD3W0sJ7AZtk8YsQzzZW00'); background-size: cover;"></div>
+<div class="absolute bottom-5 left-32 text-xs font-bold text-primary bg-black px-2 py-1 rounded">+5 online</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="py-24 px-6 md:px-10 bg-white border-t border-slate-accent" id="pricing">
+<div class="max-w-7xl mx-auto">
+<div class="text-center mb-16">
+<h2 class="text-4xl font-black mb-4">Transparent Pricing</h2>
+<p class="text-gray-500 text-lg">Choose the plan that fits your workflow.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+<div class="p-8 rounded-[2rem] bg-background-light border border-slate-accent">
+<h3 class="text-xl font-bold mb-2">Individual</h3>
+<div class="text-4xl font-black mb-6">$5.99<span class="text-lg text-gray-400 font-normal">/mo</span></div>
+<p class="text-sm text-gray-500 mb-6">For power users who need full control.</p>
+<button class="w-full py-3 rounded-full border-2 border-black font-bold hover:bg-black hover:text-white transition-colors mb-8">Start Free Trial</button>
+<ul class="space-y-3 text-sm">
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-gray-400 text-lg">check</span> <strong>Unlimited</strong> Vault Storage</li>
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-gray-400 text-lg">check</span> Pro Integrations (Jira, AWS)</li>
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-gray-400 text-lg">check</span> Visual Workflow Editor</li>
+</ul>
+</div>
+<div class="p-8 rounded-[2rem] bg-white border-[3px] border-primary shadow-2xl relative md:-mt-8">
+<div class="absolute top-0 right-0 transform translate-x-2 -translate-y-4 bg-primary text-black text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">Best Value</div>
+<h3 class="text-xl font-bold mb-2">Teams</h3>
+<div class="text-4xl font-black mb-1">$12.99<span class="text-lg text-gray-400 font-normal">/user</span></div>
+<p class="text-sm text-gray-500 mb-6">Governance and sharing for growing orgs.</p>
+<button class="w-full py-3 rounded-full bg-primary font-bold hover:bg-[#e6e205] transition-colors mb-8 text-black shadow-lg">Get Started</button>
+<ul class="space-y-3 text-sm">
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-green-600 text-lg">check</span> Everything in Individual</li>
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-green-600 text-lg">check</span> SSO / SAML</li>
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-green-600 text-lg">check</span> Governance &amp; Audit Logs</li>
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-green-600 text-lg">check</span> Team Sharing</li>
+</ul>
+</div>
+<div class="p-8 rounded-[2rem] bg-background-light border border-slate-accent">
+<h3 class="text-xl font-bold mb-2">Enterprise</h3>
+<div class="text-4xl font-black mb-1">Custom</div>
+<p class="text-sm text-gray-500 mb-6">For large organizations requiring advanced control.</p>
+<button class="w-full py-3 rounded-full border-2 border-black font-bold hover:bg-black hover:text-white transition-colors mb-8">Contact Support</button>
+<ul class="space-y-3 text-sm">
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-gray-400 text-lg">check</span> Dedicated Support</li>
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-gray-400 text-lg">check</span> Custom Contracts</li>
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-gray-400 text-lg">check</span> Advanced SLA</li>
+<li class="flex items-center gap-3"><span class="material-symbols-outlined text-gray-400 text-lg">check</span> On-premise Options</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+<footer class="bg-black text-white py-16 px-6 md:px-10">
+<div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start gap-10">
+<div>
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary">terminal</span>
+<span class="text-xl font-bold">Flocca</span>
+</div>
+<p class="text-gray-400 max-w-xs text-sm">
+                Making developers 10x more productive by bringing the entire DevOps lifecycle into the IDE.
+            </p>
+</div>
+<div class="flex flex-wrap gap-12 md:gap-24">
+<div class="flex flex-col gap-3">
+<h4 class="font-bold text-gray-200">Product</h4>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">Features</a>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">Integrations</a>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">Pricing</a>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">Changelog</a>
+</div>
+<div class="flex flex-col gap-3">
+<h4 class="font-bold text-gray-200">Resources</h4>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">Documentation</a>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">API Reference</a>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">GitHub</a>
+</div>
+<div class="flex flex-col gap-3">
+<h4 class="font-bold text-gray-200">Company</h4>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">About</a>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">Careers</a>
+<a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">Support</a>
+</div>
+</div>
+</div>
+<div class="max-w-7xl mx-auto pt-10 mt-10 border-t border-gray-800 text-center md:text-left text-xs text-gray-500">
+        © 2023 Flocca Inc. All rights reserved.
+    </div>
+</footer>
+<style>
+    @keyframes marquee {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+    }
+    .animate-marquee {
+        animation: marquee 30s linear infinite;
+        width: max-content;
+    }
+</style>
+</body></html>

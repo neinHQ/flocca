@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Documentation - Flocca</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+
+    <!-- Tailwind + Typography Plugin -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography,forms,container-queries"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f9f506",
+                        "primary-hover": "#e6e205",
+                        "bg-light": "#fafafa",
+                        "bg-sidebar": "#ffffff",
+                        "border-color": "#e5e7eb",
+                        "text-main": "#18181b",
+                        "text-muted": "#71717a"
+                    },
+                    fontFamily: {
+                        "sans": ["Spline Sans", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    typography: {
+                        DEFAULT: {
+                            css: {
+                                maxWidth: 'none',
+                                color: '#18181b',
+                                h1: { fontWeight: '700', letterSpacing: '-0.025em' },
+                                h2: { marginTop: '2em', paddingBottom: '0.5em', borderBottom: '1px solid #e5e7eb' },
+                                'code::before': { content: '""' },
+                                'code::after': { content: '""' },
+                                code: {
+                                    backgroundColor: '#f4f4f5',
+                                    padding: '0.2em 0.4em',
+                                    borderRadius: '0.25rem',
+                                    fontWeight: '500',
+                                    fontFamily: 'JetBrains Mono, monospace'
+                                },
+                                pre: {
+                                    backgroundColor: '#18181b',
+                                    color: '#f4f4f5',
+                                    fontFamily: 'JetBrains Mono, monospace'
+                                }
+                            }
+                        }
+                    }
+                },
+            },
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for sidebar */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+
+<body class="bg-bg-light text-text-main font-sans antialiased selection:bg-primary/30">
+
+    <!-- Navbar -->
+    <header class="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur-xl border-b border-border-color h-16">
+        <div class="h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+            <div class="flex items-center gap-6">
+                <!-- Mobile Sidebar Toggle -->
+                <button id="mobileSidebarToggle" class="lg:hidden p-2 -ml-2 text-text-muted hover:text-black">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
+                <a href="/" class="flex items-center gap-2 group">
+                    <img src="/logo.jpg" alt="Flocca" class="size-8 rounded-lg object-contain">
+                    <span class="font-bold text-lg tracking-tight">Flocca</span>
+                </a>
+                <div class="hidden md:flex h-5 w-px bg-gray-200"></div>
+                <!-- Desktop Nav -->
+                <nav class="hidden md:flex gap-6 text-sm font-medium text-text-muted">
+                    <a href="#" class="text-black">Documentation</a>
+                    <a href="/#pricing" class="hover:text-black transition-colors">Pricing</a>
+                    <a href="https://github.com" target="_blank" class="hover:text-black transition-colors">GitHub</a>
+                </nav>
+            </div>
+            <div class="flex items-center gap-3">
+                <!-- Search -->
+                <div class="relative group hidden sm:block">
+                    <div
+                        class="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full border border-transparent focus-within:border-primary focus-within:bg-white transition-all w-48 focus-within:w-64">
+                        <span class="material-symbols-outlined text-gray-400 text-[18px]">search</span>
+                        <input type="text" id="searchInput" placeholder="Search docs..."
+                            class="bg-transparent border-none p-0 text-sm focus:ring-0 w-full placeholder:text-gray-400">
+                    </div>
+                    <!-- Results Dropdown -->
+                    <div id="searchResults"
+                        class="hidden absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50 max-h-96 overflow-y-auto">
+                        <!-- Items injected by JS -->
+                    </div>
+                </div>
+
+                <div class="h-6 w-px bg-gray-200 hidden sm:block"></div>
+
+                <select id="langSwitch" onchange="changeLang(this.value)"
+                    class="bg-transparent border border-gray-200 rounded-md text-xs font-medium py-1.5 pl-2 pr-6 focus:ring-2 focus:ring-primary focus:border-transparent cursor-pointer hover:bg-gray-50 transition-colors">
+                    <option value="en">English</option>
+                    <option value="zh">中文</option>
+                    <option value="ja">日本語</option>
+                    <option value="ko">한국어</option>
+                    <option value="fr">Français</option>
+                    <option value="de">Deutsch</option>
+                    <option value="es">Español</option>
+                    <option value="pt">Português</option>
+                    <option value="ru">Русский</option>
+                    <option value="it">Italiano</option>
+                    <option value="pl">Polski</option>
+                    <option value="tr">Türkçe</option>
+                </select>
+                <a href="/#get-started"
+                    class="hidden sm:inline-flex items-center justify-center h-8 px-4 text-xs font-bold uppercase tracking-wide bg-black text-primary rounded-full hover:bg-gray-900 transition-colors">
+                    Download
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto flex min-h-screen">
+        <!-- Mobile Backdrop -->
+        <div id="sidebarBackdrop" class="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 hidden lg:hidden"
+            onclick="toggleSidebar()"></div>
+
+        <!-- Sidebar -->
+        <aside id="docsSidebar"
+            class="fixed inset-y-0 left-0 z-40 w-64 bg-white/95 backdrop-blur-xl border-r border-border-color pt-16 pb-10 overflow-y-auto transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+            <div class="px-6 py-8">
+                <div>
+                    <h5 class="text-xs font-bold text-text-muted uppercase tracking-wider mb-4">Getting Started</h5>
+                    <ul class="space-y-1" id="basicNav">
+                        <li><button onclick="loadDoc('installation')" id="nav-installation"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Installation</button>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="mt-8">
+                    <h5 class="text-xs font-bold text-text-muted uppercase tracking-wider mb-4">Agents</h5>
+                    <ul class="space-y-1" id="agentNav">
+                        <li><button onclick="loadDoc('github')" id="nav-github"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">GitHub</button>
+                        </li>
+                        <li><button onclick="loadDoc('gitlab')" id="nav-gitlab"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">GitLab</button>
+                        </li>
+                        <li><button onclick="loadDoc('bitbucket')" id="nav-bitbucket"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Bitbucket</button>
+                        </li>
+                        <li><button onclick="loadDoc('jira')" id="nav-jira"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Jira</button>
+                        </li>
+                        <li><button onclick="loadDoc('confluence')" id="nav-confluence"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Confluence</button>
+                        </li>
+                        <li><button onclick="loadDoc('slack')" id="nav-slack"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Slack</button>
+                        </li>
+                        <li><button onclick="loadDoc('teams')" id="nav-teams"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Microsoft
+                                Teams</button></li>
+                        <li><button onclick="loadDoc('aws')" id="nav-aws"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">AWS
+                                Cloud</button></li>
+                        <li><button onclick="loadDoc('azure')" id="nav-azure"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Azure
+                                Cloud</button></li>
+                        <li><button onclick="loadDoc('gcp')" id="nav-gcp"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Google
+                                Cloud</button></li>
+                        <li><button onclick="loadDoc('docker')" id="nav-docker"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Docker</button>
+                        </li>
+                        <li><button onclick="loadDoc('kubernetes')" id="nav-kubernetes"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Kubernetes</button>
+                        </li>
+                        <li><button onclick="loadDoc('postgres')" id="nav-postgres"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">PostgreSQL</button>
+                        </li>
+                        <li><button onclick="loadDoc('elastic')" id="nav-elastic"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Elasticsearch</button>
+                        </li>
+                        <li><button onclick="loadDoc('pytest')" id="nav-pytest"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Pytest</button>
+                        </li>
+                        <li><button onclick="loadDoc('playwright')" id="nav-playwright"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Playwright</button>
+                        </li>
+                        <li><button onclick="loadDoc('cypress')" id="nav-cypress"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Cypress</button>
+                        </li>
+                        <li><button onclick="loadDoc('zephyr')" id="nav-zephyr"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Zephyr
+                                Scale</button></li>
+                        <li><button onclick="loadDoc('sentry')" id="nav-sentry"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Sentry</button>
+                        </li>
+                        <li><button onclick="loadDoc('figma')" id="nav-figma"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Figma</button>
+                        </li>
+                        <li><button onclick="loadDoc('stripe')" id="nav-stripe"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Stripe</button>
+                        </li>
+                        <li><button onclick="loadDoc('codebase')" id="nav-codebase"
+                                class="w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md">Local
+                                Codebase</button></li>
+                    </ul>
+                </div>
+                </ul>
+            </div>
+    </div>
+    </aside>
+
+    <!-- Content -->
+    <main class="flex-1 lg:pl-64 w-full">
+        <div class="max-w-3xl mx-auto px-6 pt-0 pb-12 md:pb-16">
+            <!-- Breadcrumb -->
+            <div class="flex items-center gap-2 text-sm text-text-muted mb-1 mt-4">
+                <span>Docs</span>
+            </div>
+
+            <article id="docContent"
+                class="prose prose-slate prose-headings:font-display prose-a:text-blue-600 hover:prose-a:text-blue-500 prose-h1:mt-0 first:mt-0">
+                <!-- Loaded Content -->
+                <div class="animate-pulse space-y-8">
+                    <div class="h-8 bg-gray-200 rounded w-1/3"></div>
+                    <div class="space-y-3">
+                        <div class="h-4 bg-gray-200 rounded w-full"></div>
+                        <div class="h-4 bg-gray-200 rounded w-5/6"></div>
+                        <div class="h-4 bg-gray-200 rounded w-4/6"></div>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Feedback / Footer for Doc -->
+            <div class="mt-16 pt-8 border-t border-border-color flex justify-between items-center">
+                <div class="text-sm text-text-muted">
+                    Was this page helpful?
+                </div>
+                <div class="flex gap-4">
+                    <a href="#" class="text-sm font-medium text-text-muted hover:text-black transition-colors">Edit
+                        on GitHub</a>
+                </div>
+            </div>
+        </div>
+    </main>
+    </div>
+
+    <script>
+        let currentLang = 'en';
+        let currentAgent = 'installation'; // Default to installation page
+
+        // Search State
+        let searchIndex = [];
+        let isIndexing = false;
+
+        async function loadDoc(agent) {
+            currentAgent = agent;
+
+            // Update Nav State
+            document.querySelectorAll('#agentNav button, #basicNav button').forEach(b => {
+                b.className = "w-full text-left px-3 py-1.5 text-sm font-medium text-text-muted hover:text-black hover:bg-white hover:shadow-sm transition-all rounded-md";
+            });
+            const activeBtn = document.getElementById('nav-' + agent);
+            if (activeBtn) {
+                activeBtn.className = "w-full text-left px-3 py-1.5 text-sm font-medium text-black bg-white shadow-sm ring-1 ring-gray-200 rounded-md relative";
+            }
+
+            const contentDiv = document.getElementById('docContent');
+            contentDiv.style.opacity = '0.5'; // Transition effect
+
+            try {
+                // Fetch Logic
+                let response = await fetch(`/docs/content/${currentLang}/${agent}.md`);
+                if (!response.ok) {
+                    console.log(`Docs for ${agent} in ${currentLang} not found, falling back to en`);
+                    response = await fetch(`/docs/content/en/${agent}.md`);
+                    if (!response.ok) throw new Error('Doc not found');
+                }
+
+                const text = await response.text();
+                const html = parseMarkdown(text);
+
+                contentDiv.innerHTML = html;
+
+                if (currentLang !== 'en' && response.url.includes('/en/')) {
+                    contentDiv.insertAdjacentHTML('afterbegin', `<div class="bg-orange-50 border border-orange-100 text-orange-800 px-4 py-3 rounded-lg mb-8 text-sm flex items-start gap-3"><span class="material-symbols-outlined text-[18px] mt-0.5">translate</span><div><strong>Translation Missing</strong><br>This page is not yet available in your selected language. Showing English version.</div></div>`);
+                }
+
+            } catch (e) {
+                contentDiv.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded-lg">Error loading documentation: ${e.message}</div>`;
+            } finally {
+                contentDiv.style.opacity = '1';
+                // Scroll to top
+                window.scrollTo(0, 0);
+            }
+        }
+
+        function changeLang(lang) {
+            currentLang = lang;
+            loadDoc(currentAgent);
+            // Re-build index for new language if we want language-specific search
+            // For now, let's just keep the index as is or rebuild it. 
+            // Ideally search should search across the current language.
+            buildSearchIndex();
+        }
+
+        function parseMarkdown(md) {
+            // Enhanced Parser
+            let html = md
+                // Headers
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                // Bold/Italic
+                .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+                .replace(/\*(.*)\*/gim, '<em>$1</em>')
+                // Code Blocks (Multi-line)
+                .replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+                    return `<pre><code class="language-${lang || ''}">${escapeHtml(code.trim())}</code></pre>`;
+                })
+                // Inline Code
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                // Lists
+                .replace(/^\s*-\s(.*)$/gm, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+                // Links
+                .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2">$1</a>')
+                // Paragraphs
+                .replace(/\n\n/g, '</p><p>');
+
+            if (!html.trim().startsWith('<')) {
+                html = '<p>' + html + '</p>';
+            }
+            return html;
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // --- Search Implementation ---
+
+        const searchableFiles = [
+            'installation', 'github', 'gitlab', 'bitbucket', 'jira', 'confluence',
+            'slack', 'teams', 'aws', 'azure', 'gcp', 'docker', 'kubernetes',
+            'postgres', 'elastic', 'pytest', 'playwright', 'cypress', 'zephyr',
+            'sentry', 'figma', 'stripe', 'codebase'
+        ];
+
+        async function buildSearchIndex() {
+            if (isIndexing) return;
+            isIndexing = true;
+            searchIndex = [];
+
+            // In a real app we might fetch a generated JSON index. 
+            // Here we fetch all MD files in parallel. 
+
+            const promises = searchableFiles.map(async file => {
+                try {
+                    // Try current language first
+                    let res = await fetch(`/docs/content/${currentLang}/${file}.md`);
+                    if (!res.ok) res = await fetch(`/docs/content/en/${file}.md`);
+                    if (res.ok) {
+                        const text = await res.text();
+                        return {
+                            id: file,
+                            title: file.charAt(0).toUpperCase() + file.slice(1), // Simple title
+                            content: text.toLowerCase()
+                        };
+                    }
+                } catch (e) {
+                    // console.warn('Failed to index', file);
+                }
+                return null;
+            });
+
+            const results = await Promise.all(promises);
+            searchIndex = results.filter(r => r !== null);
+            isIndexing = false;
+            console.log("Search index built:", searchIndex.length, "docs");
+        }
+
+        const searchInput = document.getElementById('searchInput');
+        const searchResults = document.getElementById('searchResults');
+
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            if (query.length < 2) {
+                searchResults.classList.add('hidden');
+                return;
+            }
+
+            const results = searchIndex.filter(doc => {
+                return doc.id.includes(query) || doc.content.includes(query);
+            });
+
+            renderSearchResults(results);
+        });
+
+        // Hide results when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                searchResults.classList.add('hidden');
+            }
+        });
+
+        // Show results when focusing input if there's a query
+        searchInput.addEventListener('focus', () => {
+            if (searchInput.value.length >= 2) {
+                searchResults.classList.remove('hidden');
+            }
+        });
+
+        function renderSearchResults(results) {
+            searchResults.innerHTML = '';
+            if (results.length === 0) {
+                searchResults.innerHTML = '<div class="p-3 text-sm text-text-muted">No results found</div>';
+            } else {
+                results.slice(0, 8).forEach(doc => {
+                    const div = document.createElement('div');
+                    div.className = "px-4 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-3 group";
+                    div.onclick = () => {
+                        loadDoc(doc.id);
+                        searchResults.classList.add('hidden');
+                        searchInput.value = '';
+                    };
+                    div.innerHTML = `
+                        <span class="material-symbols-outlined text-gray-400 group-hover:text-primary text-[18px]">article</span>
+                        <div>
+                            <div class="text-sm font-medium text-text-main group-hover:text-black">${doc.title}</div>
+                            <!-- <div class="text-xs text-text-muted truncate w-48">...match snippet...</div> -->
+                        </div>
+                    `;
+                    searchResults.appendChild(div);
+                });
+            }
+            searchResults.classList.remove('hidden');
+        }
+
+        // Init
+        const urlParams = new URLSearchParams(window.location.search);
+        const agentParam = urlParams.get('agent');
+        if (agentParam) currentAgent = agentParam;
+
+        loadDoc(currentAgent);
+        buildSearchIndex(); // Start indexing
+
+        // Mobile Sidebar Toggle
+        function toggleSidebar() {
+            const sidebar = document.getElementById('docsSidebar');
+            const backdrop = document.getElementById('sidebarBackdrop');
+            const isClosed = sidebar.classList.contains('-translate-x-full');
+
+            if (isClosed) {
+                sidebar.classList.remove('-translate-x-full');
+                backdrop.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                backdrop.classList.add('hidden');
+                document.body.style.overflow = '';
+            }
+        }
+
+        document.getElementById('mobileSidebarToggle').addEventListener('click', toggleSidebar);
+
+        // Close sidebar on link click (mobile)
+        document.querySelectorAll('aside button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (window.innerWidth < 1024) {
+                    toggleSidebar();
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

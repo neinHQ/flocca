@@ -1,0 +1,16 @@
+{
+    "name": "teams-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP Server for Microsoft Teams",
+    "main": "server.js",
+    "scripts": {
+        "test": "jest"
+    },
+    "dependencies": {
+        "@microsoft/microsoft-graph-client": "^3.0.7",
+        "isomorphic-fetch": "^3.0.0"
+    },
+    "devDependencies": {
+        "jest": "^30.2.0"
+    }
+}

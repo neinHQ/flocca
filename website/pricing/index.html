@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <script src="https://js.stripe.com/v3/"></script>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Flocca - Pricing</title>
+    <meta name="description" content="Simple, transparent pricing for Flocca.">
+
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f9f506",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#23220f",
+                        "dark-text": "#181811",
+                        "slate-accent": "#e2e2dc"
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+</head>
+
+<body class="bg-background-light dark:bg-background-dark text-dark-text font-display antialiased overflow-x-hidden">
+    <!-- Header -->
+    <div class="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-accent">
+        <div class="px-6 md:px-10 py-4 max-w-7xl mx-auto flex items-center justify-center">
+            <div class="flex items-center gap-3">
+                <div class="size-8 bg-black rounded-lg flex items-center justify-center text-primary">
+                    <span class="material-symbols-outlined text-[20px]">terminal</span>
+                </div>
+                <h2 class="text-xl font-bold tracking-tight">Flocca</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spacer -->
+    <div class="pt-32"></div>
+
+    <!-- Pricing Section -->
+    <section class="pb-24 px-6 md:px-10" id="pricing">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-black mb-4">Transparent Pricing</h2>
+                <p class="text-gray-500 text-lg">Choose the plan that fits your workflow.</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                <div class="p-8 rounded-[2rem] bg-white border border-slate-accent">
+                    <h3 class="text-xl font-bold mb-2">Individual</h3>
+                    <div class="text-4xl font-black mb-6">$5.99<span
+                            class="text-lg text-gray-400 font-normal">/mo</span></div>
+                    <p class="text-sm text-gray-500 mb-6">For power users who need full control.</p>
+                    <button id="btn-individual"
+                        class="w-full py-3 rounded-full border-2 border-black font-bold hover:bg-black hover:text-white transition-colors mb-8">Start
+                        Free Trial</button>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span>
+                            <strong>Unlimited</strong> Vault Storage
+                        </li>
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span> Pro Integrations
+                            (Jira, AWS)</li>
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span> Visual Workflow
+                            Editor</li>
+                    </ul>
+                </div>
+                <div class="p-8 rounded-[2rem] bg-white border-[3px] border-primary shadow-2xl relative md:-mt-8">
+                    <div
+                        class="absolute top-0 right-0 transform translate-x-2 -translate-y-4 bg-primary text-black text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                        Best Value</div>
+                    <h3 class="text-xl font-bold mb-2">Teams</h3>
+                    <div class="text-4xl font-black mb-1">$12.99<span
+                            class="text-lg text-gray-400 font-normal">/user</span></div>
+                    <p class="text-sm text-gray-500 mb-2">Governance and sharing for growing orgs.</p>
+
+                    <!-- Seats Input -->
+                    <div class="mb-6">
+                        <label class="block text-xs font-bold uppercase text-gray-400 mb-1">Number of Seats</label>
+                        <input type="number" id="seats-input" min="1" value="1"
+                            class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary focus:outline-none">
+                    </div>
+
+                    <button id="btn-teams"
+                        class="w-full py-3 rounded-full bg-primary font-bold hover:bg-[#e6e205] transition-colors mb-8 text-black shadow-lg">Get
+                        Started</button>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-green-600 text-lg">check</span> Everything in
+                            Individual</li>
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-green-600 text-lg">check</span> SSO / SAML</li>
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-green-600 text-lg">check</span> Governance &amp;
+                            Audit Logs</li>
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-green-600 text-lg">check</span> Team Sharing</li>
+                    </ul>
+                </div>
+                <div class="p-8 rounded-[2rem] bg-white border border-slate-accent">
+                    <h3 class="text-xl font-bold mb-2">Enterprise</h3>
+                    <div class="text-4xl font-black mb-1">Custom</div>
+                    <p class="text-sm text-gray-500 mb-6">For large organizations requiring advanced control.</p>
+                    <button
+                        class="w-full py-3 rounded-full border-2 border-black font-bold hover:bg-black hover:text-white transition-colors mb-8">Contact
+                        Support</button>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span> Dedicated Support
+                        </li>
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span> Custom Contracts
+                        </li>
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span> Advanced SLA</li>
+                        <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span> On-premise Options
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-black text-white py-10 px-6 md:px-10">
+        <div class="max-w-7xl mx-auto text-center text-xs text-gray-500">
+            © 2023 Flocca Inc. All rights reserved.
+        </div>
+    </footer>
+
+    <!-- Checkout Modal -->
+    <div id="checkout-modal" class="fixed inset-0 z-50 hidden">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeCheckout()"></div>
+        <!-- Content -->
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div
+                class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col relative">
+                <div class="flex items-center justify-between p-4 border-b">
+                    <h3 class="font-bold text-lg">Secure Checkout</h3>
+                    <button onclick="closeCheckout()" class="p-2 hover:bg-gray-100 rounded-full">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div id="checkout" class="flex-1 overflow-y-auto bg-gray-50">
+                    <!-- Stripe mounts here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Payment Logic
+        let stripePromise = null;
+
+        async function getStripe() {
+            if (!stripePromise) {
+                const res = await fetch('http://localhost:3000/billing/config');
+                const { publishableKey } = await res.json();
+                stripePromise = Stripe(publishableKey);
+            }
+            return stripePromise;
+        }
+
+        function closeCheckout() {
+            document.getElementById('checkout-modal').classList.add('hidden');
+            document.getElementById('checkout').innerHTML = ''; // Unmount/Clear
+            // Re-enable buttons
+            document.getElementById('btn-individual').disabled = false;
+            document.getElementById('btn-individual').innerText = "Start Free Trial";
+            document.getElementById('btn-teams').disabled = false;
+            document.getElementById('btn-teams').innerText = "Get Started";
+        }
+
+        async function initiateCheckout(plan) {
+            const urlObj = new URL(window.location.href);
+            const userId = urlObj.searchParams.get("userId");
+
+            // Determine quantity:
+            // If teams, read input. If individual, always 1.
+            let quantity = 1;
+            if (plan === 'teams') {
+                const val = document.getElementById('seats-input').value;
+                quantity = val ? parseInt(val, 10) : 1;
+            }
+
+            if (!userId) {
+                alert("User ID missing. Please open this page from the Flocca VS Code Extension.");
+                return;
+            }
+
+            const btn = document.getElementById(plan === 'individual' ? 'btn-individual' : 'btn-teams');
+            const originalText = btn.innerText;
+            btn.innerText = "Loading Payment...";
+            btn.disabled = true;
+
+            try {
+                // 1. Get Secret
+                const response = await fetch('http://localhost:3000/billing/checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, plan, quantity })
+                });
+
+                if (!response.ok) {
+                    const err = await response.text();
+                    throw new Error(err);
+                }
+
+                const { clientSecret } = await response.json();
+
+                // 2. Initialize Stripe
+                const stripe = await getStripe();
+
+                // 3. Mount Embedded Checkout
+                const checkout = await stripe.initEmbeddedCheckout({
+                    clientSecret,
+                });
+
+                // Show Modal
+                document.getElementById('checkout-modal').classList.remove('hidden');
+
+                // Mount
+                checkout.mount('#checkout');
+
+            } catch (e) {
+                console.error(e);
+                alert("Checkout Failed: " + e.message);
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // On Load: Pre-fill seats if passed in URL
+        window.addEventListener('load', () => {
+            const urlObj = new URL(window.location.href);
+            const quantityParam = urlObj.searchParams.get("quantity");
+            if (quantityParam) {
+                const qty = parseInt(quantityParam, 10);
+                if (qty > 1) {
+                    document.getElementById('seats-input').value = qty;
+                }
+            }
+
+            // Auto-trigger? Maybe just respect the pre-fill
+        });
+
+        document.getElementById('btn-individual').addEventListener('click', () => initiateCheckout('individual'));
+        document.getElementById('btn-teams').addEventListener('click', () => initiateCheckout('teams'));
+    </script>
+</body>
+
+</html>

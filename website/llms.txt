@@ -1,0 +1,40 @@
+# Flocca: VS Code Dev Tools Orchestrator
+
+## What is Flocca?
+Flocca is a VS Code extension that turns your local development editor into an orchestration center for your entire DevOps toolchain. It leverages the Model Context Protocol (MCP) to bridge local environments, cloud infrastructure, and AI agents.
+
+## Core Value Proposition
+- **Unified Toolchain**: Connect Jira, GitHub, AWS, Stripe, and more directly within VS Code.
+- **MCP-Native**: Uses the open standard Model Context Protocol, allowing AI agents (like Copilot, Cursor) to safely read tickets, Inspect repos, and trigger workflows.
+- **Secure Vault**: End-to-end encrypted local storage for API keys. Secrets never leave your machine in plain text.
+- **Visual Workflows**: Build automation pipelines visually (e.g., "On Git Push -> Update Jira -> Deploy AWS").
+
+## Supported Integrations (MCP Servers)
+- **Issue Tracking**: Jira, Linear
+- **Design**: Figma
+- **Source Control**: GitHub, GitLab
+- **Cloud**: AWS, Azure, Google Cloud Platform (GCP)
+- **Database**: MongoDB, PostgreSQL
+- **Communication**: Slack, Microsoft Teams
+- **Billing**: Stripe
+
+## How It Works
+1.  **Connect**: Install the extension and link your accounts via the secure Vault.
+2.  **Orchestrate**: Use natural language or the visual builder to chain actions.
+    *   *Example*: "Check Jira ticket PROJ-123, find the relevant code in `src/`, and create a PR."
+3.  **Deploy**: Run tests (Pytest/Playwright), trigger CI/CD, and monitor deployment status without leaving the editor.
+
+## Pricing
+- **Free Trial**: 24-hour unlimited access to all features.
+- **Individual Pro**: $5.99/mo. Unlimited Vault, Pro Integrations, Workflow Editor.
+- **Teams**: $12.99/user/mo. Adds SSO, Governance, Audit Logs, and Sharing.
+- **Enterprise**: Custom pricing. Dedicated support and on-premise options.
+
+## Technical Details
+- **Architecture**: Local MCP Clients + Secure Proxy for external APIs.
+- **Security**: AES-256 encryption. Credentials stored in local OS keychain (never sent to server).
+- **Models**: Model-agnostic. Supports OpenAI, Anthropic, and Local LLMs (Ollama).
+- **Compatibility**: Works natively in VS Code and Cursor.
+
+For more details, visit: https://flocca.app
+Documentation: https://flocca.app/docs

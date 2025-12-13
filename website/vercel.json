@@ -1,0 +1,16 @@
+{
+    "cleanUrls": true,
+    "trailingSlash": true,
+    "redirects": [
+        {
+            "source": "/docs",
+            "destination": "/docs/"
+        }
+    ],
+    "rewrites": [
+        {
+            "source": "/docs/",
+            "destination": "/docs/index.html"
+        }
+    ]
+}

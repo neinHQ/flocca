@@ -1,0 +1,356 @@
+{
+  "name": "flocca",
+  "displayName": "Flocca — VS Code MCP Client",
+  "description": "The all-in-one MCP dashboard. Connect Jira, GitHub, GitLab, AWS, Azure, GCP, Slack, Teams, Postgres, Sentry, Cypress, Playwright, Pytest, and more to your AI agents in one place.",
+  "version": "0.0.1",
+  "publisher": "flocca",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flocca-vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/flocca-vscode/issues"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "mcp",
+    "mcp server",
+    "devops",
+    "jira",
+    "github",
+    "aws",
+    "orchestrator",
+    "ai",
+    "testing",
+    "playwright"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "flocca-chat",
+          "title": "Flocca",
+          "icon": "resources/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "flocca-chat": [
+        {
+          "type": "webview",
+          "id": "flocca-chat",
+          "name": "Dashboard",
+          "icon": "resources/icon.png"
+        },
+        {
+          "type": "webview",
+          "id": "flocca-workflows",
+          "name": "Flocca Workflows"
+        },
+        {
+          "type": "webview",
+          "id": "flocca-docs",
+          "name": "Documentation",
+          "visibility": "hidden"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "flocca.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "flocca.connectedGitHub",
+        "title": "Connected to GitHub",
+        "icon": {
+          "light": "resources/connected.png",
+          "dark": "resources/connected.png"
+        }
+      },
+      {
+        "command": "flocca.connectedJira",
+        "title": "Connected to Jira",
+        "icon": {
+          "light": "resources/connected.png",
+          "dark": "resources/connected.png"
+        }
+      },
+      {
+        "command": "flocca.connectGitHub",
+        "title": "Connect GitHub",
+        "icon": {
+          "light": "resources/github_connect.png",
+          "dark": "resources/github_connect.png"
+        }
+      },
+      {
+        "command": "flocca.searchRepos",
+        "title": "Flocca: Search GitHub Repos"
+      },
+      {
+        "command": "flocca.connectJira",
+        "title": "Connect Jira",
+        "icon": {
+          "light": "resources/jira_connect.png",
+          "dark": "resources/jira_connect.png"
+        }
+      },
+      {
+        "command": "flocca.jiraShell",
+        "title": "Flocca: Jira Shell"
+      },
+      {
+        "command": "flocca.connectConfluence",
+        "title": "Connect Confluence"
+      },
+      {
+        "command": "flocca.connectZephyr",
+        "title": "Connect Zephyr"
+      },
+      {
+        "command": "flocca.connectSlack",
+        "title": "Connect Slack",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "flocca.connectGitLab",
+        "title": "Connect GitLab",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "flocca.connectBitbucket",
+        "title": "Connect Bitbucket",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "flocca.connectKubernetes",
+        "title": "Connect Kubernetes",
+        "icon": "$(server)"
+      },
+      {
+        "command": "flocca.connectAzureDevOps",
+        "title": "Connect Azure DevOps",
+        "icon": "$(cloud)"
+      },
+      {
+        "command": "flocca.connectDocker",
+        "title": "Connect Docker",
+        "icon": "$(vm)"
+      },
+      {
+        "command": "flocca.connectTestRail",
+        "title": "Connect TestRail",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "flocca.connectCypress",
+        "title": "Connect Cypress",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "flocca.connectTeams",
+        "title": "Connect Teams",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "flocca.connectAzure",
+        "title": "Connect Azure",
+        "icon": "$(azure)"
+      },
+      {
+        "command": "flocca.connectAWS",
+        "title": "Connect AWS",
+        "icon": "$(server)"
+      },
+      {
+        "command": "flocca.connectGCP",
+        "title": "Connect Google Cloud",
+        "icon": "$(cloud)"
+      },
+      {
+        "command": "flocca.connectElastic",
+        "title": "Connect Elasticsearch",
+        "icon": "$(search)"
+      },
+      {
+        "command": "flocca.connectObservability",
+        "title": "Connect Observability",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "flocca.connectPostgres",
+        "title": "Connect PostgreSQL",
+        "icon": "$(database)"
+      },
+      {
+        "command": "flocca.connectPytest",
+        "title": "Connect Pytest",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "flocca.connectPlaywright",
+        "title": "Connect Playwright",
+        "icon": "$(browser)"
+      },
+      {
+        "command": "flocca.connectNotion",
+        "title": "Connect Notion",
+        "icon": "$(notebook)"
+      },
+      {
+        "command": "flocca.connectSentry",
+        "title": "Connect Sentry",
+        "icon": "$(bug)"
+      },
+      {
+        "command": "flocca.connectGHA",
+        "title": "Connect GitHub Actions",
+        "icon": "$(play)"
+      },
+      {
+        "command": "flocca.signin",
+        "title": "Sign In / Register",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "flocca.manageAccounts",
+        "title": "Manage Accounts",
+        "icon": "$(account)"
+      },
+      {
+        "command": "flocca.upgrade",
+        "title": "Upgrade to Pro",
+        "icon": "$(star)"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "flocca.menu.connect",
+        "label": "Connect",
+        "icon": "$(plug)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "submenu": "flocca.menu.connect",
+          "when": "view == flocca-chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "flocca.signin",
+          "when": "view == flocca-chat",
+          "group": "navigation@2"
+        },
+        {
+          "command": "flocca.manageAccounts",
+          "when": "view == flocca-chat",
+          "group": "navigation@3"
+        },
+        {
+          "command": "flocca.upgrade",
+          "when": "view == flocca-chat",
+          "group": "navigation@4"
+        }
+      ],
+      "flocca.menu.connect": [
+        {
+          "command": "flocca.connectGitHub",
+          "when": "!flocca.connected.github",
+          "group": "1_connect"
+        },
+        {
+          "command": "flocca.connectedGitHub",
+          "when": "flocca.connected.github",
+          "group": "1_connect"
+        },
+        {
+          "command": "flocca.connectJira",
+          "when": "!flocca.connected.jira",
+          "group": "1_connect"
+        },
+        {
+          "command": "flocca.connectedJira",
+          "when": "flocca.connected.jira",
+          "group": "1_connect"
+        },
+        {
+          "command": "flocca.connectConfluence",
+          "group": "1_connect"
+        },
+        {
+          "command": "flocca.connectZephyr",
+          "group": "1_connect"
+        },
+        {
+          "command": "flocca.connectSlack",
+          "group": "1_connect"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Flocca",
+      "properties": {
+        "flocca.telemetryEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable anonymous usage logging and error reporting to help improve Flocca."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/pg": "^8.16.0",
+    "@types/sinon": "^21.0.0",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^7.11.0",
+    "@typescript-eslint/parser": "^7.11.0",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^8.57.0",
+    "glob": "^13.0.0",
+    "jest": "^30.2.0",
+    "mocha": "^11.7.5",
+    "sinon": "^21.0.0",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.676.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.676.0",
+    "@aws-sdk/client-ec2": "^3.676.0",
+    "@aws-sdk/client-ecs": "^3.676.0",
+    "@aws-sdk/client-eks": "^3.676.0",
+    "@aws-sdk/client-iam": "^3.676.0",
+    "@aws-sdk/client-lambda": "^3.676.0",
+    "@aws-sdk/client-s3": "^3.676.0",
+    "@aws-sdk/client-sns": "^3.676.0",
+    "@aws-sdk/client-sqs": "^3.676.0",
+    "@aws-sdk/client-sts": "^3.676.0",
+    "@aws-sdk/util-stream-node": "^3.374.0",
+    "@modelcontextprotocol/sdk": "^1.24.3",
+    "eventsource": "^4.1.0",
+    "pg": "^8.16.3",
+    "posthog-node": "^5.17.2"
+  }
+}
