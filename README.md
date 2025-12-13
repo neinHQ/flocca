@@ -47,4 +47,4 @@ Connect your tools once, and give your favorite AI agents (Copilot, Cursor, etc.
 
 ---
 
-[Website](https://flocca.app) | [Documentation](https://flocca.app/docs) | [Issues](https://github.com/flocca-vscode/issues)
+[Website](https://flocca.app) | [Documentation](https://flocca.app/docs) | [Issues](https://github.com/neinHQ/flocca-vscode/issues)
