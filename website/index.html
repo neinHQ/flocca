@@ -149,11 +149,12 @@
                         class="font-mono text-xs md:text-sm text-green-400 whitespace-nowrap">Jira → Figma → Code → Tests → CI → Cloud → Slack / Teams</code>
                 </div>
                 <div class="flex flex-wrap gap-4 pt-2">
-                    <button
-                        class="h-12 px-8 flex items-center gap-2 rounded-full bg-black text-white hover:bg-gray-800 transition-all font-bold shadow-lg hover:shadow-xl hover:-translate-y-1">
-                        <span class="material-symbols-outlined text-[20px]">download</span>
-                        <span>Install for VS Code</span>
-                    </button>
+                    <a href="https://marketplace.visualstudio.com/items?itemName=flocca.flocca"
+                        class="bg-[#3b82f6] text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-[#2563_eb] transition-all flex items-center gap-3 shadow-lg shadow-blue-500/20 group">
+                        <span
+                            class="material-symbols-outlined group-hover:rotate-12 transition-transform">download</span>
+                        Install Extension
+                    </a>
                     <button
                         class="h-12 px-8 flex items-center gap-2 rounded-full bg-white border-2 border-slate-accent hover:border-black transition-all font-bold text-black">
                         <span class="material-symbols-outlined text-[20px]">visibility</span>
@@ -173,7 +174,7 @@
                             src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsNsDrgwpb3hgASo0xrWNicCdbp_u8enkPcOTU9RMgr3ECSUHrds9YvYT6ZPpgxjdBzT0kv2xTC1-OYk4TZ0pENudB7R33ToBJIp3gYiyx-cQiKY9kwCRqF3KOBIEASQfDmYk1Pcd8TiSfRcCoucSwpn352yokLLFnys2DUDoiT8IJRrI3I02Nat9MD_wSqC22DZV5olEhbLdHziECvwUZ4ARDOwFeZWx-DURw_B9gqypFqyWv0G9p90s_1pYnk7HdHeA3gtI5Z_M"
                             alt="" />
                         <img class="inline-block h-6 w-6 rounded-full ring-2 ring-white"
-                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXXzMZD3RCMsXtGDtzWd-lg5GZde84fzTxswrvA1dWSIrT4FHhU5hJgH9eAILsEoO65uwEVHhk-ziSuRIKQtqAnBfh1ffPvOsaYZuDiq5PLxEBvpDb2cIaPO0GYUMsyixGrLH7Gy6z3xLifamlU4YKTgZtO5yf1P5ehbbDeuNMV7SkBLFc_gAg3iYZrlQLKA2wvCHkSkkbFyLOpgB6YSIiaJpIm5U8W41dEmMHN0eUN8YYsPip3cBSxAD3W0sJ7AZtk8YsQzzZW00"
+                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXXzMZD3RCMsXtGDtzWd-lg5GZde84fzTxswrvA1dWSIrT4FHhU5hJgH9eAILsEoO65uwEVHhk-ziSuRIKQtqAnBfh1ffPvOsaYZuDiq5PLxEBvpDb2cIaPO0GYUMsyixGrLH7Gy6z3xLifamlU4YKTgZtO5yf1P5ehbbDeuNMV7SkBLFc_gAg3iYZrlKA2wvCHkSkkbFyLOpgB6YSIiaJpIm5U8W41dEmMHN0eUN8YYsPip3cBSxAD3W0sJ7AZtk8YsQzzZW00"
                             alt="" />
                     </div>
                     <p class="text-sm font-medium text-gray-500">Trusted by 10000+ developers, devOps and QA/SDET</p>
@@ -194,7 +195,7 @@
                     <div class="aspect-video w-full bg-[#1e1e1e] relative">
                         <div class="absolute inset-0 bg-cover bg-center"
                             data-alt="VS Code extension interface screenshot showing code and sidebar tools"
-                            style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCh9yLBud-r4QNg5GSYpWuQGLM4EAXGpuL3prvySIRQSnP7gftT3EVAxvsPKkzZn8AklWlU0X6PBpEEs6z5WfqOk1TRAimpBDkS5FeQC_pZ-YGJE4Vz4130AcHtX4Wh5bDTNbWtnJ24KvOHmJkp7pWlOlBWnBP_J8sJ5Ff9VzluZxU_PEkhol1VQj_bZl3ib_ygOoc_b70NRsiHiGSo9_wzXGjmu4emCq8EzUKTOa39iGCYWxes0X2x1LX685M8YcKL1VezDxVdTjg'); opacity: 0.8;">
+                            style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCh9yLBud-r4QNg5GSYpWuQGLM4EAXGpuL3prvySIRQSnP7gftT3EVAxvsPKkzZn8AklWlU0X6PBpEEs6z5WfqOk1TRAimpBDkS5FeQC_pZ-YGJE4Vz4130AcHtX4Wh5bDTNbWtnJ24KvOHmJkp7pWlOlBWnBP_J8sJ5Ff9VzluZxU_PEkhol1VQj_bZl3ib_ygOoc_b70NRsiHiGSo9_wzXGjmu3emCq8EzUKTOa39iGCYWxes0X2x1LX685M8YcKL1VezDxVdTjg'); opacity: 0.8;">
                         </div>
                         <div
                             class="absolute right-0 top-0 bottom-0 w-80 bg-[#252526] border-l border-[#3e3e42] p-4 flex flex-col gap-4 shadow-xl">
@@ -620,48 +621,38 @@
                     <h3 class="text-2xl font-bold mb-3">Visual Workflows</h3>
                     <p class="text-gray-600 mb-8 leading-relaxed">Automate your day. Trigger pipelines, update tickets,
                         and notify Slack channels on every git push visually.</p>
-                    <div
-                        class="mt-auto bg-gray-50 rounded-xl p-4 border border-gray-100 flex items-center justify-center">
-                        <div class="flex items-center gap-1">
-                            <div class="size-8 rounded bg-gray-200 flex items-center justify-center"><span
-                                    class="material-symbols-outlined text-xs">commit</span></div>
-                            <div class="h-0.5 w-4 bg-gray-300"></div>
-                            <div class="size-8 rounded bg-blue-100 flex items-center justify-center"><span
-                                    class="material-symbols-outlined text-xs text-blue-600">rocket_launch</span></div>
-                            <div class="h-0.5 w-4 bg-gray-300"></div>
-                            <div class="size-8 rounded bg-green-100 flex items-center justify-center"><span
-                                    class="material-symbols-outlined text-xs text-green-600">check</span></div>
-                        </div>
-                    </div>
-                </div>
-                <div
-                    class="group bg-white p-8 rounded-[2rem] border border-slate-accent hover:border-black/20 transition-all hover:shadow-xl flex flex-col h-full">
-                    <div
-                        class="w-14 h-14 rounded-full bg-gray-100 text-black flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-3xl">group_add</span>
-                    </div>
-                    <h3 class="text-2xl font-bold mb-3">Team Sync</h3>
-                    <p class="text-gray-600 mb-8 leading-relaxed">Onboard new devs in minutes, not days. Share workspace
-                        configurations and toolchains instantly.</p>
-                    <div class="mt-auto relative h-24">
-                        <div class="absolute bottom-2 left-4 w-10 h-10 rounded-full bg-white border-2 border-primary z-30 shadow-md"
-                            data-alt="Team member 1"
-                            style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAo8YoIOTdW6Hrn6f_VA7V8XKb6QvNnrVMgZ4natGk0_HBOfeU2l-vI29F66zcTGRSA6NSUoHyGpyPrkVVNWDSiNQlkUHCXlSCbs7PmUnL_I2G_tg52G0hgSYGRta7lxFPlH2ZeDW2dZ4ipgWv0SkPaVXWyR8FdeK7ntlVpsBHIHZRIfvMsd5iLMI1oiAOe_GseuwGG48bo1DWh7ESv2oUS0Gia3a-1bT4S_JMA_oagLrzhuMmxsc4l4eoj1fgmQO3mvRpCOHST6Dg'); background-size: cover;">
-                        </div>
-                        <div class="absolute bottom-2 left-10 w-10 h-10 rounded-full bg-white border-2 border-gray-200 z-20 shadow-md"
-                            data-alt="Team member 2"
-                            style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDsNsDrgwpb3hgASo0xrWNicCdbp_u8enkPcOTU9RMgr3ECSUHrds9YvYT6ZPpgxjdBzT0kv2xTC1-OYk4TZ0pENudB7R33ToBJIp3gYiyx-cQiKY9kwCRqF3KOBIEASQfDmYk1Pcd8TiSfRcCoucSwpn352yokLLFnys2DUDoiT8IJRrI3I02Nat9MD_wSqC22DZV5olEhbLdHziECvwUZ4ARDOwFeZWx-DURw_B9gqypFqyWv0G9p90s_1pYnk7HdHeA3gtI5Z_M'); background-size: cover;">
-                        </div>
-                        <div class="absolute bottom-2 left-16 w-10 h-10 rounded-full bg-white border-2 border-gray-200 z-10 shadow-md"
-                            data-alt="Team member 3"
-                            style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDXXzMZD3RCMsXtGDtzWd-lg5GZde84fzTxswrvA1dWSIrT4FHhU5hJgH9eAILsEoO65uwEVHhk-ziSuRIKQtqAnBfh1ffPvOsaYZuDiq5PLxEBvpDb2cIaPO0GYUMsyixGrLH7Gy6z3xLifamlU4YKTgZtO5yf1P5ehbbDeuNMV7SkBLFc_gAg3iYZrlQLKA2wvCHkSkkbFyLOpgB6YSIiaJpIm5U8W41dEmMHN0eUN8YYsPip3cBSxAD3W0sJ7AZtk8YsQzzZW00'); background-size: cover;">
-                        </div>
-                        <div
-                            class="absolute bottom-5 left-32 text-xs font-bold text-primary bg-black px-2 py-1 rounded">
-                            +5 online</div>
-                    </div>
+                    <div class="size-8 rounded bg-green-100 flex items-center justify-center"><span
+                            class="material-symbols-outlined text-xs text-green-600">check</span></div>
                 </div>
             </div>
+        </div>
+        <div
+            class="group bg-white p-8 rounded-[2rem] border border-slate-accent hover:border-black/20 transition-all hover:shadow-xl flex flex-col h-full">
+            <div
+                class="w-14 h-14 rounded-full bg-gray-100 text-black flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                <span class="material-symbols-outlined text-3xl">group_add</span>
+            </div>
+            <h3 class="text-2xl font-bold mb-3">Team Sync</h3>
+            <p class="text-gray-600 mb-8 leading-relaxed">Onboard new devs in minutes, not days. Share workspace
+                configurations and toolchains instantly.</p>
+            <div class="mt-auto relative h-24">
+                <div class="absolute bottom-2 left-4 w-10 h-10 rounded-full bg-white border-2 border-primary z-30 shadow-md"
+                    data-alt="Team member 1"
+                    style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAo8YoIOTdW6Hrn6f_VA7V8XKb6QvNnrVMgZ4natGk0_HBOfeU2l-vI29F66zcTGRSA6NSUoHyGpyPrkVVNWDSiNQlkUHCXlSCbs7PmUnL_I2G_tg52G0hgSYGRta7lxFPlH2ZeDW2dZ4ipgWv0SkPaVXWyR8FdeK7ntlVpsBHIHZRIfvMsd5iLMI1oiAOe_GseuwGG48bo1DWh7ESv2oUS0Gia3a-1bT4S_JMA_oagLrzhuMmxsc4l4eoj1fgmQO3mvRpCOHST6Dg'); background-size: cover;">
+                </div>
+                <div class="absolute bottom-2 left-10 w-10 h-10 rounded-full bg-white border-2 border-gray-200 z-20 shadow-md"
+                    data-alt="Team member 2"
+                    style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDsNsDrgwpb3hgASo0xrWNicCdbp_u8enkPcOTU9RMgr3ECSUHrds9YvYT6ZPpgxjdBzT0kv2xTC1-OYk4TZ0pENudB7R33ToBJIp3gYiyx-cQiKY9kwCRqF3KOBIEASQfDmYk1Pcd8TiSfRcCoucSwpn352yokLLFnys2DUDoiT8IJRrI3I02Nat9MD_wSqC22DZV5olEhbLdHziECvwUZ4ARDOwFeZWx-DURw_B9gqypFqyWv0G9p90s_1pYnk7HdHeA3gtI5Z_M'); background-size: cover;">
+                </div>
+                <div class="absolute bottom-2 left-16 w-10 h-10 rounded-full bg-white border-2 border-gray-200 z-10 shadow-md"
+                    data-alt="Team member 3"
+                    style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDXXzMZD3RCMsXtGDtzWd-lg5GZde84fzTxswrvA1dWSIrT4FHhU5hJgH9eAILsEoO65uwEVHhk-ziSuRIKQtqAnBfh1ffPvOsaYZuDiq5PLxEBvpDb2cIaPO0GYUMsyixGrLH7Gy6z3xLifamlU4YKTgZtO5yf1P5ehbbDeuNMV7SkBLFc_gAg3iYZrlQLKA2wvCHkSkkbFyLOpgB6YSIiaJpIm5U8W41dEmMHN0eUN8YYsPip3cBSxAD3W0sJ7AZtk8YsQzzZW00'); background-size: cover;">
+                </div>
+                <div class="absolute bottom-5 left-32 text-xs font-bold text-primary bg-black px-2 py-1 rounded">
+                    +5 online</div>
+            </div>
+        </div>
+        </div>
         </div>
     </section>
     <section class="py-24 px-6 md:px-10 bg-white border-t border-slate-accent" id="pricing">
