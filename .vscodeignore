@@ -1,0 +1,37 @@
+.vscode/**
+.vscode-test/**
+out/test/**
+test/**
+src/**
+**/*.map
+.gitignore
+.git/**
+.DS_Store
+
+# Documentation (Keep README and LICENSE!)
+tasks.md
+reqs.md
+ui.md
+PUBLISHING.md
+logo_preview.md
+implementation_plan.md
+walkthrough.md
+
+# Web
+website/**
+public-repo-staging/**
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment - Explicit Excludes
+.env
+**/.env
+.env.*
+
+# Resources Optimization
+resources/**/node_modules/**
+resources/backend/node_modules/**
+resources/**/tests/**
+resources/**/__pycache__/**

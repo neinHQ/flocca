@@ -2,6 +2,8 @@
 
 **The all-in-one MCP dashboard. Connect Jira, GitHub, GitLab, AWS, Azure, GCP, Slack, Teams, Postgres, Sentry, Cypress, Playwright, Pytest, and more to your AI agents in one place.**
 
+![Flocca Dashboard](resources/dashboard.png)
+
 Flocca turns your local development editor into a **Unified Control Center** for your entire development toolchain. Instead of managing individual connections or switching contexts, Flocca brings everything together using the **Model Context Protocol (MCP)**.
 
 Connect your tools once, and give your favorite AI agents (Copilot, Cursor, etc.) the power to:
