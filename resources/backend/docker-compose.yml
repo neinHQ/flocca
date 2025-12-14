@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    restart: always
+    ports:
+      - "${APP_PORT:-4000}:3000" # Host port configurable via .env (default 4000)
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://flocca:securepassword@db:5432/flocca?schema=public
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    depends_on:
+      - db
+    networks:
+      - flocca-network
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=flocca
+      - POSTGRES_PASSWORD=securepassword
+      - POSTGRES_DB=flocca
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # PERSISTENT VOLUME
+    networks:
+      - flocca-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flocca"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  flocca-network:

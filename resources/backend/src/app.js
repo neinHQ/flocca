@@ -17,6 +17,11 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public')); // If we had public assets
 
 // Routes
+// Health Check
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date(), version: process.env.npm_package_version });
+});
+
 app.use('/connect', connectRoutes);
 app.use('/proxy', proxyRoutes);
 app.use('/connections', statusRoutes);
