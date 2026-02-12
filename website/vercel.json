@@ -9,6 +9,10 @@
     ],
     "rewrites": [
         {
+            "source": "/api/(.*)",
+            "destination": "https://api.flocca.app/$1"
+        },
+        {
             "source": "/docs/",
             "destination": "/docs/index.html"
         }

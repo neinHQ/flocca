@@ -1,5 +1,6 @@
 
 export const CONFIG = {
-    API_BASE: 'https://flocca.app',
-    PROXY_BASE: 'https://flocca.app/proxy'
+    // API is served via www domain and rewritten to backend.
+    API_BASE: 'https://www.flocca.app/api',
+    PROXY_BASE: 'https://www.flocca.app/api/proxy'
 };

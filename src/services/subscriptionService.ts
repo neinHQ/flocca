@@ -121,9 +121,8 @@ export class SubscriptionService {
 
     public async openPricingPage(plan: string, quantity: number) {
         const userId = this.getUserId();
-        // Open local website with params
-        // Website runs on port 3000
-        const url = `${SubscriptionService.API_BASE_URL}/pricing?userId=${userId}&plan=${plan}&quantity=${quantity}`;
+        // Pricing page is a web page (not under /api).
+        const url = `https://www.flocca.app/pricing?userId=${userId}&plan=${plan}&quantity=${quantity}`;
 
         await vscode.env.openExternal(vscode.Uri.parse(url));
 

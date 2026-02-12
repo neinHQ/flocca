@@ -76,7 +76,7 @@
             }
 
             try {
-                const res = await fetch(`/billing/session-status?session_id=${sessionId}`);
+                const res = await fetch(`/api/billing/session-status?session_id=${sessionId}`);
                 const data = await res.json();
 
                 if (data.status === 'open') {
