@@ -171,10 +171,11 @@
     <script>
         // Payment Logic
         let stripePromise = null;
+        const API_BASE = window.location.origin;
 
         async function getStripe() {
             if (!stripePromise) {
-                const res = await fetch('http://localhost:3000/billing/config');
+                const res = await fetch(`${API_BASE}/billing/config`);
                 const { publishableKey } = await res.json();
                 stripePromise = Stripe(publishableKey);
             }
@@ -215,7 +216,7 @@
 
             try {
                 // 1. Get Secret
-                const response = await fetch('http://localhost:3000/billing/checkout', {
+                const response = await fetch(`${API_BASE}/billing/checkout`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId, plan, quantity })

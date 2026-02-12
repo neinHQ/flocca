@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import { CONFIG } from '../config';
 
 export type SubscriptionStatus = 'none' | 'active' | 'expired';
 
@@ -92,7 +93,7 @@ export class SubscriptionService {
         }
     }
 
-    private static readonly API_BASE_URL = 'http://localhost:3000'; // Configurable in real app
+    private static readonly API_BASE_URL = CONFIG.API_BASE;
 
     // Fetch Plans from Backend
     public async getPlans() {
@@ -122,7 +123,7 @@ export class SubscriptionService {
         const userId = this.getUserId();
         // Open local website with params
         // Website runs on port 3000
-        const url = `http://localhost:3000/pricing?userId=${userId}&plan=${plan}&quantity=${quantity}`;
+        const url = `${SubscriptionService.API_BASE_URL}/pricing?userId=${userId}&plan=${plan}&quantity=${quantity}`;
 
         await vscode.env.openExternal(vscode.Uri.parse(url));
 

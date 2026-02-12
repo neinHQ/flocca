@@ -10,7 +10,11 @@ const statusRoutes = require('./routes/status');
 const app = express();
 
 app.use(cors());
-app.use(bodyParser.json());
+// Keep Stripe webhook body raw for signature verification.
+app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/billing/webhook')) return next();
+    return bodyParser.json()(req, res, next);
+});
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Tech: HTML forms for connect

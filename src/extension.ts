@@ -8,6 +8,7 @@ import { WorkflowService } from './services/workflowService';
 import { WorkflowProvider } from './ui/workflowProvider';
 import { DocProvider } from './ui/docProvider';
 import { SubscriptionService } from './services/subscriptionService';
+import { CONFIG } from './config';
 
 import { TelemetryService } from './services/telemetryService';
 
@@ -225,7 +226,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         args: [context.asAbsolutePath('resources/servers/playwright/server.js')],
                         env: {
                             FLOCCA_USER_ID: subs.getUserId(),
-                            FLOCCA_PROXY_URL: `http://localhost:3000/proxy/playwright`
+                            FLOCCA_PROXY_URL: `${CONFIG.PROXY_BASE}/playwright`
                         }
                     };
                 }
@@ -253,7 +254,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         args: [context.asAbsolutePath('resources/servers/pytest/server.py')],
                         env: {
                             FLOCCA_USER_ID: subs.getUserId(),
-                            FLOCCA_PROXY_URL: `http://localhost:3000/proxy/pytest`
+                            FLOCCA_PROXY_URL: `${CONFIG.PROXY_BASE}/pytest`
                         }
                     };
                 }

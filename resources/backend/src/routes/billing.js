@@ -46,7 +46,7 @@ router.get('/plans', async (req, res) => {
 
 // POST /checkout - Create a Stripe Checkout Session
 router.post('/checkout', async (req, res) => {
-    const { userId, successUrl, cancelUrl, plan = 'individual', quantity = 1 } = req.body;
+    const { userId, successUrl, plan = 'individual', quantity = 1 } = req.body;
 
     if (!userId) return res.status(400).send("Missing userId");
     if (!['individual', 'teams'].includes(plan)) return res.status(400).send("Invalid plan type");
@@ -58,6 +58,11 @@ router.post('/checkout', async (req, res) => {
     if (!priceId) return res.status(500).send(`Price ID not configured for plan: ${plan}`);
 
     try {
+        const appBaseUrl = process.env.BASE_URL || 'https://flocca.app';
+        const returnUrl = (typeof successUrl === 'string' && successUrl.startsWith('http'))
+            ? successUrl
+            : `${appBaseUrl}/return?session_id={CHECKOUT_SESSION_ID}`;
+
         // 1. Get/Create User
         let user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
@@ -89,7 +94,7 @@ router.post('/checkout', async (req, res) => {
                     quantity: plan === 'teams' ? parseInt(quantity) || 1 : 1,
                 },
             ],
-            return_url: 'http://localhost:8080/return?session_id={CHECKOUT_SESSION_ID}',
+            return_url: returnUrl,
             metadata: {
                 userId,
                 plan

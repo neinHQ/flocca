@@ -40,7 +40,7 @@
         {
           "id": "flocca-chat",
           "title": "Flocca",
-          "icon": "resources/icon.png"
+          "icon": "resources/flocca-activity-icon.svg"
         }
       ]
     },
@@ -50,7 +50,7 @@
           "type": "webview",
           "id": "flocca-chat",
           "name": "Dashboard",
-          "icon": "resources/icon.png"
+          "icon": "resources/flocca-activity-icon.svg"
         },
         {
           "type": "webview",

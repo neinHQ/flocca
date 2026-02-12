@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import { SubscriptionService } from './subscriptionService';
+import { CONFIG } from '../config';
 
 export class TeamService {
-    private static readonly API_BASE = 'http://localhost:3000';
+    private static readonly API_BASE = CONFIG.API_BASE;
 
     constructor(private context: vscode.ExtensionContext) { }
 
