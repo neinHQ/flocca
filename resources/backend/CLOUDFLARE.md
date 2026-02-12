@@ -35,7 +35,7 @@ Route `api.flocca.app` to your tunnel:
 cloudflared tunnel route dns flocca-backend api.flocca.app
 ```
 
-## Step 4: Run the Tunnel
+## Step 4: Run the Tunnels
 
 Create a configuration file `config.yml` (or run directly).
 
