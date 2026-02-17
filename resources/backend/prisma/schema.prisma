@@ -19,9 +19,12 @@ model User {
   stripeCustomerId   String?
   subscriptionStatus String       @default("free") // "free", "active", "pro", "past_due"
   stripeSubscriptionId String?
+  planTier           String       @default("free") // "free", "pro", "team", "enterprise"
+  capabilityOverrides Json?       // { allow: string[], deny: string[] }
 
   connections Connection[]
   teams       TeamMember[]
+  billedTeams Team[]       @relation("TeamBillingUser")
 }
 
 model Connection {
@@ -47,10 +50,13 @@ model Team {
   id          String       @id @default(uuid())
   name        String
   createdAt   DateTime     @default(now())
+  billingUserId String?
+  seatPlan    String       @default("free") // "free", "teams", "enterprise"
   
   members     TeamMember[]
   connections Connection[] // Shared vault items
   invites     InviteCode[]
+  billingUser User?        @relation("TeamBillingUser", fields: [billingUserId], references: [id])
 }
 
 model TeamMember {
@@ -58,6 +64,7 @@ model TeamMember {
   userId    String
   teamId    String
   role      String   @default("MEMBER") // OWNER, ADMIN, MEMBER
+  assignedSkus Json? @default("[]")
   
   user      User     @relation(fields: [userId], references: [id])
   team      Team     @relation(fields: [teamId], references: [id])

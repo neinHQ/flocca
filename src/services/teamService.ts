@@ -20,11 +20,14 @@ export class TeamService {
 
             if (!res.ok) {
                 const err = await res.json() as any;
-                throw new Error(err.error || `Request to ${path} failed`);
+                const e: any = new Error(err.error || `Request to ${path} failed`);
+                e.status = res.status;
+                e.payload = err;
+                throw e;
             }
             return await res.json();
         } catch (e: any) {
-            throw new Error(e.message);
+            throw e;
         }
     }
 
@@ -36,11 +39,14 @@ export class TeamService {
             const res = await fetch(`${TeamService.API_BASE}${path}?userId=${userId}`);
             if (!res.ok) {
                 const err = await res.json() as any;
-                throw new Error(err.error || `Request to ${path} failed`);
+                const e: any = new Error(err.error || `Request to ${path} failed`);
+                e.status = res.status;
+                e.payload = err;
+                throw e;
             }
             return await res.json();
         } catch (e: any) {
-            throw new Error(e.message);
+            throw e;
         }
     }
 
@@ -57,12 +63,39 @@ export class TeamService {
     }
 
     async getMyTeams() {
-        const res = await this.get('/teams/my');
-        return res.teams || [];
+        try {
+            const res = await this.get('/teams/my');
+            return Array.isArray(res) ? res : (res.teams || []);
+        } catch {
+            const res = await this.get('/teams');
+            return Array.isArray(res) ? res : (res.teams || []);
+        }
     }
 
     async getTeamMembers(teamId: string) {
         const res = await this.get(`/teams/${teamId}/members`);
-        return res.members || [];
+        return Array.isArray(res) ? res : (res.members || []);
+    }
+
+    async getSeatSummary(teamId: string) {
+        return this.get(`/teams/${teamId}/seats/summary`);
+    }
+
+    async getSeatAssignments(teamId: string) {
+        const res = await this.get(`/teams/${teamId}/seats/assignments`);
+        return res.assignments || [];
+    }
+
+    async getSkuCatalog() {
+        const res = await this.get('/teams/skus/catalog');
+        return res.skus || [];
+    }
+
+    async assignSkus(teamId: string, targetUserId: string, skus: string[]) {
+        return this.post(`/teams/${teamId}/seats/assign`, { targetUserId, skus });
+    }
+
+    async topUpSeats(teamId: string, addSeats: number) {
+        return this.post(`/teams/${teamId}/seats/topup`, { addSeats });
     }
 }

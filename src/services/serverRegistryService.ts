@@ -200,7 +200,7 @@ export class ServerRegistryService {
         {
             id: 'codebase',
             name: 'Local Codebase',
-            description: 'Index and search your local source code.',
+            description: 'Search your local code.',
             icon: 'file-code',
             type: 'local',
             connectCommand: 'flocca.connectCodebase' // I need to verify if this command exists

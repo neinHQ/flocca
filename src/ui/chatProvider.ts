@@ -58,6 +58,15 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 case 'inviteTeam':
                     await this.handleInviteTeam(message.teamId);
                     break;
+                case 'openSeatManager':
+                    await this.handleOpenSeatManager(message.teamId);
+                    break;
+                case 'assignSkus':
+                    await this.handleAssignSkus(message.teamId, message.targetUserId, message.skus || []);
+                    break;
+                case 'topUpSeats':
+                    await this.handleTopUpSeats(message.teamId, message.addSeats);
+                    break;
 
                 // --- Connection ---
                 case 'connectCommand':
@@ -89,6 +98,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
             const subs = new SubscriptionService(this._context);
             await subs.setUserId(res.user.id);
             if (res.user.email) await subs.setEmail(res.user.email);
+            if (res.user.entitlements) await subs.applyEntitlements(res.user.entitlements);
             vscode.window.showInformationMessage(`Welcome back, ${res.user.email}!`);
             this.updateStatus();
         }
@@ -102,6 +112,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         if (res && res.user) {
             await subs.setUserId(res.user.id);
             if (res.user.email) await subs.setEmail(res.user.email);
+            if (res.user.entitlements) await subs.applyEntitlements(res.user.entitlements);
             vscode.window.showInformationMessage(`Account created for ${res.user.email}!`);
             this.updateStatus();
         }
@@ -164,6 +175,54 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
             vscode.window.showInformationMessage(`Invite code copied: ${res.code}`);
         } catch (e: any) {
             vscode.window.showErrorMessage(e.message);
+        }
+    }
+
+    private async pushSeatManagerData(teamId: string) {
+        const teamService = new TeamService(this._context);
+        const [summary, assignments, skus] = await Promise.all([
+            teamService.getSeatSummary(teamId),
+            teamService.getSeatAssignments(teamId),
+            teamService.getSkuCatalog()
+        ]);
+
+        this._view?.webview.postMessage({
+            type: 'seatManagerData',
+            data: { teamId, summary, assignments, skus }
+        });
+    }
+
+    private async handleOpenSeatManager(teamId: string) {
+        try {
+            await this.pushSeatManagerData(teamId);
+        } catch (e: any) {
+            vscode.window.showErrorMessage(`Failed to load seat manager: ${e.message}`);
+        }
+    }
+
+    private async handleAssignSkus(teamId: string, targetUserId: string, skus: string[]) {
+        try {
+            const teamService = new TeamService(this._context);
+            await teamService.assignSkus(teamId, targetUserId, skus);
+            await this.pushSeatManagerData(teamId);
+            vscode.window.showInformationMessage('Seat assignment updated.');
+            await this.updateStatus();
+        } catch (e: any) {
+            if (e?.status === 409 && e?.payload?.seats) {
+                this._view?.webview.postMessage({ type: 'seatLimitExceeded', data: e.payload.seats });
+            }
+            vscode.window.showErrorMessage(`Failed to assign seats: ${e.message}`);
+        }
+    }
+
+    private async handleTopUpSeats(teamId: string, addSeats: number) {
+        try {
+            const teamService = new TeamService(this._context);
+            await teamService.topUpSeats(teamId, addSeats);
+            await this.pushSeatManagerData(teamId);
+            vscode.window.showInformationMessage('Seats added and billed immediately.');
+        } catch (e: any) {
+            vscode.window.showErrorMessage(`Failed to top up seats: ${e.message}`);
         }
     }
 
@@ -419,12 +478,27 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 </div>
             </div>
 
+            <div id="modal-seats" class="modal-overlay">
+                <div class="modal" style="max-width: 560px; width: 92%;">
+                    <span class="close-modal" onclick="closeModals()">✕</span>
+                    <h3>Seat Management</h3>
+                    <div id="seat-summary" style="font-size:12px; margin-bottom:10px;"></div>
+                    <div id="seat-limit-banner" style="display:none; margin-bottom:10px; padding:8px; border:1px solid var(--vscode-inputValidation-warningBorder);"></div>
+                    <div id="seat-assignments" style="max-height: 240px; overflow-y: auto; border-top: 1px solid var(--vscode-widget-border); padding-top: 8px;"></div>
+                    <div id="seat-topup" style="margin-top:10px; border-top: 1px solid var(--vscode-widget-border); padding-top:10px; display:none;">
+                        <input type="number" id="topup-count" placeholder="Seats to add" />
+                        <button class="btn-block" onclick="topUpSeats()">Add Seats (Billed Now)</button>
+                    </div>
+                </div>
+            </div>
+
             <script>
                 const vscode = acquireVsCodeApi();
                 let catalogData = [];
                 let connectedList = [];
                 let currentEmail = null;
                 let myTeams = [];
+                let seatManager = { teamId: null, summary: null, assignments: [], skus: [] };
 
                 function post(type, data) {
                     if (typeof data === 'string') { vscode.postMessage({ type, command: data }); }
@@ -509,9 +583,79 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     if(myTeams.length===0) { list.innerHTML='<div style="font-size:11px; padding:5px;">No teams.</div>'; return; }
                     let h = '';
                     myTeams.forEach(t => {
-                        h += \`<div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:12px;">\${t.name} <a href="#" onclick="post('inviteTeam', {teamId:'\${t.id}'})">Invite</a></div>\`;
+                        const canManage = t.role === 'OWNER' || t.role === 'ADMIN';
+                        h += \`<div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:12px;">
+                                <span>\${t.name} <span style="opacity:.6">(\${t.role})</span></span>
+                                <span>
+                                    <a href="#" onclick="post('inviteTeam', {teamId:'\${t.id}'})">Add User</a>
+                                    \${canManage ? \` | <a href="#" onclick="openSeatManager('\${t.id}')">Seats</a>\` : ''}
+                                </span>
+                              </div>\`;
                     });
                     list.innerHTML=h;
+                }
+
+                function openSeatManager(teamId) {
+                    post('openSeatManager', { teamId });
+                    openModal('modal-seats');
+                }
+
+                function renderSeatManager() {
+                    const s = seatManager.summary || {};
+                    const plan = s.plan || 'free';
+                    const topUpMinimum = s.topUpMinimum || (plan === 'enterprise' ? 10 : 3);
+
+                    document.getElementById('seat-summary').innerHTML =
+                        \`Plan: <b>\${plan}</b> | Purchased: <b>\${s.seatsPurchased || 0}</b> | Used: <b>\${s.seatsUsed || 0}</b> | Available: <b>\${s.seatsAvailable || 0}</b>\`;
+
+                    const assignmentDiv = document.getElementById('seat-assignments');
+                    assignmentDiv.innerHTML = '';
+
+                    (seatManager.assignments || []).forEach(a => {
+                        const row = document.createElement('div');
+                        row.style.borderBottom = '1px solid var(--vscode-widget-border)';
+                        row.style.padding = '8px 0';
+
+                        const skuOptions = (seatManager.skus || []).map(sku => {
+                            const checked = (a.skus || []).includes(sku.id) ? 'checked' : '';
+                            return \`<label style="display:inline-block; margin-right:8px; font-size:11px;">
+                                <input type="checkbox" data-user="\${a.userId}" data-sku="\${sku.id}" \${checked}/> \${sku.name}
+                            </label>\`;
+                        }).join('');
+
+                        row.innerHTML = \`
+                            <div style="font-size:12px; margin-bottom:6px;">
+                                <b>\${a.email || a.userId}</b> <span style="opacity:.65">(\${a.role})</span>
+                            </div>
+                            <div>\${skuOptions}</div>
+                            <button style="margin-top:6px;" onclick="saveSeatAssignment('\${a.userId}')">Save</button>
+                        \`;
+                        assignmentDiv.appendChild(row);
+                    });
+
+                    const topupDiv = document.getElementById('seat-topup');
+                    const needTopup = (s.seatsAvailable || 0) <= 0 && (plan === 'teams' || plan === 'enterprise');
+                    topupDiv.style.display = needTopup ? 'block' : 'none';
+                    document.getElementById('topup-count').value = String(topUpMinimum);
+                    document.getElementById('topup-count').min = String(topUpMinimum);
+
+                    const banner = document.getElementById('seat-limit-banner');
+                    banner.style.display = needTopup ? 'block' : 'none';
+                    if (needTopup) {
+                        banner.innerHTML = \`Seat limit reached. Add at least <b>\${topUpMinimum}</b> seats to continue assigning.\`;
+                    }
+                }
+
+                function saveSeatAssignment(userId) {
+                    const boxes = Array.from(document.querySelectorAll(\`input[type=\"checkbox\"][data-user=\"\${userId}\"]\`));
+                    const skus = boxes.filter(b => b.checked).map(b => b.getAttribute('data-sku'));
+                    post('assignSkus', { teamId: seatManager.teamId, targetUserId: userId, skus });
+                }
+
+                function topUpSeats() {
+                    const addSeats = parseInt(document.getElementById('topup-count').value || '0', 10);
+                    if (!addSeats || addSeats <= 0) return;
+                    post('topUpSeats', { teamId: seatManager.teamId, addSeats });
                 }
 
                 // Auth Actions
@@ -576,6 +720,13 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                         renderCatalog(catalogData);
                     } else if (msg.type === 'showLogin') {
                         openModal('modal-login');
+                    } else if (msg.type === 'seatManagerData') {
+                        seatManager = msg.data || { teamId: null, summary: null, assignments: [], skus: [] };
+                        renderSeatManager();
+                    } else if (msg.type === 'seatLimitExceeded') {
+                        const b = document.getElementById('seat-limit-banner');
+                        b.style.display = 'block';
+                        b.innerHTML = \`Seat limit exceeded. Required additional seats: <b>\${msg.data.requiredAdditional}</b>. Recommended top-up: <b>\${msg.data.recommendedTopUp}</b>.\`;
                     }
                 });
 

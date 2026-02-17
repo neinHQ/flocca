@@ -107,7 +107,7 @@ export class McpClientManager {
         // ENFORCE SUBSCRIPTION
         // We allow 'listTools' (implied) but block 'callTool' if not subbed
         // Exception: Maybe 'listTools' is safe.
-        if (serverName !== 'github' && serverName !== 'pytest' && serverName !== 'playwright' && !this.subscriptionService.checkAccess('mcp_tool')) {
+        if (!this.subscriptionService.checkAccess(`mcp_tool:${serverName}`)) {
             this.telemetryService.logUsage('mcp_tool_blocked', { server: serverName, tool: toolName });
             throw new Error("SUBSCRIPTION_REQUIRED");
         }

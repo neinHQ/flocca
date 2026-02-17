@@ -6,8 +6,8 @@ const { StdioServerTransport } = require(path.join(__dirname, '../../../node_mod
 const SERVER_INFO = { name: 'figma-mcp', version: '0.1.0' };
 
 const sessionConfig = {
-    token: undefined,
-    default_file_key: undefined
+    token: process.env.FIGMA_TOKEN || process.env.FIGMA_ACCESS_TOKEN,
+    default_file_key: process.env.FIGMA_DEFAULT_FILE_KEY
 };
 
 const cache = {

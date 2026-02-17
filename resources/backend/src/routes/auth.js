@@ -3,6 +3,7 @@ const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const crypto = require('crypto');
+const { buildEntitlements } = require('../utils/entitlements');
 
 // Helper: Hash password (simple sha256 for MVP)
 const hashPassword = (password) => {
@@ -46,7 +47,17 @@ router.post('/register', async (req, res) => {
                         where: { id: anonymousId },
                         data: { email, password: hashedPassword }
                     });
-                    return res.json({ success: true, user: { id: user.id, email: user.email }, claimed: true });
+                    return res.json({
+                        success: true,
+                        user: {
+                            id: user.id,
+                            email: user.email,
+                            subscriptionStatus: user.subscriptionStatus,
+                            planTier: user.planTier,
+                            entitlements: buildEntitlements(user)
+                        },
+                        claimed: true
+                    });
                 }
             }
         }
@@ -59,7 +70,17 @@ router.post('/register', async (req, res) => {
             }
         });
 
-        res.json({ success: true, user: { id: user.id, email: user.email }, claimed: false });
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                subscriptionStatus: user.subscriptionStatus,
+                planTier: user.planTier,
+                entitlements: buildEntitlements(user)
+            },
+            claimed: false
+        });
 
     } catch (e) {
         console.error(e);
@@ -85,7 +106,9 @@ router.post('/login', async (req, res) => {
             user: {
                 id: user.id,
                 email: user.email,
-                subscriptionStatus: user.subscriptionStatus
+                subscriptionStatus: user.subscriptionStatus,
+                planTier: user.planTier,
+                entitlements: buildEntitlements(user)
             }
         });
     } catch (e) {
@@ -229,6 +252,56 @@ router.get('/gitlab/callback', async (req, res) => {
 
     } catch (e) {
         res.redirect('/auth/error');
+    }
+});
+
+// GET /auth/entitlements?userId=...
+router.get('/entitlements', async (req, res) => {
+    const userId = req.query.userId || req.headers['x-flocca-user-id'];
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    try {
+        const user = await prisma.user.findUnique({ where: { id: String(userId) } });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        return res.json({ entitlements: buildEntitlements(user) });
+    } catch (e) {
+        console.error(e);
+        return res.status(500).json({ error: 'Failed to load entitlements' });
+    }
+});
+
+// POST /auth/entitlements
+// Admin-only helper to set plan tier and capability overrides for a user.
+router.post('/entitlements', async (req, res) => {
+    const adminKey = req.headers['x-admin-key'];
+    if (!process.env.ADMIN_API_KEY || adminKey !== process.env.ADMIN_API_KEY) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const { userId, planTier, allow = [], deny = [] } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    try {
+        const user = await prisma.user.update({
+            where: { id: String(userId) },
+            data: {
+                ...(planTier ? { planTier: String(planTier) } : {}),
+                capabilityOverrides: { allow, deny }
+            }
+        });
+
+        return res.json({
+            success: true,
+            user: {
+                id: user.id,
+                planTier: user.planTier,
+                subscriptionStatus: user.subscriptionStatus,
+                entitlements: buildEntitlements(user)
+            }
+        });
+    } catch (e) {
+        console.error(e);
+        return res.status(500).json({ error: 'Failed to update entitlements' });
     }
 });
 

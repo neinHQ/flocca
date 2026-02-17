@@ -7,12 +7,23 @@ const SERVER_INFO = { name: 'github-actions-mcp', version: '1.0.0' };
 let config = {
     token: process.env.GITHUB_TOKEN,
     owner: process.env.GITHUB_OWNER,
-    repo: process.env.GITHUB_REPO
+    repo: process.env.GITHUB_REPO,
+    apiUrl: process.env.GITHUB_API_URL
 };
+
+function normalizeGitHubApiUrl(url) {
+    if (!url) return undefined;
+    const trimmed = url.replace(/\/+$/, '');
+    if (/\/api\/v3$/i.test(trimmed)) return trimmed;
+    return `${trimmed}/api/v3`;
+}
 
 function getKit() {
     if (!config.token) throw new Error("GitHub Actions not configured.");
-    return new Octokit({ auth: config.token });
+    return new Octokit({
+        auth: config.token,
+        baseUrl: normalizeGitHubApiUrl(config.apiUrl)
+    });
 }
 
 function normalizeError(err) {
@@ -24,11 +35,12 @@ async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     server.registerTool('github_actions.configure',
-        { description: 'Configure GHA', inputSchema: { type: 'object', properties: { token: { type: 'string' }, owner: { type: 'string' }, repo: { type: 'string' } }, required: ['token', 'owner', 'repo'] } },
+        { description: 'Configure GHA', inputSchema: { type: 'object', properties: { token: { type: 'string' }, owner: { type: 'string' }, repo: { type: 'string' }, api_url: { type: 'string' } }, required: ['token', 'owner', 'repo'] } },
         async (args) => {
             config.token = args.token;
             config.owner = args.owner;
             config.repo = args.repo;
+            config.apiUrl = args.api_url;
             try {
                 await getKit().repos.get({ owner: config.owner, repo: config.repo });
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: 'authenticated' }) }] };
@@ -103,4 +115,9 @@ if (require.main === module) {
     main().catch(console.error);
 }
 
-module.exports = { main };
+module.exports = {
+    main,
+    __test: {
+        normalizeGitHubApiUrl
+    }
+};

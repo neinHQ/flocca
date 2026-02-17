@@ -11,7 +11,8 @@ const USER_ID = process.env.FLOCCA_USER_ID;
 let config = {
     email: process.env.JIRA_EMAIL,
     token: process.env.JIRA_API_TOKEN || process.env.JIRA_TOKEN,
-    url: process.env.JIRA_SITE_URL || process.env.JIRA_URL
+    url: process.env.JIRA_SITE_URL || process.env.JIRA_URL,
+    deploymentMode: (process.env.JIRA_DEPLOYMENT_MODE || 'cloud').toLowerCase()
 };
 
 // Override config if Proxy is active
@@ -19,6 +20,7 @@ if (PROXY_URL && USER_ID) {
     config.url = PROXY_URL;
     // We don't need email/token locally
 }
+config.url = normalizeBaseUrl(config.url);
 
 function getHeaders() {
     if (PROXY_URL && USER_ID) {
@@ -38,6 +40,35 @@ function getHeaders() {
     };
 }
 
+function normalizeBaseUrl(url) {
+    return (url || '').replace(/\/+$/, '');
+}
+
+function getApiVersions() {
+    if (config.deploymentMode === 'server' || config.deploymentMode === 'self_hosted') return ['2', '3'];
+    return ['3', '2'];
+}
+
+async function jiraGet(pathSuffix, options = {}) {
+    const versions = getApiVersions();
+    let lastError;
+
+    for (const version of versions) {
+        try {
+            const url = `${config.url}/rest/api/${version}/${pathSuffix.replace(/^\/+/, '')}`;
+            return await axios.get(url, options);
+        } catch (err) {
+            lastError = err;
+            const status = err?.response?.status;
+            // If endpoint doesn't exist, try next API version.
+            if (status === 404 || status === 405) continue;
+            throw err;
+        }
+    }
+
+    throw lastError || new Error('Jira request failed');
+}
+
 function normalizeError(err) {
     const msg = err.response?.data?.errorMessages?.join(', ') || JSON.stringify(err.response?.data) || err.message;
     return { isError: true, content: [{ type: 'text', text: `Jira Error: ${msg}` }] };
@@ -54,7 +85,8 @@ async function main() {
                 properties: {
                     email: { type: 'string' },
                     token: { type: 'string' },
-                    url: { type: 'string' }
+                    url: { type: 'string' },
+                    deployment_mode: { type: 'string' }
                 },
                 required: ['email', 'token', 'url']
             }
@@ -62,16 +94,10 @@ async function main() {
         async (args) => {
             config.email = args.email;
             config.token = args.token;
-            config.url = args.url.replace(/\/$/, '');
+            config.url = normalizeBaseUrl(args.url);
+            if (args.deployment_mode) config.deploymentMode = args.deployment_mode.toLowerCase();
             try {
-                // Verify
-                const baseUrl = (PROXY_URL && USER_ID) ? PROXY_URL : config.url;
-                // Note: Proxy expects /rest/api/... appended? 
-                // Our proxy implementation at /proxy/jira/* accepts full path
-                // But local Jira URL is usually base.
-                // If using Proxy: PROXY_URL is http://localhost:3000/proxy/jira
-                // Call needs to be: http://localhost:3000/proxy/jira/rest/api/3/myself
-                await axios.get(`${baseUrl}/rest/api/3/myself`, { headers: getHeaders() });
+                await jiraGet('myself', { headers: getHeaders() });
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: 'authenticated' }) }] };
             } catch (e) {
                 config.token = undefined;
@@ -94,7 +120,7 @@ async function main() {
         },
         async (args) => {
             try {
-                const res = await axios.get(`${config.url}/rest/api/3/search`, {
+                const res = await jiraGet('search', {
                     headers: getHeaders(),
                     params: { jql: args.jql, maxResults: args.limit || 10 }
                 });
@@ -114,7 +140,7 @@ async function main() {
         },
         async (args) => {
             try {
-                const res = await axios.get(`${config.url}/rest/api/3/issue/${args.issue_key}`, { headers: getHeaders() });
+                const res = await jiraGet(`issue/${args.issue_key}`, { headers: getHeaders() });
                 return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
             } catch (e) { return normalizeError(e); }
         }
@@ -128,4 +154,13 @@ if (require.main === module) {
     main().catch(console.error);
 }
 
-module.exports = { main };
+module.exports = {
+    main,
+    __test: {
+        normalizeBaseUrl,
+        getApiVersions,
+        jiraGet,
+        setConfig: (next) => { config = { ...config, ...next }; },
+        getConfig: () => ({ ...config })
+    }
+};

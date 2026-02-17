@@ -9,6 +9,17 @@ let config = {
     workspace: process.env.BITBUCKET_WORKSPACE // Optional default
 };
 
+function normalizeServiceUrl(url) {
+    if (!url) return 'https://api.bitbucket.org/2.0';
+    const trimmed = url.replace(/\/+$/, '');
+    if (trimmed.includes('api.bitbucket.org/2.0')) return trimmed;
+    if (trimmed.includes('bitbucket.org')) return 'https://api.bitbucket.org/2.0';
+    if (/\/rest\/api\/\d+\.\d+$/i.test(trimmed)) return trimmed;
+    return `${trimmed}/rest/api/1.0`;
+}
+
+config.serviceUrl = normalizeServiceUrl(config.serviceUrl);
+
 // Helper: Get Axios Instance
 function getApi() {
     const proxyUrl = process.env.FLOCCA_PROXY_URL;
@@ -71,7 +82,7 @@ async function handleToolCall(name, args) {
 
         switch (name) {
             case 'bitbucket.configure':
-                if (args.service_url) config.serviceUrl = args.service_url;
+                if (args.service_url) config.serviceUrl = normalizeServiceUrl(args.service_url);
                 if (args.auth) {
                     config.username = args.auth.username;
                     config.password = args.auth.password;

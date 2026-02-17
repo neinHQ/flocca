@@ -25,10 +25,10 @@ function getClient() {
         // Graph Client constructs URL like https://graph.microsoft.com/v1.0/me
         // We want: proxyUrl + /v1.0/me
         const customFetch = async (url, options) => {
-            const dest = url.toString().replace('https://graph.microsoft.com', proxyUrl);
+            const dest = url.toString().replace('https://graph.microsoft.com', PROXY);
             const headers = { ...(options.headers || {}) };
             delete headers['Authorization']; // Proxy handles this
-            headers['X-Flocca-User-ID'] = userId;
+            headers['X-Flocca-User-ID'] = USER;
 
             return fetch(dest, { ...options, headers });
         };

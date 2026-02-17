@@ -3,14 +3,34 @@ import * as crypto from 'crypto';
 import { CONFIG } from '../config';
 
 export type SubscriptionStatus = 'none' | 'active' | 'expired';
+type Capability = 'free.github' | 'free.codebase' | 'free.testing' | 'pro.connectors' | 'pro.tools';
+type Entitlements = {
+    planTier?: string;
+    capabilities?: string[];
+    capabilityOverrides?: { allow?: string[]; deny?: string[] } | null;
+};
 
 export class SubscriptionService {
     private static readonly TRIAL_DURATION_MS = 24 * 60 * 60 * 1000; // 24 Hours
     private static readonly TRIAL_START_KEY = 'flocca.trialStartDate';
     private static readonly SUB_STATUS_KEY = 'flocca.subscriptionStatus';
     private static readonly USER_ID_KEY = 'flocca.userId';
+    private static readonly ENTITLEMENTS_KEY = 'flocca.entitlements';
 
     private _statusBarItem: vscode.StatusBarItem;
+    private static readonly FREE_CAPABILITIES: ReadonlySet<Capability> = new Set([
+        'free.github',
+        'free.codebase',
+        'free.testing'
+    ]);
+
+    private static readonly FEATURE_CAPABILITY_MAP: Record<string, Capability> = {
+        github: 'free.github',
+        codebase: 'free.codebase',
+        pytest: 'free.testing',
+        playwright: 'free.testing',
+        mcp_tool: 'pro.tools'
+    };
 
     constructor(private context: vscode.ExtensionContext) {
         // Initialize User ID
@@ -59,15 +79,57 @@ export class SubscriptionService {
         return 'expired';
     }
 
-    public checkAccess(feature: string): boolean {
-        // Free Features
-        if (['github', 'codebase'].includes(feature)) return true;
+    private getRequiredCapability(feature: string): Capability {
+        if (feature.startsWith('mcp_tool:')) {
+            const serverName = feature.slice('mcp_tool:'.length);
+            if (['github', 'pytest', 'playwright', 'codebase'].includes(serverName)) {
+                return serverName === 'github'
+                    ? 'free.github'
+                    : serverName === 'codebase'
+                        ? 'free.codebase'
+                        : 'free.testing';
+            }
+            return 'pro.tools';
+        }
 
-        const status = this.getStatus();
-        return status === 'active';
+        return SubscriptionService.FEATURE_CAPABILITY_MAP[feature] || 'pro.connectors';
+    }
+
+    public hasCapability(capability: Capability): boolean {
+        const entitlements = this.getEntitlements();
+        if (entitlements && Array.isArray(entitlements.capabilities) && entitlements.capabilities.length > 0) {
+            return entitlements.capabilities.includes(capability);
+        }
+        if (SubscriptionService.FREE_CAPABILITIES.has(capability)) return true;
+        return this.getStatus() === 'active';
+    }
+
+    public checkAccess(feature: string): boolean {
+        return this.hasCapability(this.getRequiredCapability(feature));
+    }
+
+    public getEntitlements(): Entitlements | undefined {
+        return this.context.globalState.get<Entitlements>(SubscriptionService.ENTITLEMENTS_KEY);
+    }
+
+    public async applyEntitlements(entitlements?: Entitlements) {
+        await this.context.globalState.update(SubscriptionService.ENTITLEMENTS_KEY, entitlements || undefined);
+        if (!entitlements) return;
+
+        const caps = Array.isArray(entitlements.capabilities) ? entitlements.capabilities : [];
+        const isPaid = caps.includes('pro.connectors') || caps.includes('pro.tools') ||
+            ['pro', 'team', 'enterprise'].includes(entitlements.planTier || '');
+        await this.context.globalState.update(SubscriptionService.SUB_STATUS_KEY, isPaid ? 'active' : undefined);
+        this.updateStatusBar();
     }
 
     public isPaidUser(): boolean {
+        const entitlements = this.getEntitlements();
+        if (entitlements) {
+            const caps = Array.isArray(entitlements.capabilities) ? entitlements.capabilities : [];
+            if (caps.includes('pro.connectors') || caps.includes('pro.tools')) return true;
+            if (['pro', 'team', 'enterprise'].includes(entitlements.planTier || '')) return true;
+        }
         // 'active' stored explicitly means Paid. Missing means Trial.
         return this.context.globalState.get<string>(SubscriptionService.SUB_STATUS_KEY) === 'active';
     }
@@ -151,8 +213,11 @@ export class SubscriptionService {
             // but VS Code maintains Node env. Node 18+ has fetch.
             const res = await fetch(`${SubscriptionService.API_BASE_URL}/billing/status?userId=${userId}`);
             if (res.ok) {
-                const data = await res.json() as { plan: string };
-                if (['individual', 'teams', 'pro'].includes(data.plan)) {
+                const data = await res.json() as { plan: string, entitlements?: Entitlements };
+                if (data.entitlements) {
+                    await this.applyEntitlements(data.entitlements);
+                }
+                if (['individual', 'teams', 'team', 'pro', 'enterprise', 'active'].includes(data.plan)) {
                     await this.context.globalState.update(SubscriptionService.SUB_STATUS_KEY, 'active');
                     this.updateStatusBar();
                     return true;

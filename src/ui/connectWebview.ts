@@ -19,7 +19,8 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
     'jira': {
         title: 'Connect Jira',
         fields: [
-            { id: 'url', label: 'Jira Site URL', placeholder: 'https://your-domain.atlassian.net', type: 'text' },
+            { id: 'url', label: 'Jira Base URL', placeholder: 'https://your-domain.atlassian.net or https://jira.your-company.com', type: 'text' },
+            { id: 'deployment_mode', label: 'Deployment Mode (cloud/server)', placeholder: 'cloud', type: 'text', required: false },
             { id: 'email', label: 'Email Address', placeholder: 'name@example.com', type: 'email' },
             { id: 'token', label: 'API Token', placeholder: 'Paste your API token', type: 'password' }
         ],
@@ -28,7 +29,8 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
     'confluence': {
         title: 'Connect Confluence',
         fields: [
-            { id: 'url', label: 'Confluence Base URL', placeholder: 'https://your-domain.atlassian.net/wiki', type: 'text' },
+            { id: 'url', label: 'Confluence Base URL', placeholder: 'https://your-domain.atlassian.net or https://confluence.your-company.com', type: 'text' },
+            { id: 'deployment_mode', label: 'Deployment Mode (cloud/server)', placeholder: 'cloud', type: 'text', required: false },
             { id: 'email', label: 'Email Address', placeholder: 'name@example.com', type: 'email' },
             { id: 'token', label: 'API Token', placeholder: 'Paste your API token', type: 'password' }
         ],
@@ -37,7 +39,8 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
     'gitlab': {
         title: 'Connect GitLab',
         fields: [
-            { id: 'url', label: 'GitLab API URL', placeholder: 'https://gitlab.com', type: 'text', value: 'https://gitlab.com' },
+            { id: 'url', label: 'GitLab Base URL', placeholder: 'https://gitlab.com or https://gitlab.company.com', type: 'text', value: 'https://gitlab.com' },
+            { id: 'deployment_mode', label: 'Deployment Mode (cloud/self_hosted)', placeholder: 'cloud', type: 'text', required: false },
             { id: 'token', label: 'Personal Access Token', placeholder: 'glpat-...', type: 'password' }
         ],
         links: [{ text: 'Create Token', url: 'https://gitlab.com/-/profile/personal_access_tokens' }]
@@ -45,7 +48,8 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
     'bitbucket': {
         title: 'Connect Bitbucket',
         fields: [
-            { id: 'url', label: 'Server URL (Optional, for Enterprise)', placeholder: 'https://bitbucket.your-company.com', type: 'text' },
+            { id: 'url', label: 'Bitbucket URL', placeholder: 'https://bitbucket.org or https://bitbucket.your-company.com', type: 'text', required: false },
+            { id: 'deployment_mode', label: 'Deployment Mode (cloud/server)', placeholder: 'cloud', type: 'text', required: false },
             { id: 'username', label: 'Username', placeholder: 'Bitbucket Username', type: 'text' },
             { id: 'password', label: 'App Password', placeholder: 'App Password', type: 'password' },
             { id: 'workspace', label: 'Workspace ID (Optional)', placeholder: 'workspace-id', type: 'text' }
@@ -190,6 +194,7 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
         title: 'Connect Azure DevOps',
         fields: [
             { id: 'org_url', label: 'Organization URL', placeholder: 'https://dev.azure.com/my-org', type: 'text' },
+            { id: 'project', label: 'Project', placeholder: 'my-project', type: 'text' },
             { id: 'token', label: 'Personal Access Token', placeholder: 'PAT...', type: 'password' }
         ],
         links: [{ text: 'Create PAT', url: 'https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows' }]
@@ -199,20 +204,23 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
         fields: [
             { id: 'url', label: 'Instance URL', placeholder: 'https://my.testrail.io', type: 'text' },
             { id: 'username', label: 'Username', placeholder: 'user@example.com', type: 'text' },
-            { id: 'api_key', label: 'API Key', placeholder: 'Key...', type: 'password' }
+            { id: 'api_key', label: 'API Key', placeholder: 'Key...', type: 'password' },
+            { id: 'project_id', label: 'Project ID', placeholder: '1', type: 'text' },
+            { id: 'suite_id', label: 'Suite ID (Optional)', placeholder: '2', type: 'text', required: false }
         ],
         links: [{ text: 'My Settings (API Keys)', url: 'https://secure.testrail.com/customers/testrail/settings/api' }]
     },
     'cypress': {
         title: 'Connect Cypress',
         fields: [
-            { id: 'config_path', label: 'cypress.config.js Path', placeholder: '/path/to/cypress.config.js', type: 'text' }
+            { id: 'project_root', label: 'Project Root', placeholder: '/path/to/project', type: 'text' }
         ],
         links: []
     },
     'github_actions': {
         title: 'Connect GitHub Actions',
         fields: [
+            { id: 'api_url', label: 'API URL (Optional, GHES)', placeholder: 'https://github.company.com/api/v3', type: 'text', required: false },
             { id: 'owner', label: 'Repo Owner', placeholder: 'microsoft', type: 'text' },
             { id: 'repo', label: 'Repo Name', placeholder: 'vscode', type: 'text' },
             { id: 'token', label: 'GitHub Token', placeholder: 'ghp_...', type: 'password' }

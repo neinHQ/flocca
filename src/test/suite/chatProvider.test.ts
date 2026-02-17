@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 import { DashboardProvider } from '../../ui/chatProvider';
 import { McpClientManager } from '../../services/mcpClientService';
+import { TeamService } from '../../services/teamService';
 
 suite('DashboardProvider Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
@@ -11,10 +12,14 @@ suite('DashboardProvider Test Suite', () => {
     let mockContext: any;
     let mockWebviewView: any;
     let mockWebview: any;
+    let mockState: Map<string, any>;
     let onDidReceiveMessageCallback: (data: any) => void;
 
     setup(() => {
         sandbox = sinon.createSandbox();
+        mockState = new Map<string, any>();
+        mockState.set('flocca.subscriptionStatus', 'active');
+        mockState.set('flocca.userId', 'u1');
 
         // 1. Mock McpClientManager
         mockClientManager = {
@@ -25,7 +30,10 @@ suite('DashboardProvider Test Suite', () => {
         // 2. Mock Context for Subscription
         mockContext = {
             globalState: {
-                get: sandbox.stub().returns('active') // Default Paid
+                get: sandbox.stub().callsFake((key: string) => mockState.get(key)),
+                update: sandbox.stub().callsFake(async (key: string, value: any) => {
+                    mockState.set(key, value);
+                })
             }
         };
 
@@ -41,6 +49,11 @@ suite('DashboardProvider Test Suite', () => {
         mockWebviewView = {
             webview: mockWebview
         };
+
+        sandbox.stub(global, 'setTimeout').callsFake((() => 0) as any);
+        sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined as any);
+        sandbox.stub(vscode.window, 'showErrorMessage').resolves(undefined as any);
+        sandbox.stub(TeamService.prototype, 'getMyTeams').resolves([]);
 
         // 4. Create Provider
         // @ts-ignore
@@ -82,5 +95,157 @@ suite('DashboardProvider Test Suite', () => {
 
         // Assert
         assert.ok(executeCommandStub.calledWith('flocca.connectGitHub'));
+    });
+
+    test('openSeatManager loads and posts seat manager data', async () => {
+        const getSeatSummaryStub = sandbox.stub(TeamService.prototype, 'getSeatSummary').resolves({
+            plan: 'teams',
+            seatsPurchased: 3,
+            seatsUsed: 1,
+            seatsAvailable: 2,
+            topUpMinimum: 3
+        });
+        const getSeatAssignmentsStub = sandbox.stub(TeamService.prototype, 'getSeatAssignments').resolves([
+            { userId: 'u1', email: 'a@b.com', role: 'OWNER', skus: ['qa_core'] }
+        ]);
+        const getSkuCatalogStub = sandbox.stub(TeamService.prototype, 'getSkuCatalog').resolves([
+            { id: 'qa_core', name: 'QA Core' }
+        ]);
+
+        // @ts-ignore
+        provider.resolveWebviewView(mockWebviewView, {}, {});
+        await onDidReceiveMessageCallback({ type: 'openSeatManager', teamId: 't1' });
+
+        assert.ok(getSeatSummaryStub.calledOnceWithExactly('t1'));
+        assert.ok(getSeatAssignmentsStub.calledOnceWithExactly('t1'));
+        assert.ok(getSkuCatalogStub.calledOnce);
+        assert.ok(
+            mockWebview.postMessage.calledWithMatch({
+                type: 'seatManagerData',
+                data: sinon.match({
+                    teamId: 't1',
+                    summary: sinon.match.has('seatsPurchased', 3)
+                })
+            })
+        );
+    });
+
+    test('assignSkus posts seatLimitExceeded when API returns 409', async () => {
+        const err: any = new Error('Seat limit exceeded');
+        err.status = 409;
+        err.payload = {
+            seats: {
+                requiredAdditional: 2,
+                recommendedTopUp: 3
+            }
+        };
+
+        sandbox.stub(TeamService.prototype, 'assignSkus').rejects(err);
+        sandbox.stub(TeamService.prototype, 'getSeatSummary').resolves({
+            plan: 'teams',
+            seatsPurchased: 1,
+            seatsUsed: 1,
+            seatsAvailable: 0,
+            topUpMinimum: 3
+        });
+        sandbox.stub(TeamService.prototype, 'getSeatAssignments').resolves([]);
+        sandbox.stub(TeamService.prototype, 'getSkuCatalog').resolves([]);
+
+        // @ts-ignore
+        provider.resolveWebviewView(mockWebviewView, {}, {});
+        await onDidReceiveMessageCallback({
+            type: 'assignSkus',
+            teamId: 't1',
+            targetUserId: 'u2',
+            skus: ['qa_core']
+        });
+
+        assert.ok(
+            mockWebview.postMessage.calledWithMatch({
+                type: 'seatLimitExceeded',
+                data: sinon.match({
+                    requiredAdditional: 2,
+                    recommendedTopUp: 3
+                })
+            })
+        );
+    });
+
+    test('assignSkus success refreshes seat manager, updates status, and shows toast', async () => {
+        const assignSkusStub = sandbox.stub(TeamService.prototype, 'assignSkus').resolves({
+            success: true
+        });
+        const getSeatSummaryStub = sandbox.stub(TeamService.prototype, 'getSeatSummary').resolves({
+            plan: 'teams',
+            seatsPurchased: 3,
+            seatsUsed: 2,
+            seatsAvailable: 1,
+            topUpMinimum: 3
+        });
+        sandbox.stub(TeamService.prototype, 'getSeatAssignments').resolves([
+            { userId: 'u1', email: 'a@b.com', role: 'OWNER', skus: ['qa_core'] },
+            { userId: 'u2', email: 'c@d.com', role: 'MEMBER', skus: ['qa_core'] }
+        ]);
+        sandbox.stub(TeamService.prototype, 'getSkuCatalog').resolves([
+            { id: 'qa_core', name: 'QA Core' }
+        ]);
+
+        // @ts-ignore
+        provider.resolveWebviewView(mockWebviewView, {}, {});
+        await onDidReceiveMessageCallback({
+            type: 'assignSkus',
+            teamId: 't1',
+            targetUserId: 'u2',
+            skus: ['qa_core']
+        });
+
+        const infoStub = vscode.window.showInformationMessage as unknown as sinon.SinonStub;
+        assert.ok(assignSkusStub.calledOnceWithExactly('t1', 'u2', ['qa_core']));
+        assert.ok(getSeatSummaryStub.calledOnceWithExactly('t1'));
+        assert.ok(infoStub.calledWith('Seat assignment updated.'));
+        assert.ok(
+            mockWebview.postMessage.calledWithMatch({
+                type: 'seatManagerData',
+                data: sinon.match({ teamId: 't1' })
+            })
+        );
+        assert.ok(
+            mockWebview.postMessage.calledWithMatch({
+                type: 'updateStatus'
+            })
+        );
+    });
+
+    test('topUpSeats calls service and refreshes seat manager data', async () => {
+        const topUpSeatsStub = sandbox.stub(TeamService.prototype, 'topUpSeats').resolves({
+            success: true,
+            seatsPurchased: 6
+        });
+        const getSeatSummaryStub = sandbox.stub(TeamService.prototype, 'getSeatSummary').resolves({
+            plan: 'teams',
+            seatsPurchased: 6,
+            seatsUsed: 2,
+            seatsAvailable: 4,
+            topUpMinimum: 3
+        });
+        sandbox.stub(TeamService.prototype, 'getSeatAssignments').resolves([]);
+        sandbox.stub(TeamService.prototype, 'getSkuCatalog').resolves([]);
+
+        // @ts-ignore
+        provider.resolveWebviewView(mockWebviewView, {}, {});
+        await onDidReceiveMessageCallback({
+            type: 'topUpSeats',
+            teamId: 't1',
+            addSeats: 3
+        });
+
+        assert.ok(topUpSeatsStub.calledOnceWithExactly('t1', 3));
+        assert.ok(getSeatSummaryStub.calledOnceWithExactly('t1'));
+        assert.ok(
+            mockWebview.postMessage.calledWithMatch({
+                type: 'seatManagerData',
+                data: sinon.match({ teamId: 't1' })
+            })
+        );
     });
 });

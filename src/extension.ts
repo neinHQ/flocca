@@ -523,7 +523,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectFigma', () =>
         connectWithWebview('figma', 'figma', 'resources/servers/figma/server.js', 'node', (data) => ({
-            'FIGMA_ACCESS_TOKEN': data.token
+            'FIGMA_TOKEN': data.token
         }))
     ));
 
@@ -536,12 +536,15 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectGitLab', () =>
         connectWithWebview('gitlab', 'gitlab', 'resources/servers/gitlab/server.js', 'node', (data) => ({
             'GITLAB_TOKEN': data.token,
-            'GITLAB_BASE_URL': data.url
+            'GITLAB_BASE_URL': data.url,
+            'GITLAB_DEPLOYMENT_MODE': data.deployment_mode || ''
         }))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectBitbucket', () =>
         connectWithWebview('bitbucket', 'bitbucket', 'resources/servers/bitbucket/server.js', 'node', (data) => ({
+            'BITBUCKET_SERVICE_URL': data.url || '',
+            'BITBUCKET_DEPLOYMENT_MODE': data.deployment_mode || '',
             'BITBUCKET_USERNAME': data.username,
             'BITBUCKET_PASSWORD': data.password,
             'BITBUCKET_WORKSPACE': data.workspace || ''
@@ -551,6 +554,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectJira', () =>
         connectWithWebview('jira', 'jira', 'resources/servers/jira/server.js', 'node', (data) => ({
             'JIRA_SITE_URL': data.url,
+            'JIRA_DEPLOYMENT_MODE': data.deployment_mode || '',
             'JIRA_EMAIL': data.email,
             'JIRA_API_TOKEN': data.token
         }))
@@ -559,6 +563,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectConfluence', () =>
         connectWithWebview('confluence', 'confluence', 'resources/servers/confluence/server.js', 'node', (data) => ({
             'CONFLUENCE_BASE_URL': data.url,
+            'CONFLUENCE_DEPLOYMENT_MODE': data.deployment_mode || '',
             'CONFLUENCE_USERNAME': data.email,
             'CONFLUENCE_TOKEN': data.token
         }))
@@ -589,7 +594,8 @@ export async function activate(context: vscode.ExtensionContext) {
         connectWithWebview('github_actions', 'github_actions', 'resources/servers/github_actions/server.js', 'node', (data) => ({
             'GITHUB_TOKEN': data.token,
             'GITHUB_OWNER': data.owner,
-            'GITHUB_REPO': data.repo
+            'GITHUB_REPO': data.repo,
+            'GITHUB_API_URL': data.api_url || ''
         }))
     ));
 
@@ -622,8 +628,9 @@ export async function activate(context: vscode.ExtensionContext) {
     // Azure DevOps (separate from Cloud)
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectAzureDevOps', () =>
         connectWithWebview('azuredevops', 'azuredevops', 'resources/servers/azuredevops/server.js', 'node', (data) => ({
-            'ADO_ORG_URL': data.org_url,
-            'ADO_PAT': data.token
+            'AZURE_DEVOPS_ORG_URL': data.org_url,
+            'AZURE_DEVOPS_PROJECT': data.project,
+            'AZURE_DEVOPS_TOKEN': data.token
         }))
     ));
 
@@ -667,15 +674,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectTestRail', () =>
         connectWithWebview('testrail', 'testrail', 'resources/servers/testrail/server.js', 'node', (data) => ({
-            'TESTRAIL_URL': data.url,
+            'TESTRAIL_BASE_URL': data.url,
             'TESTRAIL_USERNAME': data.username,
-            'TESTRAIL_API_KEY': data.api_key
+            'TESTRAIL_API_KEY': data.api_key,
+            'TESTRAIL_PROJECT_ID': data.project_id || '',
+            'TESTRAIL_SUITE_ID': data.suite_id || ''
         }))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectCypress', () =>
         connectWithWebview('cypress', 'cypress', 'resources/servers/cypress/server.js', 'node', (data) => ({
-            'CYPRESS_CONFIG_PATH': data.config_path
+            'CYPRESS_PROJECT_ROOT': data.project_root
         }))
     ));
 
@@ -767,9 +776,11 @@ export async function activate(context: vscode.ExtensionContext) {
             await subs.setUserId(result.user.id);
             if (result.user.email) await subs.setEmail(result.user.email);
 
-            if (result.user.subscriptionStatus) {
+            if (result.user.entitlements) {
+                await subs.applyEntitlements(result.user.entitlements);
+            } else if (result.user.subscriptionStatus) {
                 // Determine if active based on status string
-                const isActive = result.user.subscriptionStatus === 'individual' || result.user.subscriptionStatus === 'teams';
+                const isActive = ['individual', 'teams', 'team', 'pro', 'enterprise', 'active'].includes(result.user.subscriptionStatus);
                 await context.globalState.update('flocca.subscriptionStatus', isActive ? 'active' : undefined);
             }
             subs.updateStatusBar();
@@ -805,8 +816,10 @@ export async function activate(context: vscode.ExtensionContext) {
             await subs.setUserId(result.user.id);
             if (result.user.email) await subs.setEmail(result.user.email);
 
-            if (result.user.subscriptionStatus) {
-                const isActive = result.user.subscriptionStatus === 'individual' || result.user.subscriptionStatus === 'teams';
+            if (result.user.entitlements) {
+                await subs.applyEntitlements(result.user.entitlements);
+            } else if (result.user.subscriptionStatus) {
+                const isActive = ['individual', 'teams', 'team', 'pro', 'enterprise', 'active'].includes(result.user.subscriptionStatus);
                 await context.globalState.update('flocca.subscriptionStatus', isActive ? 'active' : undefined);
             }
             subs.updateStatusBar();

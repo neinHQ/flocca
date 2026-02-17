@@ -285,13 +285,22 @@ app.get('/subscription/status', async (req, res) => {
                 shared_vault: true,
                 shared_workflows: true,
                 seat_billing: true
+            },
+            enterprise: {
+                pro_integrations: true,
+                unlimited_vault: true,
+                mcp_workflows: true,
+                priority_support: true,
+                shared_vault: true,
+                shared_workflows: true,
+                seat_billing: true
             }
         };
 
         const permissions = FEATURES[plan] || FEATURES.free;
 
         res.json({
-            status: (plan === 'individual' || plan === 'teams') ? 'active' : 'inactive', // For legacy extension check
+            status: (plan === 'individual' || plan === 'teams' || plan === 'enterprise') ? 'active' : 'inactive', // For legacy extension check
             plan: plan,
             features: permissions
         });

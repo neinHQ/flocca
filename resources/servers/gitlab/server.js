@@ -8,6 +8,15 @@ let GITLAB_BASE_URL = process.env.GITLAB_BASE_URL || 'https://gitlab.com/api/v4'
 const PROXY_URL = process.env.FLOCCA_PROXY_URL;
 const USER_ID = process.env.FLOCCA_USER_ID;
 
+function normalizeGitLabBaseUrl(url) {
+    if (!url) return 'https://gitlab.com/api/v4';
+    const trimmed = url.replace(/\/+$/, '');
+    if (/\/api\/v4$/i.test(trimmed)) return trimmed;
+    return `${trimmed}/api/v4`;
+}
+
+GITLAB_BASE_URL = normalizeGitLabBaseUrl(GITLAB_BASE_URL);
+
 if (!GITLAB_TOKEN && (!PROXY_URL || !USER_ID)) {
     console.error("Error: GITLAB_TOKEN (or Proxy) is required.");
     process.exit(1);
