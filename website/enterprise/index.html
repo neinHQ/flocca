@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Flocca - Enterprise</title>
+    <meta name="description"
+        content="Flocca Enterprise: governance, role-based SKU controls, and scalable seat-based billing for teams.">
+
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f9f506",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#23220f",
+                        "dark-text": "#181811",
+                        "slate-accent": "#e2e2dc"
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+</head>
+
+<body class="bg-background-light text-dark-text font-display antialiased overflow-x-hidden">
+    <div class="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-accent">
+        <div class="px-6 md:px-10 py-4 max-w-7xl mx-auto flex items-center justify-between">
+            <a class="flex items-center gap-3" href="/">
+                <img src="/logo.png" alt="Flocca Logo" class="h-8 w-8 object-contain rounded-lg">
+                <h2 class="text-xl font-bold tracking-tight">Flocca</h2>
+            </a>
+            <a href="/pricing"
+                class="inline-flex h-10 px-6 items-center justify-center rounded-full bg-primary hover:bg-[#e6e205] transition-colors text-black text-sm font-bold tracking-wide">View
+                Pricing</a>
+        </div>
+    </div>
+
+    <div class="pt-28"></div>
+
+    <section class="py-12 px-6 md:px-10">
+        <div class="max-w-7xl mx-auto">
+            <h1 class="text-4xl md:text-5xl font-black mb-4">Teams vs Enterprise</h1>
+            <p class="text-gray-600 text-lg mb-10">Pick the right plan for your organization and growth stage.</p>
+            <div class="overflow-x-auto">
+                <table class="w-full bg-white border border-slate-accent rounded-2xl overflow-hidden">
+                    <thead class="bg-black text-white">
+                        <tr>
+                            <th class="text-left p-4 text-sm font-bold">Feature</th>
+                            <th class="text-left p-4 text-sm font-bold">Teams</th>
+                            <th class="text-left p-4 text-sm font-bold">Enterprise</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-sm">
+                        <tr class="border-t border-slate-accent">
+                            <td class="p-4 font-semibold">Minimum seats</td>
+                            <td class="p-4">3</td>
+                            <td class="p-4">10</td>
+                        </tr>
+                        <tr class="border-t border-slate-accent">
+                            <td class="p-4 font-semibold">Price</td>
+                            <td class="p-4">$12.99 / user</td>
+                            <td class="p-4">$24.99 / seat / month</td>
+                        </tr>
+                        <tr class="border-t border-slate-accent">
+                            <td class="p-4 font-semibold">Seat scaling</td>
+                            <td class="p-4">Add seats anytime</td>
+                            <td class="p-4">Add seats anytime with org-level controls</td>
+                        </tr>
+                        <tr class="border-t border-slate-accent">
+                            <td class="p-4 font-semibold">SKU assignment</td>
+                            <td class="p-4">Owner/Admin assignment</td>
+                            <td class="p-4">Advanced role-based SKU assignment</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="pb-20 px-6 md:px-10">
+        <div class="max-w-6xl mx-auto">
+            <div class="grid md:grid-cols-2 gap-10 items-start">
+                <div>
+                    <h2 class="text-4xl font-black mb-6">Enterprise Control at Scale</h2>
+                    <p class="text-gray-700 text-lg leading-relaxed mb-6">
+                        Enterprise is built for organizations that need governance, control, and scale. Manage access by
+                        role, assign connector SKUs per user, and expand seats instantly with predictable per-seat
+                        billing.
+                    </p>
+                    <a href="mailto:hello@flocca.app?subject=Flocca%20Enterprise"
+                        class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity">Talk
+                        to Sales</a>
+                </div>
+                <div class="bg-white border border-slate-accent rounded-[2rem] p-8">
+                    <h3 class="text-2xl font-bold mb-5">What Enterprise adds</h3>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex items-start gap-3"><span
+                                class="material-symbols-outlined text-gray-500 text-lg">check</span>Owner/Admin can
+                            assign user access by SKU</li>
+                        <li class="flex items-start gap-3"><span
+                                class="material-symbols-outlined text-gray-500 text-lg">check</span>Users can have
+                            multiple SKUs</li>
+                        <li class="flex items-start gap-3"><span
+                                class="material-symbols-outlined text-gray-500 text-lg">check</span>Seat visibility:
+                            purchased, used, available</li>
+                        <li class="flex items-start gap-3"><span
+                                class="material-symbols-outlined text-gray-500 text-lg">check</span>Clear plan minimums
+                            and top-up flow</li>
+                        <li class="flex items-start gap-3"><span
+                                class="material-symbols-outlined text-gray-500 text-lg">check</span>Immediate seat
+                            billing adjustments</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="bg-black text-white py-10 px-6 md:px-10">
+        <div class="max-w-7xl mx-auto text-center text-xs text-gray-500">
+            © <span id="currentYear"></span> Flocca Inc. All rights reserved.
+        </div>
+    </footer>
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+    </script>
+</body>
+
+</html>
