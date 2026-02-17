@@ -91,17 +91,18 @@
                     <div class="text-4xl font-black mb-1">$12.99<span
                             class="text-lg text-gray-400 font-normal">/user</span></div>
                     <p class="text-sm text-gray-500 mb-2">Governance and sharing for growing orgs.</p>
+                    <p class="text-sm text-gray-600 mb-4">Minimum 3 seats. Add seats anytime (billed immediately).</p>
 
                     <!-- Seats Input -->
                     <div class="mb-6">
                         <label class="block text-xs font-bold uppercase text-gray-400 mb-1">Number of Seats</label>
-                        <input type="number" id="seats-input" min="1" value="1"
+                        <input type="number" id="seats-input" min="3" value="3"
                             class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-primary focus:outline-none">
                     </div>
 
                     <button id="btn-teams"
-                        class="w-full py-3 rounded-full bg-primary font-bold hover:bg-[#e6e205] transition-colors mb-8 text-black shadow-lg">Get
-                        Started</button>
+                        class="w-full py-3 rounded-full bg-primary font-bold hover:bg-[#e6e205] transition-colors mb-8 text-black shadow-lg">Start
+                        with 3+ seats</button>
                     <ul class="space-y-3 text-sm">
                         <li class="flex items-center gap-3"><span
                                 class="material-symbols-outlined text-green-600 text-lg">check</span> Everything in
@@ -117,24 +118,132 @@
                 </div>
                 <div class="p-8 rounded-[2rem] bg-white border border-slate-accent">
                     <h3 class="text-xl font-bold mb-2">Enterprise</h3>
-                    <div class="text-4xl font-black mb-1">Custom</div>
-                    <p class="text-sm text-gray-500 mb-6">For large organizations requiring advanced control.</p>
-                    <button
-                        class="w-full py-3 rounded-full border-2 border-black font-bold hover:bg-black hover:text-white transition-colors mb-8">Contact
-                        Support</button>
+                    <div class="text-4xl font-black mb-1">$24.99<span
+                            class="text-lg text-gray-400 font-normal">/seat/mo</span></div>
+                    <p class="text-sm text-gray-500 mb-2">For organizations needing governance, control, and scale.</p>
+                    <p class="text-sm text-gray-600 mb-6">Minimum 10 seats. Add seats anytime (billed immediately).
+                    </p>
+                    <a href="mailto:hello@flocca.app?subject=Flocca%20Enterprise"
+                        class="w-full py-3 rounded-full border-2 border-black font-bold hover:bg-black hover:text-white transition-colors mb-8 inline-flex items-center justify-center">Start
+                        with 10+ seats</a>
                     <ul class="space-y-3 text-sm">
                         <li class="flex items-center gap-3"><span
                                 class="material-symbols-outlined text-gray-400 text-lg">check</span> Dedicated Support
                         </li>
                         <li class="flex items-center gap-3"><span
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span> Role-based SKU
+                            assignment controls</li>
+                        <li class="flex items-center gap-3"><span
                                 class="material-symbols-outlined text-gray-400 text-lg">check</span> Custom Contracts
                         </li>
                         <li class="flex items-center gap-3"><span
-                                class="material-symbols-outlined text-gray-400 text-lg">check</span> Advanced SLA</li>
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span> Stripe-supported
+                            payments (no invoice in v1)</li>
                         <li class="flex items-center gap-3"><span
-                                class="material-symbols-outlined text-gray-400 text-lg">check</span> On-premise Options
+                                class="material-symbols-outlined text-gray-400 text-lg">check</span> Advanced SLA &
+                            governance
                         </li>
                     </ul>
+                </div>
+            </div>
+            <p class="text-center text-xs text-gray-500 mt-8">Additional seats are billed immediately when added.</p>
+        </div>
+    </section>
+
+    <section class="pb-24 px-6 md:px-10">
+        <div class="max-w-7xl mx-auto">
+            <h3 class="text-3xl font-black mb-8 text-center">Teams vs Enterprise</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full bg-white border border-slate-accent rounded-2xl overflow-hidden">
+                    <thead class="bg-black text-white">
+                        <tr>
+                            <th class="text-left p-4 text-sm font-bold">Feature</th>
+                            <th class="text-left p-4 text-sm font-bold">Teams</th>
+                            <th class="text-left p-4 text-sm font-bold">Enterprise</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-sm">
+                        <tr class="border-t border-slate-accent">
+                            <td class="p-4 font-semibold">Minimum seats</td>
+                            <td class="p-4">3</td>
+                            <td class="p-4">10</td>
+                        </tr>
+                        <tr class="border-t border-slate-accent">
+                            <td class="p-4 font-semibold">Price</td>
+                            <td class="p-4">$12.99 / user</td>
+                            <td class="p-4">$24.99 / seat / month</td>
+                        </tr>
+                        <tr class="border-t border-slate-accent">
+                            <td class="p-4 font-semibold">Seat scaling</td>
+                            <td class="p-4">Add seats anytime</td>
+                            <td class="p-4">Add seats anytime with org-level controls</td>
+                        </tr>
+                        <tr class="border-t border-slate-accent">
+                            <td class="p-4 font-semibold">SKU assignment</td>
+                            <td class="p-4">Owner/Admin assignment</td>
+                            <td class="p-4">Advanced role-based SKU assignment</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="pb-24 px-6 md:px-10">
+        <div class="max-w-4xl mx-auto bg-white border border-slate-accent rounded-[2rem] p-8 md:p-10">
+            <h3 class="text-3xl font-black mb-4">Enterprise</h3>
+            <p class="text-gray-700 text-lg leading-relaxed mb-6">
+                Enterprise is built for organizations that need governance, control, and scale. Manage access by role,
+                assign connector SKUs per user, and expand seats instantly with predictable per-seat billing.
+            </p>
+            <ul class="space-y-3 text-sm mb-8">
+                <li class="flex items-start gap-3"><span
+                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Owner/Admin can assign user
+                    access by SKU</li>
+                <li class="flex items-start gap-3"><span
+                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Users can have multiple SKUs
+                </li>
+                <li class="flex items-start gap-3"><span
+                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Seat visibility: purchased,
+                    used, available</li>
+                <li class="flex items-start gap-3"><span
+                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Owner/Admin invite users and
+                    manage assignments</li>
+                <li class="flex items-start gap-3"><span
+                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Immediate billing adjustment
+                    when seats are added</li>
+            </ul>
+            <a href="mailto:hello@flocca.app?subject=Flocca%20Enterprise"
+                class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity">Talk
+                to Sales</a>
+        </div>
+    </section>
+
+    <section class="pb-24 px-6 md:px-10">
+        <div class="max-w-4xl mx-auto">
+            <h3 class="text-3xl font-black mb-8 text-center">FAQ</h3>
+            <div class="space-y-6">
+                <div>
+                    <h4 class="text-lg font-bold mb-2">Why Enterprise vs Teams?</h4>
+                    <p class="text-gray-600">Teams is for collaboration. Enterprise is for governance, control, and
+                        scalable access management across larger organizations.</p>
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold mb-2">What is the minimum seat count?</h4>
+                    <p class="text-gray-600">Teams starts at 3 seats. Enterprise starts at 10 seats.</p>
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold mb-2">Can we add or remove seats anytime?</h4>
+                    <p class="text-gray-600">Seats can be added anytime. Removals and downgrade timing follow the
+                        standard grace-period policy.</p>
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold mb-2">How are additional seats billed?</h4>
+                    <p class="text-gray-600">Additional seats are billed immediately when added.</p>
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold mb-2">Can one user have multiple SKUs?</h4>
+                    <p class="text-gray-600">Yes. Owner and Admin roles can assign multiple SKUs to a user.</p>
                 </div>
             </div>
         </div>
@@ -257,7 +366,7 @@
             const quantityParam = urlObj.searchParams.get("quantity");
             if (quantityParam) {
                 const qty = parseInt(quantityParam, 10);
-                if (qty > 1) {
+                if (qty >= 3) {
                     document.getElementById('seats-input').value = qty;
                 }
             }
