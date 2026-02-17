@@ -4,6 +4,8 @@
     "description": "Mock Backend for Flocca Application",
     "main": "server.js",
     "scripts": {
+        "postinstall": "prisma generate",
+        "build": "prisma generate",
         "start": "node server.js",
         "test": "jest"
     },
