@@ -7,6 +7,8 @@ interface FieldConfig {
     placeholder?: string;
     value?: string;
     required?: boolean;
+    options?: { value: string; label: string }[];
+    infoText?: string;
 }
 
 interface ProviderConfig {
@@ -20,7 +22,18 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
         title: 'Connect Jira',
         fields: [
             { id: 'url', label: 'Jira Base URL', placeholder: 'https://your-domain.atlassian.net or https://jira.your-company.com', type: 'text' },
-            { id: 'deployment_mode', label: 'Deployment Mode (cloud/server)', placeholder: 'cloud', type: 'text', required: false },
+            {
+                id: 'deployment_mode',
+                label: 'Deployment Mode',
+                type: 'select',
+                value: 'cloud',
+                required: true,
+                options: [
+                    { value: 'cloud', label: 'Cloud (atlassian.net)' },
+                    { value: 'server', label: 'Server / Data Center (self-hosted)' }
+                ],
+                infoText: 'Cloud = Atlassian-hosted Jira on atlassian.net. Server = self-hosted Jira Server/Data Center on your company domain.'
+            },
             { id: 'email', label: 'Email Address', placeholder: 'name@example.com', type: 'email' },
             { id: 'token', label: 'API Token', placeholder: 'Paste your API token', type: 'password' }
         ],
@@ -30,7 +43,18 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
         title: 'Connect Confluence',
         fields: [
             { id: 'url', label: 'Confluence Base URL', placeholder: 'https://your-domain.atlassian.net or https://confluence.your-company.com', type: 'text' },
-            { id: 'deployment_mode', label: 'Deployment Mode (cloud/server)', placeholder: 'cloud', type: 'text', required: false },
+            {
+                id: 'deployment_mode',
+                label: 'Deployment Mode',
+                type: 'select',
+                value: 'cloud',
+                required: true,
+                options: [
+                    { value: 'cloud', label: 'Cloud (atlassian.net)' },
+                    { value: 'server', label: 'Server / Data Center (self-hosted)' }
+                ],
+                infoText: 'Cloud = Atlassian-hosted Confluence on atlassian.net. Server = self-hosted Confluence on your company domain.'
+            },
             { id: 'email', label: 'Email Address', placeholder: 'name@example.com', type: 'email' },
             { id: 'token', label: 'API Token', placeholder: 'Paste your API token', type: 'password' }
         ],
@@ -40,7 +64,17 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
         title: 'Connect GitLab',
         fields: [
             { id: 'url', label: 'GitLab Base URL', placeholder: 'https://gitlab.com or https://gitlab.company.com', type: 'text', value: 'https://gitlab.com' },
-            { id: 'deployment_mode', label: 'Deployment Mode (cloud/self_hosted)', placeholder: 'cloud', type: 'text', required: false },
+            {
+                id: 'deployment_mode',
+                label: 'Deployment Mode',
+                type: 'select',
+                value: 'cloud',
+                required: true,
+                options: [
+                    { value: 'cloud', label: 'Cloud (gitlab.com)' },
+                    { value: 'self_hosted', label: 'Self-hosted GitLab' }
+                ]
+            },
             { id: 'token', label: 'Personal Access Token', placeholder: 'glpat-...', type: 'password' }
         ],
         links: [{ text: 'Create Token', url: 'https://gitlab.com/-/profile/personal_access_tokens' }]
@@ -49,7 +83,17 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
         title: 'Connect Bitbucket',
         fields: [
             { id: 'url', label: 'Bitbucket URL', placeholder: 'https://bitbucket.org or https://bitbucket.your-company.com', type: 'text', required: false },
-            { id: 'deployment_mode', label: 'Deployment Mode (cloud/server)', placeholder: 'cloud', type: 'text', required: false },
+            {
+                id: 'deployment_mode',
+                label: 'Deployment Mode',
+                type: 'select',
+                value: 'cloud',
+                required: true,
+                options: [
+                    { value: 'cloud', label: 'Cloud (bitbucket.org)' },
+                    { value: 'server', label: 'Server / Data Center (self-hosted)' }
+                ]
+            },
             { id: 'username', label: 'Username', placeholder: 'Bitbucket Username', type: 'text' },
             { id: 'password', label: 'App Password', placeholder: 'App Password', type: 'password' },
             { id: 'workspace', label: 'Workspace ID (Optional)', placeholder: 'workspace-id', type: 'text' }
@@ -337,11 +381,27 @@ export class ConnectWebview {
             // Default to true if undefined
             const isRequired = f.required !== false;
             const requiredAttr = isRequired ? 'required' : '';
+            const infoIcon = f.infoText
+                ? `<span class="info-icon" tabindex="0" title="${f.infoText.replace(/"/g, '&quot;')}">i</span>`
+                : '';
+
+            const requiredHint = isRequired ? ' <span class="required">*</span>' : '';
+
+            let controlHtml = '';
+            if (type === 'select' || (f.options && f.options.length > 0)) {
+                const optionsHtml = (f.options || []).map(opt => {
+                    const selected = val === opt.value ? 'selected' : '';
+                    return `<option value="${opt.value}" ${selected}>${opt.label}</option>`;
+                }).join('');
+                controlHtml = `<select id="${f.id}" name="${f.id}" ${requiredAttr}>${optionsHtml}</select>`;
+            } else {
+                controlHtml = `<input type="${type}" id="${f.id}" name="${f.id}" value="${val}" ${help} ${requiredAttr}>`;
+            }
 
             fieldsHtml += `
             <div class="form-group">
-                <label for="${f.id}">${f.label}</label>
-                <input type="${type}" id="${f.id}" name="${f.id}" value="${val}" ${help} ${requiredAttr}>
+                <label for="${f.id}">${f.label}${requiredHint}${infoIcon}</label>
+                ${controlHtml}
             </div>`;
         });
 
@@ -375,7 +435,7 @@ export class ConnectWebview {
                 h2 { margin-bottom: 20px; font-weight: 500; }
                 .form-group { margin-bottom: 15px; text-align: left; }
                 label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; }
-                input {
+                input, select {
                     width: 100%;
                     padding: 8px;
                     background: var(--vscode-input-background);
@@ -384,10 +444,26 @@ export class ConnectWebview {
                     border-radius: 4px;
                     box-sizing: border-box;
                 }
-                input:focus { outline: 1px solid var(--vscode-focusBorder); border-color: var(--vscode-focusBorder); }
+                input:focus, select:focus { outline: 1px solid var(--vscode-focusBorder); border-color: var(--vscode-focusBorder); }
                 .help-text { font-size: 12px; margin-top: 15px; opacity: 0.8; text-align: center; }
                 a { color: var(--vscode-textLink-foreground); text-decoration: none; }
                 a:hover { text-decoration: underline; }
+                .required { color: #d93025; }
+                .info-icon {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 14px;
+                    height: 14px;
+                    margin-left: 6px;
+                    border-radius: 50%;
+                    border: 1px solid var(--vscode-input-border);
+                    color: var(--vscode-descriptionForeground);
+                    font-size: 10px;
+                    font-weight: 700;
+                    cursor: help;
+                    vertical-align: middle;
+                }
                 
                 /* Button Color System */
                 :root {
@@ -428,16 +504,38 @@ export class ConnectWebview {
             <script>
                 const vscode = acquireVsCodeApi();
                 const form = document.getElementById('connectForm');
+                const submitBtn = form.querySelector('button');
+
+                function isComplete() {
+                    const requiredFields = form.querySelectorAll('input[required], select[required], textarea[required]');
+                    return Array.from(requiredFields).every(field => {
+                        return String(field.value || '').trim().length > 0;
+                    });
+                }
+
+                function updateSubmitState() {
+                    if (!submitBtn) return;
+                    submitBtn.disabled = !isComplete();
+                }
+
+                form.querySelectorAll('input, select, textarea').forEach(field => {
+                    field.addEventListener('input', updateSubmitState);
+                    field.addEventListener('change', updateSubmitState);
+                });
+
+                updateSubmitState();
+
                 form.addEventListener('submit', (e) => {
                     e.preventDefault();
-                    const btn = form.querySelector('button');
+                    if (!isComplete()) return;
+                    const btn = submitBtn;
                     if (btn) {
                         btn.textContent = 'Connecting...';
                         btn.classList.add('connecting');
                         btn.disabled = true;
                     }
                     const data = {};
-                    const inputs = form.querySelectorAll('input');
+                    const inputs = form.querySelectorAll('input, select, textarea');
                     inputs.forEach(input => {
                         data[input.name] = input.value;
                     });

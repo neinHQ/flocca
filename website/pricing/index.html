@@ -185,79 +185,79 @@
     <section class="pb-24 px-6 md:px-10">
         <div class="max-w-7xl mx-auto">
             <h3 class="text-3xl font-black mb-8 text-center">Teams vs Enterprise</h3>
-            <div class="overflow-x-auto">
-                <table class="w-full bg-white border border-slate-accent rounded-2xl overflow-hidden shadow-sm">
-                    <thead class="bg-gradient-to-r from-black to-[#2c2c2c] text-white">
-                        <tr>
-                            <th class="text-left p-4 text-sm font-bold">Feature</th>
-                            <th class="text-left p-4 text-sm font-bold">Teams</th>
-                            <th class="text-left p-4 text-sm font-bold">Enterprise</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-sm">
-                        <tr class="border-t border-slate-accent">
-                            <td class="p-4 font-semibold">Minimum seats</td>
-                            <td class="p-4">3</td>
-                            <td class="p-4">10</td>
-                        </tr>
-                        <tr class="border-t border-slate-accent">
-                            <td class="p-4 font-semibold">Price</td>
-                            <td class="p-4">$12.99 / user</td>
-                            <td class="p-4">$24.99 / seat / month</td>
-                        </tr>
-                        <tr class="border-t border-slate-accent">
-                            <td class="p-4 font-semibold">Seat scaling</td>
-                            <td class="p-4">Add seats anytime</td>
-                            <td class="p-4">Add seats anytime with org-level controls</td>
-                        </tr>
-                        <tr class="border-t border-slate-accent">
-                            <td class="p-4 font-semibold">SKU assignment</td>
-                            <td class="p-4">Owner/Admin assignment</td>
-                            <td class="p-4">Advanced role-based SKU assignment</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="rounded-[2rem] border border-slate-accent bg-white shadow-sm overflow-hidden">
+                <div class="hidden md:grid md:grid-cols-[1.2fr_1fr_1fr] bg-gradient-to-r from-black to-[#2c2c2c] text-white">
+                    <div class="p-4 text-sm font-bold">Feature</div>
+                    <div class="p-4 text-sm font-bold">Teams</div>
+                    <div class="p-4 text-sm font-bold">Enterprise</div>
+                </div>
+
+                <div class="grid md:grid-cols-[1.2fr_1fr_1fr] border-t border-slate-accent">
+                    <div class="p-4 text-sm font-semibold bg-[#fbfbf8]">Minimum seats</div>
+                    <div class="p-4 text-sm"><span class="inline-flex px-2 py-1 rounded-full bg-slate-100 font-semibold">3</span></div>
+                    <div class="p-4 text-sm"><span class="inline-flex px-2 py-1 rounded-full bg-primary/30 font-semibold">10</span></div>
+                </div>
+                <div class="grid md:grid-cols-[1.2fr_1fr_1fr] border-t border-slate-accent">
+                    <div class="p-4 text-sm font-semibold bg-[#fbfbf8]">Price</div>
+                    <div class="p-4 text-sm">$12.99 / user</div>
+                    <div class="p-4 text-sm">$24.99 / seat / month</div>
+                </div>
+                <div class="grid md:grid-cols-[1.2fr_1fr_1fr] border-t border-slate-accent">
+                    <div class="p-4 text-sm font-semibold bg-[#fbfbf8]">Seat scaling</div>
+                    <div class="p-4 text-sm">Add seats anytime</div>
+                    <div class="p-4 text-sm">Add seats anytime with org-level controls</div>
+                </div>
+                <div class="grid md:grid-cols-[1.2fr_1fr_1fr] border-t border-slate-accent">
+                    <div class="p-4 text-sm font-semibold bg-[#fbfbf8]">SKU assignment</div>
+                    <div class="p-4 text-sm">Owner/Admin assignment</div>
+                    <div class="p-4 text-sm">Advanced role-based SKU assignment</div>
+                </div>
             </div>
         </div>
     </section>
 
     <section class="pb-24 px-6 md:px-10">
-        <div class="max-w-4xl mx-auto bg-gradient-to-br from-white to-[#f6f6ef] border border-slate-accent rounded-[2rem] p-8 md:p-10 shadow-sm">
-            <h3 class="text-3xl font-black mb-4">Enterprise</h3>
-            <p class="text-gray-700 text-lg leading-relaxed mb-6">
-                Enterprise is built for organizations that need governance, control, and scale. Manage access by role,
-                assign connector SKUs per user, and expand seats instantly with predictable per-seat billing.
-            </p>
-            <ul class="space-y-3 text-sm mb-8">
-                <li class="flex items-start gap-3"><span
-                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Owner/Admin can assign user
-                    access by SKU</li>
-                <li class="flex items-start gap-3"><span
-                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Users can have multiple SKUs
-                </li>
-                <li class="flex items-start gap-3"><span
-                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Seat visibility: purchased,
-                    used, available</li>
-                <li class="flex items-start gap-3"><span
-                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Owner/Admin invite users and
-                    manage assignments</li>
-                <li class="flex items-start gap-3"><span
-                        class="material-symbols-outlined text-gray-500 text-lg">check</span>Immediate billing adjustment
-                    when seats are added</li>
-            </ul>
-            <a href="mailto:hello@flocca.app?subject=Flocca%20Enterprise"
-                class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity shadow-sm">Talk
-                to Sales</a>
-        </div>
-    </section>
+        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+            <div class="bg-gradient-to-br from-white to-[#f6f6ef] border border-slate-accent rounded-[2rem] p-8 md:p-10 shadow-sm">
+                <h3 class="text-3xl font-black mb-4">Enterprise</h3>
+                <p class="text-gray-700 text-lg leading-relaxed mb-6">
+                    Enterprise is built for organizations that need governance, control, and scale. Manage access by
+                    role, assign connector SKUs per user, and expand seats instantly with predictable per-seat billing.
+                </p>
+                <ul class="space-y-3 text-sm mb-8">
+                    <li class="flex items-start gap-3"><span
+                            class="material-symbols-outlined text-gray-500 text-lg">check</span>Owner/Admin can assign
+                        user access by SKU</li>
+                    <li class="flex items-start gap-3"><span
+                            class="material-symbols-outlined text-gray-500 text-lg">check</span>Users can have multiple
+                        SKUs</li>
+                    <li class="flex items-start gap-3"><span
+                            class="material-symbols-outlined text-gray-500 text-lg">check</span>Seat visibility:
+                        purchased, used, available</li>
+                    <li class="flex items-start gap-3"><span
+                            class="material-symbols-outlined text-gray-500 text-lg">check</span>Owner/Admin invite users
+                        and manage assignments</li>
+                    <li class="flex items-start gap-3"><span
+                            class="material-symbols-outlined text-gray-500 text-lg">check</span>Immediate billing
+                        adjustment when seats are added</li>
+                </ul>
+                <a href="mailto:hello@flocca.app?subject=Flocca%20Enterprise"
+                    class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity shadow-sm">Talk
+                    to Sales</a>
+            </div>
 
-    <section class="pb-24 px-6 md:px-10">
-        <div class="max-w-4xl mx-auto text-center rounded-[2rem] border border-slate-accent bg-white p-10 shadow-sm">
-            <h3 class="text-3xl font-black mb-4">FAQ</h3>
-            <p class="text-gray-600 mb-8">The full FAQ now lives in our docs for easier updates and versioning.</p>
-            <a href="/docs?agent=faq"
-                class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity">Open
-                FAQ in Docs</a>
+            <div class="rounded-[2rem] border border-slate-accent bg-white p-10 shadow-sm flex flex-col justify-between">
+                <div>
+                    <h3 class="text-3xl font-black mb-4">FAQ</h3>
+                    <p class="text-gray-600 mb-8">The full FAQ now lives in our docs for easier updates and
+                        versioning.</p>
+                </div>
+                <div>
+                    <a href="/docs?agent=faq"
+                        class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity">Open
+                        FAQ in Docs</a>
+                </div>
+            </div>
         </div>
     </section>
 
