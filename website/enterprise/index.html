@@ -7,6 +7,25 @@
     <title>Flocca - Enterprise</title>
     <meta name="description"
         content="Flocca Enterprise: governance, role-based SKU controls, and scalable seat-based billing for teams.">
+    <meta name="keywords"
+        content="Flocca enterprise, enterprise MCP, role-based SKU assignment, team governance, seat management">
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg">
+    <link rel="shortcut icon" href="/favicon.jpg">
+    <link rel="canonical" href="https://flocca.app/enterprise/">
+    <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM Context" />
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://flocca.app/enterprise/">
+    <meta property="og:title" content="Flocca Enterprise">
+    <meta property="og:description"
+        content="Enterprise governance and scalable seat-based access for Dev, QA, DevOps, and Product teams using Flocca.">
+    <meta property="og:image" content="https://flocca.app/og-image.png">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Flocca Enterprise">
+    <meta name="twitter:description"
+        content="Role-based SKU control and scalable seat management for enterprise teams.">
+    <meta name="twitter:image" content="https://flocca.app/og-image.png">
 
     <link href="https://fonts.googleapis.com" rel="preconnect" />
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
@@ -38,28 +57,45 @@
     </script>
 </head>
 
-<body class="bg-background-light text-dark-text font-display antialiased overflow-x-hidden">
-    <div class="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-accent">
+<body class="bg-gradient-to-b from-[#fbfbf8] via-[#f6f6ef] to-[#ffffff] text-dark-text font-display antialiased overflow-x-hidden">
+    <div class="fixed top-0 left-0 right-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-accent">
         <div class="px-6 md:px-10 py-4 max-w-7xl mx-auto flex items-center justify-between">
             <a class="flex items-center gap-3" href="/">
                 <img src="/logo.png" alt="Flocca Logo" class="h-8 w-8 object-contain rounded-lg">
                 <h2 class="text-xl font-bold tracking-tight">Flocca</h2>
             </a>
-            <a href="/pricing"
-                class="inline-flex h-10 px-6 items-center justify-center rounded-full bg-primary hover:bg-[#e6e205] transition-colors text-black text-sm font-bold tracking-wide">View
-                Pricing</a>
+            <div class="flex items-center gap-3">
+                <a href="/pricing"
+                    class="inline-flex h-10 px-5 items-center justify-center rounded-full border border-black/15 bg-white text-sm font-semibold hover:bg-black hover:text-white transition-colors">Pricing</a>
+                <a href="/docs?agent=faq"
+                    class="inline-flex h-10 px-5 items-center justify-center rounded-full bg-black text-white text-sm font-semibold hover:opacity-90 transition-opacity">FAQ</a>
+            </div>
         </div>
     </div>
 
     <div class="pt-28"></div>
 
-    <section class="py-12 px-6 md:px-10">
+    <section class="px-6 md:px-10 pb-12">
+        <div class="max-w-7xl mx-auto relative overflow-hidden rounded-[2.5rem] bg-black text-white p-10 md:p-14">
+            <div class="absolute -right-20 -top-16 h-64 w-64 rounded-full bg-primary/25 blur-3xl"></div>
+            <div class="absolute -left-16 -bottom-24 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl"></div>
+            <div class="relative z-10 max-w-3xl">
+                <p class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wider mb-5">
+                    Enterprise for Modern Teams
+                </p>
+                <h1 class="text-4xl md:text-6xl font-black leading-tight mb-4">Governed access for teams at scale</h1>
+                <p class="text-white/80 text-lg">Control connector access by role, scale seats instantly, and keep billing predictable as your org grows.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-8 px-6 md:px-10">
         <div class="max-w-7xl mx-auto">
-            <h1 class="text-4xl md:text-5xl font-black mb-4">Teams vs Enterprise</h1>
+            <h2 class="text-4xl md:text-5xl font-black mb-4">Teams vs Enterprise</h2>
             <p class="text-gray-600 text-lg mb-10">Pick the right plan for your organization and growth stage.</p>
             <div class="overflow-x-auto">
-                <table class="w-full bg-white border border-slate-accent rounded-2xl overflow-hidden">
-                    <thead class="bg-black text-white">
+                <table class="w-full bg-white border border-slate-accent rounded-2xl overflow-hidden shadow-sm">
+                    <thead class="bg-gradient-to-r from-black to-[#2c2c2c] text-white">
                         <tr>
                             <th class="text-left p-4 text-sm font-bold">Feature</th>
                             <th class="text-left p-4 text-sm font-bold">Teams</th>
@@ -96,18 +132,18 @@
     <section class="pb-20 px-6 md:px-10">
         <div class="max-w-6xl mx-auto">
             <div class="grid md:grid-cols-2 gap-10 items-start">
-                <div>
-                    <h2 class="text-4xl font-black mb-6">Enterprise Control at Scale</h2>
+                <div class="rounded-[2rem] border border-slate-accent bg-white p-8 shadow-sm">
+                    <h3 class="text-4xl font-black mb-6">Enterprise Control at Scale</h3>
                     <p class="text-gray-700 text-lg leading-relaxed mb-6">
                         Enterprise is built for organizations that need governance, control, and scale. Manage access by
                         role, assign connector SKUs per user, and expand seats instantly with predictable per-seat
                         billing.
                     </p>
                     <a href="mailto:hello@flocca.app?subject=Flocca%20Enterprise"
-                        class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity">Talk
+                        class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity shadow-sm">Talk
                         to Sales</a>
                 </div>
-                <div class="bg-white border border-slate-accent rounded-[2rem] p-8">
+                <div class="bg-gradient-to-br from-white to-[#f6f6ef] border border-slate-accent rounded-[2rem] p-8 shadow-sm">
                     <h3 class="text-2xl font-bold mb-5">What Enterprise adds</h3>
                     <ul class="space-y-3 text-sm">
                         <li class="flex items-start gap-3"><span
@@ -131,8 +167,20 @@
         </div>
     </section>
 
-    <footer class="bg-black text-white py-10 px-6 md:px-10">
-        <div class="max-w-7xl mx-auto text-center text-xs text-gray-500">
+    <footer class="bg-black text-white py-12 px-6 md:px-10">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+            <a href="/" class="flex items-center gap-3">
+                <img src="/logo.png" alt="Flocca Logo" class="h-8 w-8 object-contain rounded-lg">
+                <span class="text-lg font-bold tracking-tight text-white">Flocca</span>
+            </a>
+            <div class="flex items-center gap-6 text-sm">
+                <a href="/pricing" class="text-gray-300 hover:text-white transition-colors">Pricing</a>
+                <a href="/enterprise" class="text-gray-300 hover:text-white transition-colors">Enterprise</a>
+                <a href="/docs" class="text-gray-300 hover:text-white transition-colors">Docs</a>
+                <a href="mailto:hello@flocca.app" class="text-gray-300 hover:text-white transition-colors">Contact</a>
+            </div>
+        </div>
+        <div class="max-w-7xl mx-auto mt-8 pt-6 border-t border-white/10 text-xs text-gray-500">
             © <span id="currentYear"></span> Flocca Inc. All rights reserved.
         </div>
     </footer>

@@ -6,7 +6,27 @@
     <script src="https://js.stripe.com/v3/"></script>
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>Flocca - Pricing</title>
-    <meta name="description" content="Simple, transparent pricing for Flocca.">
+    <meta name="description"
+        content="Flocca pricing for Individual, Teams, and Enterprise plans with seat minimums, add-on seat scaling, and transparent monthly billing.">
+    <meta name="keywords"
+        content="Flocca pricing, MCP pricing, Teams plan, Enterprise plan, seat-based billing, VS Code extension pricing">
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg">
+    <link rel="shortcut icon" href="/favicon.jpg">
+    <link rel="canonical" href="https://flocca.app/pricing/">
+    <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM Context" />
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://flocca.app/pricing/">
+    <meta property="og:title" content="Flocca Pricing">
+    <meta property="og:description"
+        content="Compare Flocca Individual, Teams, and Enterprise plans. Seat-based pricing with clear scaling and billing.">
+    <meta property="og:image" content="https://flocca.app/og-image.png">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Flocca Pricing">
+    <meta name="twitter:description"
+        content="Compare Flocca plans and choose the seat-based option that fits your team.">
+    <meta name="twitter:image" content="https://flocca.app/og-image.png">
 
     <link href="https://fonts.googleapis.com" rel="preconnect" />
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
@@ -38,31 +58,49 @@
     </script>
 </head>
 
-<body class="bg-background-light dark:bg-background-dark text-dark-text font-display antialiased overflow-x-hidden">
+<body class="bg-gradient-to-b from-[#fbfbf8] via-[#f6f6ef] to-[#ffffff] text-dark-text font-display antialiased overflow-x-hidden">
     <!-- Header -->
-    <div class="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-accent">
-        <div class="px-6 md:px-10 py-4 max-w-7xl mx-auto flex items-center justify-center">
-            <div class="flex items-center gap-3">
-                <div class="size-8 bg-black rounded-lg flex items-center justify-center text-primary">
-                    <span class="material-symbols-outlined text-[20px]">terminal</span>
-                </div>
+    <div class="fixed top-0 left-0 right-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-accent">
+        <div class="px-6 md:px-10 py-4 max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <img src="/logo.png" alt="Flocca Logo" class="h-8 w-8 object-contain rounded-lg">
                 <h2 class="text-xl font-bold tracking-tight">Flocca</h2>
+            </a>
+            <div class="flex items-center gap-3">
+                <a href="/enterprise"
+                    class="hidden sm:inline-flex h-10 px-5 items-center justify-center rounded-full border border-black/15 bg-white text-sm font-semibold hover:bg-black hover:text-white transition-colors">Enterprise</a>
+                <a href="/docs?agent=faq"
+                    class="inline-flex h-10 px-5 items-center justify-center rounded-full bg-black text-white text-sm font-semibold hover:opacity-90 transition-opacity">FAQ</a>
             </div>
         </div>
     </div>
 
     <!-- Spacer -->
-    <div class="pt-32"></div>
+    <div class="pt-28"></div>
+
+    <section class="px-6 md:px-10 pb-12">
+        <div class="max-w-7xl mx-auto relative overflow-hidden rounded-[2.5rem] bg-black text-white p-10 md:p-14">
+            <div class="absolute -right-20 -top-16 h-64 w-64 rounded-full bg-primary/25 blur-3xl"></div>
+            <div class="absolute -left-16 -bottom-24 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl"></div>
+            <div class="relative z-10 max-w-3xl">
+                <p class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wider mb-5">
+                    Seat-Based Billing
+                </p>
+                <h1 class="text-4xl md:text-6xl font-black leading-tight mb-4">Pricing that scales with your team</h1>
+                <p class="text-white/80 text-lg">Start monthly, add seats instantly, and keep connector access aligned to each role.</p>
+            </div>
+        </div>
+    </section>
 
     <!-- Pricing Section -->
-    <section class="pb-24 px-6 md:px-10" id="pricing">
+    <section class="pb-20 px-6 md:px-10" id="pricing">
         <div class="max-w-7xl mx-auto">
             <div class="text-center mb-16">
-                <h2 class="text-4xl font-black mb-4">Transparent Pricing</h2>
+                <h2 class="text-4xl md:text-5xl font-black mb-4">Transparent Pricing</h2>
                 <p class="text-gray-500 text-lg">Choose the plan that fits your workflow.</p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                <div class="p-8 rounded-[2rem] bg-white border border-slate-accent">
+                <div class="p-8 rounded-[2rem] bg-white/90 border border-slate-accent shadow-sm hover:shadow-lg transition-shadow">
                     <h3 class="text-xl font-bold mb-2">Individual</h3>
                     <div class="text-4xl font-black mb-6">$5.99<span
                             class="text-lg text-gray-400 font-normal">/mo</span></div>
@@ -83,7 +121,7 @@
                             Editor</li>
                     </ul>
                 </div>
-                <div class="p-8 rounded-[2rem] bg-white border-[3px] border-primary shadow-2xl relative md:-mt-8">
+                <div class="p-8 rounded-[2rem] bg-white border-[3px] border-primary shadow-2xl relative md:-mt-6">
                     <div
                         class="absolute top-0 right-0 transform translate-x-2 -translate-y-4 bg-primary text-black text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
                         Best Value</div>
@@ -116,7 +154,7 @@
                                 class="material-symbols-outlined text-green-600 text-lg">check</span> Team Sharing</li>
                     </ul>
                 </div>
-                <div class="p-8 rounded-[2rem] bg-white border border-slate-accent">
+                <div class="p-8 rounded-[2rem] bg-white/90 border border-slate-accent shadow-sm hover:shadow-lg transition-shadow">
                     <h3 class="text-xl font-bold mb-2">Enterprise</h3>
                     <div class="text-4xl font-black mb-1">$24.99<span
                             class="text-lg text-gray-400 font-normal">/seat/mo</span></div>
@@ -148,8 +186,8 @@
         <div class="max-w-7xl mx-auto">
             <h3 class="text-3xl font-black mb-8 text-center">Teams vs Enterprise</h3>
             <div class="overflow-x-auto">
-                <table class="w-full bg-white border border-slate-accent rounded-2xl overflow-hidden">
-                    <thead class="bg-black text-white">
+                <table class="w-full bg-white border border-slate-accent rounded-2xl overflow-hidden shadow-sm">
+                    <thead class="bg-gradient-to-r from-black to-[#2c2c2c] text-white">
                         <tr>
                             <th class="text-left p-4 text-sm font-bold">Feature</th>
                             <th class="text-left p-4 text-sm font-bold">Teams</th>
@@ -184,7 +222,7 @@
     </section>
 
     <section class="pb-24 px-6 md:px-10">
-        <div class="max-w-4xl mx-auto bg-white border border-slate-accent rounded-[2rem] p-8 md:p-10">
+        <div class="max-w-4xl mx-auto bg-gradient-to-br from-white to-[#f6f6ef] border border-slate-accent rounded-[2rem] p-8 md:p-10 shadow-sm">
             <h3 class="text-3xl font-black mb-4">Enterprise</h3>
             <p class="text-gray-700 text-lg leading-relaxed mb-6">
                 Enterprise is built for organizations that need governance, control, and scale. Manage access by role,
@@ -208,13 +246,13 @@
                     when seats are added</li>
             </ul>
             <a href="mailto:hello@flocca.app?subject=Flocca%20Enterprise"
-                class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity">Talk
+                class="inline-flex items-center justify-center px-6 py-3 rounded-full bg-black text-white font-bold hover:opacity-90 transition-opacity shadow-sm">Talk
                 to Sales</a>
         </div>
     </section>
 
     <section class="pb-24 px-6 md:px-10">
-        <div class="max-w-4xl mx-auto text-center">
+        <div class="max-w-4xl mx-auto text-center rounded-[2rem] border border-slate-accent bg-white p-10 shadow-sm">
             <h3 class="text-3xl font-black mb-4">FAQ</h3>
             <p class="text-gray-600 mb-8">The full FAQ now lives in our docs for easier updates and versioning.</p>
             <a href="/docs?agent=faq"
@@ -224,9 +262,21 @@
     </section>
 
     <!-- Footer -->
-    <footer class="bg-black text-white py-10 px-6 md:px-10">
-        <div class="max-w-7xl mx-auto text-center text-xs text-gray-500">
-            © 2023 Flocca Inc. All rights reserved.
+    <footer class="bg-black text-white py-12 px-6 md:px-10">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+            <a href="/" class="flex items-center gap-3">
+                <img src="/logo.png" alt="Flocca Logo" class="h-8 w-8 object-contain rounded-lg">
+                <span class="text-lg font-bold tracking-tight text-white">Flocca</span>
+            </a>
+            <div class="flex items-center gap-6 text-sm">
+                <a href="/pricing" class="text-gray-300 hover:text-white transition-colors">Pricing</a>
+                <a href="/enterprise" class="text-gray-300 hover:text-white transition-colors">Enterprise</a>
+                <a href="/docs" class="text-gray-300 hover:text-white transition-colors">Docs</a>
+                <a href="mailto:hello@flocca.app" class="text-gray-300 hover:text-white transition-colors">Contact</a>
+            </div>
+        </div>
+        <div class="max-w-7xl mx-auto mt-8 pt-6 border-t border-white/10 text-xs text-gray-500">
+            © <span id="currentYear"></span> Flocca Inc. All rights reserved.
         </div>
     </footer>
 
@@ -348,6 +398,7 @@
             // Auto-trigger? Maybe just respect the pre-fill
         });
 
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
         document.getElementById('btn-individual').addEventListener('click', () => initiateCheckout('individual'));
         document.getElementById('btn-teams').addEventListener('click', () => initiateCheckout('teams'));
     </script>
