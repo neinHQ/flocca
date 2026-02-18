@@ -220,6 +220,11 @@
         "icon": "$(play)"
       },
       {
+        "command": "flocca.openServerCatalog",
+        "title": "Connect",
+        "icon": "$(plug)"
+      },
+      {
         "command": "flocca.signin",
         "title": "Sign In / Register",
         "icon": "$(sign-in)"
@@ -250,7 +255,7 @@
     "menus": {
       "view/title": [
         {
-          "submenu": "flocca.menu.connect",
+          "command": "flocca.openServerCatalog",
           "when": "view == flocca-chat",
           "group": "navigation@1"
         },

@@ -393,6 +393,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         this._view?.webview.postMessage({ type: 'showSubscription' });
     }
 
+    public showServerCatalog() {
+        this._view?.webview.postMessage({ type: 'showCatalog' });
+    }
+
     public async restoreConnectionsForCurrentUser() {
         const subService = new SubscriptionService(this._context);
         const userId = subService.getUserId();
@@ -583,7 +587,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     </div>
 
                     <div style="text-align: center; margin-top: 15px;">
-                        <button class="add-server-btn" onclick="showCatalog()">+ Add New Server</button>
+                        <button class="add-server-btn" onclick="showCatalog()">Add New Server</button>
                     </div>
 
                     <div id="upgrade-section" style="margin-top: 25px; border-top: 1px solid var(--vscode-widget-border); padding-top: 15px;">
@@ -731,59 +735,99 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     { id: 'confluence', name: 'Confluence', desc: 'Atlassian Cloud', command: 'flocca.connectConfluence' }
                 ];
 
+                function normalizeServerId(id) {
+                    return String(id || '').trim().toLowerCase().replace(/_/g, '-');
+                }
+
                 function renderServerList(allServersRegistry) {
                     const listDiv = document.getElementById('server-list');
                     listDiv.innerHTML = '';
 
-                    // 1. Start with Defaults
-                    let displayList = [...defaultServers];
+                    const registryById = new Map();
+                    (allServersRegistry || []).forEach((r) => {
+                        registryById.set(normalizeServerId(r.id), r);
+                    });
 
-                    // 2. Add any other connected servers not in defaults
-                    if (connectedList && connectedList.length > 0) {
-                        connectedList.forEach(connId => {
-                            if (!displayList.find(d => d.id === connId)) {
-                                // Find details in registry
-                                const info = allServersRegistry.find(r => r.id === connId);
-                                if (info) {
-                                    displayList.push({
-                                        id: info.id,
-                                        name: info.name,
-                                        desc: info.description,
-                                        command: info.connectCommand
-                                    });
-                                } else {
-                                    // Fallback if not found in registry (shouldn't happen often)
-                                    displayList.push({
-                                        id: connId,
-                                        name: connId,
-                                        desc: 'Connected',
-                                        command: ''
-                                    });
-                                }
-                            }
-                        });
+                    const normalizedConnected = (connectedList || []).map(normalizeServerId);
+
+                    // 1. Build connected list (always visible)
+                    let connectedDisplay = [];
+                    const seen = new Set();
+                    normalizedConnected.forEach((connId) => {
+                        if (seen.has(connId)) return;
+                        seen.add(connId);
+                        const info = registryById.get(connId);
+                        if (info) {
+                            connectedDisplay.push({
+                                id: normalizeServerId(info.id),
+                                name: info.name,
+                                desc: info.description,
+                                command: info.connectCommand || ''
+                            });
+                        } else {
+                            connectedDisplay.push({
+                                id: connId,
+                                name: connId,
+                                desc: 'Connected',
+                                command: ''
+                            });
+                        }
+                    });
+
+                    // 2. Build available quick-connect list (non-connected defaults)
+                    let availableDisplay = [];
+                    defaultServers.forEach((srv) => {
+                        const id = normalizeServerId(srv.id);
+                        if (!seen.has(id)) {
+                            availableDisplay.push({
+                                id,
+                                name: srv.name,
+                                desc: srv.desc,
+                                command: srv.command
+                            });
+                        }
+                    });
+
+                    const connectedHeader = document.createElement('h3');
+                    connectedHeader.textContent = \`Connected (\${connectedDisplay.length})\`;
+                    listDiv.appendChild(connectedHeader);
+
+                    if (connectedDisplay.length === 0) {
+                        const empty = document.createElement('div');
+                        empty.className = 'desc';
+                        empty.style.marginBottom = '10px';
+                        empty.textContent = 'No MCP servers connected yet.';
+                        listDiv.appendChild(empty);
                     }
 
-                    // Render
-                    displayList.forEach(srv => {
-                        const isConnected = connectedList.includes(srv.id);
-                        const card = document.createElement('div');
-                        card.className = 'card' + (isConnected ? ' connected' : '');
-                        
-                        let btnText = isConnected ? '✓ Connected' : 'Connect';
-                        let btnClass = isConnected ? 'connected' : '';
-                        
-                        let btnHtml = \`<button class="\${btnClass}" \${isConnected ? 'disabled' : ''} onclick="post('connectCommand', '\${srv.command}')">\${btnText}</button>\`;
-                        
-                        card.innerHTML = \`
-                            <div>
-                                <div class="card-title"><span class="status-dot"></span> \${srv.name}</div>
-                                <div class="desc">\${srv.desc || ''}</div>
-                            </div>
-                            \${btnHtml}
-                        \`;
-                        listDiv.appendChild(card);
-                    });
+                    const renderCards = (servers) => {
+                        servers.forEach(srv => {
+                            const isConnected = normalizedConnected.includes(normalizeServerId(srv.id));
+                            const card = document.createElement('div');
+                            card.className = 'card' + (isConnected ? ' connected' : '');
+
+                            let btnText = isConnected ? '✓ Connected' : 'Connect';
+                            let btnClass = isConnected ? 'connected' : '';
+                            let btnHtml = \`<button class="\${btnClass}" \${isConnected ? 'disabled' : ''} onclick="post('connectCommand', '\${srv.command}')">\${btnText}</button>\`;
+
+                            card.innerHTML = \`
+                                <div>
+                                    <div class="card-title"><span class="status-dot"></span> \${srv.name}</div>
+                                    <div class="desc">\${srv.desc || ''}</div>
+                                </div>
+                                \${btnHtml}
+                            \`;
+                            listDiv.appendChild(card);
+                        });
+                    };
+
+                    renderCards(connectedDisplay);
+
+                    const availableHeader = document.createElement('h3');
+                    availableHeader.style.marginTop = '14px';
+                    availableHeader.textContent = \`Available to Connect (\${availableDisplay.length})\`;
+                    listDiv.appendChild(availableHeader);
+                    renderCards(availableDisplay);
                 }
 
                 // Modals
@@ -1007,6 +1051,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                         openAccountModal();
                     } else if (msg.type === 'showSubscription') {
                         openSubscriptionModal();
+                    } else if (msg.type === 'showCatalog') {
+                        showCatalog();
                     } else if (msg.type === 'loggedOut') {
                         closeModals();
                         openModal('modal-login');

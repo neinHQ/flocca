@@ -214,7 +214,7 @@ export class ServerRegistryService {
             connectCommand: 'flocca.connectZephyr'
         },
         {
-            id: 'zephyr_enterprise',
+            id: 'zephyr-enterprise',
             name: 'Zephyr Enterprise',
             description: 'Enterprise Test Management.',
             icon: 'server-process',

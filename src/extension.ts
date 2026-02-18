@@ -497,6 +497,10 @@ export async function activate(context: vscode.ExtensionContext) {
         dashboardProvider.showLogin();
     }));
 
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.openServerCatalog', () => {
+        dashboardProvider.showServerCatalog();
+    }));
+
     // --- Connect Commands ---
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectZephyr', () =>
