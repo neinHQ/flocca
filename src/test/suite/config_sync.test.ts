@@ -28,7 +28,7 @@ suite('Config Sync Security Test Suite', () => {
 
     test('saveConfig should create .vscode directory and write mcp.json', async () => {
         const service = new McpConfigService(mockContext, mockFs, workspaceFolders);
-        const config = { mcpServers: { github: { command: 'npx' } } };
+        const config = { servers: { github: { command: 'npx' } } };
 
         await service.saveConfig(config);
 
@@ -43,7 +43,9 @@ suite('Config Sync Security Test Suite', () => {
         assert.ok(fileArgs[0].path.endsWith('mcp.json'), 'Should write to mcp.json');
 
         const writtenContent = JSON.parse(new TextDecoder().decode(fileArgs[1]));
-        assert.deepStrictEqual(writtenContent, config);
+        assert.ok(!('mcpServers' in writtenContent), 'Should not write legacy mcpServers key');
+        assert.ok(writtenContent.servers, 'Should write VS Code-compatible servers key');
+        assert.ok(writtenContent.servers.github, 'Should preserve provided server entries');
     });
 
     test('deleteConfig should delete mcp.json', async () => {
@@ -61,7 +63,7 @@ suite('Config Sync Security Test Suite', () => {
         const service = new McpConfigService(mockContext, mockFs, undefined);
 
         // Should not throw
-        await service.saveConfig({ mcpServers: {} });
+        await service.saveConfig({ servers: {} });
         await service.deleteConfig();
 
         assert.strictEqual(mockFs.createDirectory.called, false);

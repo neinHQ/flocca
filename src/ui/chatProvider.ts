@@ -174,23 +174,23 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     FLOCCA_PROXY_URL: `${CONFIG.PROXY_BASE}/${proxyProvider}`
                 };
 
-                if (!config.mcpServers[def.serverName]) {
-                    config.mcpServers[def.serverName] = {
+                if (!config.servers[def.serverName]) {
+                    config.servers[def.serverName] = {
                         command: def.runtime,
                         args: [absServerPath],
                         env: proxyEnv
                     };
                 } else {
-                    config.mcpServers[def.serverName].command = def.runtime;
-                    config.mcpServers[def.serverName].args = [absServerPath];
-                    config.mcpServers[def.serverName].env = {
-                        ...(config.mcpServers[def.serverName].env || {}),
+                    config.servers[def.serverName].command = def.runtime;
+                    config.servers[def.serverName].args = [absServerPath];
+                    config.servers[def.serverName].env = {
+                        ...(config.servers[def.serverName].env || {}),
                         ...proxyEnv
                     };
                 }
 
                 try {
-                    await this._clientManager.connectLocal(def.serverName, def.runtime, [absServerPath], config.mcpServers[def.serverName].env || proxyEnv);
+                    await this._clientManager.connectLocal(def.serverName, def.runtime, [absServerPath], config.servers[def.serverName].env || proxyEnv);
                     await vscode.commands.executeCommand('setContext', `flocca.connected.${def.serverName}`, true);
                     restoredCount += 1;
                 } catch (e) {

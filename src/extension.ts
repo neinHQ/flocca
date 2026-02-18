@@ -70,12 +70,12 @@ export async function activate(context: vscode.ExtensionContext) {
     // Initialize Clients in Background
     if (config) {
         console.log('Loaded MCP Config:', JSON.stringify(config, null, 2));
-        vscode.window.showInformationMessage(`Flocca loaded ${Object.keys(config.mcpServers).length} MCP servers.`);
+        vscode.window.showInformationMessage(`Flocca loaded ${Object.keys(config.servers).length} MCP servers.`);
         const authService = new AuthService(context);
 
         // Async Background Connection - Do NOT await here to block startup
         (async () => {
-            const promises = Object.entries(config.mcpServers).map(async ([name, server]) => {
+            const promises = Object.entries(config.servers).map(async ([name, server]) => {
                 try {
                     if (server.url) {
                         let token: string | undefined;
@@ -138,16 +138,16 @@ export async function activate(context: vscode.ExtensionContext) {
             if (config) {
                 const auth = new AuthService(context);
                 const ghToken = await auth.getGitHubToken(false);
-                if (ghToken && config.mcpServers['github']?.command) {
-                    config.mcpServers['github'].env = {
-                        ...(config.mcpServers['github'].env || {}),
+                if (ghToken && config.servers['github']?.command) {
+                    config.servers['github'].env = {
+                        ...(config.servers['github'].env || {}),
                         'GITHUB_PERSONAL_ACCESS_TOKEN': ghToken
                     };
                 }
                 const slackToken = await auth.getSlackToken();
-                if (slackToken && config.mcpServers['slack']) {
-                    config.mcpServers['slack'].env = {
-                        ...(config.mcpServers['slack'].env || {}),
+                if (slackToken && config.servers['slack']) {
+                    config.servers['slack'].env = {
+                        ...(config.servers['slack'].env || {}),
                         'SLACK_BOT_TOKEN': slackToken
                     };
                 }
@@ -235,18 +235,18 @@ export async function activate(context: vscode.ExtensionContext) {
             console.log('GitHub Token found:', !!ghToken);
 
             if (ghToken) {
-                if (!config.mcpServers['github']) {
+                if (!config.servers['github']) {
                     console.log('Auto-creating GitHub config');
-                    config.mcpServers['github'] = {
+                    config.servers['github'] = {
                         command: 'node',
                         args: [context.asAbsolutePath('resources/servers/github/server.js')],
                         env: {}
                     };
                 }
 
-                if (config.mcpServers['github'].command) {
-                    config.mcpServers['github'].env = {
-                        ...(config.mcpServers['github'].env || {}),
+                if (config.servers['github'].command) {
+                    config.servers['github'].env = {
+                        ...(config.servers['github'].env || {}),
                         'GITHUB_PERSONAL_ACCESS_TOKEN': ghToken
                     };
 
@@ -254,9 +254,9 @@ export async function activate(context: vscode.ExtensionContext) {
                     try {
                         await clientManager.connectLocal(
                             'github',
-                            config.mcpServers['github'].command,
-                            config.mcpServers['github'].args || [],
-                            config.mcpServers['github'].env
+                            config.servers['github'].command,
+                            config.servers['github'].args || [],
+                            config.servers['github'].env
                         );
                         vscode.commands.executeCommand('setContext', 'flocca.connected.github', true);
                     } catch (e) { console.error('Auto-connect GitHub failed:', e); }
@@ -265,9 +265,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
             // 2. Playwright (Auto-Connect unless disconnected)
             if (!context.globalState.get('flocca.disconnected.playwright')) {
-                if (!config.mcpServers['playwright']) {
+                if (!config.servers['playwright']) {
                     console.log('Auto-creating Playwright config');
-                    config.mcpServers['playwright'] = {
+                    config.servers['playwright'] = {
                         command: 'node',
                         args: [context.asAbsolutePath('resources/servers/playwright/server.js')],
                         env: {
@@ -282,9 +282,9 @@ export async function activate(context: vscode.ExtensionContext) {
                     if (!clientManager.getClient('playwright')) {
                         await clientManager.connectLocal(
                             'playwright',
-                            config.mcpServers['playwright'].command || 'node',
-                            config.mcpServers['playwright'].args || [],
-                            config.mcpServers['playwright'].env
+                            config.servers['playwright'].command || 'node',
+                            config.servers['playwright'].args || [],
+                            config.servers['playwright'].env
                         );
                         vscode.commands.executeCommand('setContext', 'flocca.connected.playwright', true);
                     }
@@ -293,9 +293,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
             // 3. Pytest (Auto-Connect unless disconnected)
             if (!context.globalState.get('flocca.disconnected.pytest')) {
-                if (!config.mcpServers['pytest']) {
+                if (!config.servers['pytest']) {
                     console.log('Auto-creating Pytest config');
-                    config.mcpServers['pytest'] = {
+                    config.servers['pytest'] = {
                         command: 'python3',
                         args: [context.asAbsolutePath('resources/servers/pytest/server.py')],
                         env: {
@@ -308,9 +308,9 @@ export async function activate(context: vscode.ExtensionContext) {
                     if (!clientManager.getClient('pytest')) {
                         await clientManager.connectLocal(
                             'pytest',
-                            config.mcpServers['pytest'].command || 'python3',
-                            config.mcpServers['pytest'].args || [],
-                            config.mcpServers['pytest'].env
+                            config.servers['pytest'].command || 'python3',
+                            config.servers['pytest'].args || [],
+                            config.servers['pytest'].env
                         );
                         vscode.commands.executeCommand('setContext', 'flocca.connected.pytest', true);
                     }
@@ -319,9 +319,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
             // 4. Slack
             const slackToken = await auth.getSlackToken();
-            if (slackToken && config.mcpServers['slack']) {
-                config.mcpServers['slack'].env = {
-                    ...(config.mcpServers['slack'].env || {}),
+            if (slackToken && config.servers['slack']) {
+                config.servers['slack'].env = {
+                    ...(config.servers['slack'].env || {}),
                     'SLACK_BOT_TOKEN': slackToken
                 };
             }
@@ -352,8 +352,8 @@ export async function activate(context: vscode.ExtensionContext) {
             // Remove from config (Optional: keeps config clean, prevents auto-reconnect if logic changes)
             const configService = new McpConfigService(context);
             const config = await configService.loadConfig();
-            if (config && config.mcpServers[selected]) {
-                delete config.mcpServers[selected];
+            if (config && config.servers[selected]) {
+                delete config.servers[selected];
                 await configService.saveConfig(config);
             }
 
@@ -384,17 +384,17 @@ export async function activate(context: vscode.ExtensionContext) {
                 const config = await configService.loadConfig();
 
                 if (config) {
-                    if (!config.mcpServers['github']) {
+                    if (!config.servers['github']) {
                         // Auto-configure if missing
-                        config.mcpServers['github'] = {
+                        config.servers['github'] = {
                             command: 'node',
                             args: [context.asAbsolutePath('resources/servers/github/server.js')],
                             env: {}
                         };
                     }
 
-                    config.mcpServers['github'].env = {
-                        ...(config.mcpServers['github'].env || {}),
+                    config.servers['github'].env = {
+                        ...(config.servers['github'].env || {}),
                         'GITHUB_PERSONAL_ACCESS_TOKEN': token
                     };
                     await configService.saveConfig(config);
@@ -404,7 +404,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         'github',
                         'node',
                         [context.asAbsolutePath('resources/servers/github/server.js')],
-                        config.mcpServers['github'].env
+                        config.servers['github'].env
                     );
 
                     await updateState(); // Refresh UI
@@ -570,7 +570,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 const configService = new McpConfigService(context);
                 const config = await configService.loadConfig();
                 if (config) {
-                    if (!config.mcpServers[serverName]) {
+                    if (!config.servers[serverName]) {
                         const args = [context.asAbsolutePath(serverPath)];
                         // We set PYTHONUNBUFFERED in env instead of just relying on -u arg
                         const extraEnv: Record<string, string> = {};
@@ -578,7 +578,7 @@ export async function activate(context: vscode.ExtensionContext) {
                             extraEnv['PYTHONUNBUFFERED'] = '1';
                         }
 
-                        config.mcpServers[serverName] = {
+                        config.servers[serverName] = {
                             command: runtime,
                             args: args,
                             env: extraEnv
@@ -586,8 +586,8 @@ export async function activate(context: vscode.ExtensionContext) {
                     }
 
                     // Merge new env vars with existing ones to preserve other settings if any
-                    config.mcpServers[serverName].env = {
-                        ...config.mcpServers[serverName].env,
+                    config.servers[serverName].env = {
+                        ...config.servers[serverName].env,
                         ...envMapper(data)
                     };
 
@@ -597,7 +597,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         serverName,
                         runtime,
                         [context.asAbsolutePath(serverPath)],
-                        config.mcpServers[serverName].env
+                        config.servers[serverName].env
                     );
                     log(`Connected local MCP server=${serverName}`, { provider });
                     void reportBackendLog({

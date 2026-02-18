@@ -9,8 +9,7 @@ export interface McpServerConfig {
 }
 
 export interface McpConfig {
-    mcpServers: Record<string, McpServerConfig>;
-    servers?: Record<string, McpServerConfig>;
+    servers: Record<string, McpServerConfig>;
 }
 
 export class McpConfigService {
@@ -35,25 +34,22 @@ export class McpConfigService {
 
         const raw = config as any;
         let serverMap: Record<string, McpServerConfig> = {};
-        if (raw?.mcpServers && typeof raw.mcpServers === 'object') {
-            serverMap = raw.mcpServers;
-        } else if (raw?.servers && typeof raw.servers === 'object') {
-            serverMap = raw.servers;
-        }
-        config = { mcpServers: serverMap, servers: { ...serverMap } };
+        const legacyServers = (raw?.mcpServers && typeof raw.mcpServers === 'object') ? raw.mcpServers : {};
+        const vscodeServers = (raw?.servers && typeof raw.servers === 'object') ? raw.servers : {};
+        // Prefer VS Code canonical `servers`; fall back to legacy `mcpServers`.
+        serverMap = { ...legacyServers, ...vscodeServers };
+        config = { servers: serverMap };
 
         // Default: Add Local Codebase (Essential for Flocca)
-        if (!config.mcpServers['codebase']) {
-            config.mcpServers['codebase'] = {
+        if (!config.servers['codebase']) {
+            config.servers['codebase'] = {
                 type: 'stdio',
                 command: "node",
                 args: [this.context.asAbsolutePath("resources/servers/codebase/server.js")]
             };
         }
-        config.servers = { ...config.mcpServers };
-
         // Validation
-        if (!config.mcpServers) {
+        if (!config.servers) {
             return undefined;
         }
 
@@ -72,7 +68,7 @@ export class McpConfigService {
             await this.fs.createDirectory(vscodeDir);
 
             const normalizedServers: Record<string, McpServerConfig> = {};
-            for (const [name, server] of Object.entries(config.mcpServers || {})) {
+            for (const [name, server] of Object.entries(config.servers || {})) {
                 const inferredType: 'stdio' | 'sse' | undefined = server.type || (server.url ? 'sse' : (server.command ? 'stdio' : undefined));
                 normalizedServers[name] = {
                     ...server,
@@ -81,8 +77,6 @@ export class McpConfigService {
             }
 
             const fileShape = {
-                ...config,
-                mcpServers: normalizedServers,
                 // VS Code/Copilot-compatible MCP config key.
                 servers: normalizedServers
             };
