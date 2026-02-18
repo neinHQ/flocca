@@ -1,40 +1,42 @@
-# Flocca: VS Code Dev Tools Orchestrator
+# Flocca: Connect MCPs Simply and Securely
 
 ## What is Flocca?
-Flocca is a VS Code extension that turns your local development editor into an orchestration center for your entire DevOps toolchain. It leverages the Model Context Protocol (MCP) to bridge local environments, cloud infrastructure, and AI agents.
+Flocca is an IDE-first MCP platform and VS Code extension that connects local environments, cloud infrastructure, and AI agents. Teams use Flocca to connect tools once and run cross-tool workflows from one workspace.
 
 ## Core Value Proposition
-- **Unified Toolchain**: Connect Jira, GitHub, AWS, Stripe, and more directly within VS Code.
-- **MCP-Native**: Uses the open standard Model Context Protocol, allowing AI agents (like Copilot, Cursor) to safely read tickets, Inspect repos, and trigger workflows.
-- **Secure Vault**: End-to-end encrypted local storage for API keys. Secrets never leave your machine in plain text.
-- **Visual Workflows**: Build automation pipelines visually (e.g., "On Git Push -> Update Jira -> Deploy AWS").
+- **Connect once**: Link Jira, GitHub, cloud, testing, and communication tools from the IDE.
+- **MCP-native**: Uses Model Context Protocol so AI agents can act across systems with consistent interfaces.
+- **Secure by default**: Credentials are stored in local secure storage with encrypted handling.
+- **Team controls**: Role-based access and per-user SKU assignment for connector access.
+- **Seat-based scale**: Teams and Enterprise plans with instant top-up billing when seats are added.
 
 ## Supported Integrations (MCP Servers)
-- **Issue Tracking**: Jira, Linear
-- **Design**: Figma
-- **Source Control**: GitHub, GitLab
-- **Cloud**: AWS, Azure, Google Cloud Platform (GCP)
-- **Database**: MongoDB, PostgreSQL
-- **Communication**: Slack, Microsoft Teams
-- **Billing**: Stripe
+- **Issue Tracking / PM**: Jira, Confluence, Zephyr, Notion
+- **Design / Collaboration**: Figma, Slack, Microsoft Teams
+- **Source Control / CI**: GitHub, GitLab, Bitbucket, GitHub Actions
+- **Cloud / Infra**: AWS, Azure, Google Cloud, Kubernetes, Docker
+- **Data / Observability**: PostgreSQL, Elasticsearch, Sentry
+- **Testing / QA**: Cypress, Playwright, Pytest, TestRail
 
 ## How It Works
-1.  **Connect**: Install the extension and link your accounts via the secure Vault.
-2.  **Orchestrate**: Use natural language or the visual builder to chain actions.
-    *   *Example*: "Check Jira ticket PROJ-123, find the relevant code in `src/`, and create a PR."
-3.  **Deploy**: Run tests (Pytest/Playwright), trigger CI/CD, and monitor deployment status without leaving the editor.
+1. **Connect**: Install the extension and configure connectors from the Flocca dashboard.
+2. **Run workflows**: AI agents can operate across tickets, code, tests, and deployments through MCP.
+3. **Manage access**: Owners/Admins assign connector SKUs and monitor seat usage.
 
 ## Pricing
-- **Free Trial**: 24-hour unlimited access to all features.
-- **Individual Pro**: $5.99/mo. Unlimited Vault, Pro Integrations, Workflow Editor.
-- **Teams**: $12.99/user/mo. Adds SSO, Governance, Audit Logs, and Sharing.
-- **Enterprise**: Custom pricing. Dedicated support and on-premise options.
+- **Teams**: $12.99 per seat/month, minimum 3 seats.
+- **Enterprise**: $24.99 per seat/month, minimum 10 seats.
+- **Seat scaling**: Additional seats can be added anytime and are billed immediately.
 
 ## Technical Details
-- **Architecture**: Local MCP Clients + Secure Proxy for external APIs.
-- **Security**: AES-256 encryption. Credentials stored in local OS keychain (never sent to server).
-- **Models**: Model-agnostic. Supports OpenAI, Anthropic, and Local LLMs (Ollama).
-- **Compatibility**: Works natively in VS Code and Cursor.
+- **Architecture**: IDE extension + MCP connectors + backend APIs.
+- **Security**: Local credential handling and encrypted storage practices.
+- **Model support**: Works with AI agents that can use MCP toolchains.
+- **Compatibility**: Built for VS Code and compatible IDE workflows.
 
-For more details, visit: https://flocca.app
-Documentation: https://flocca.app/docs
+For details:
+- Website: https://flocca.app
+- Pricing: https://flocca.app/pricing/
+- Enterprise: https://flocca.app/enterprise/
+- Documentation: https://flocca.app/docs/
+- Blog: https://flocca.app/blog/

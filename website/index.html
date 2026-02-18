@@ -4,11 +4,12 @@
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>Flocca - VS Code Dev Tools Orchestrator</title>
+    <title>Flocca - Connect Your MCPs, Simply and Securely</title>
     <meta name="description"
-        content="Flocca is the all-in-one place to orchestrate your dev tools. Learn how to connect your MCP servers, bridge local environments, and verify your connections directly from VS Code.">
+        content="Connect your MCPs simply and securely. Flocca links Jira, GitHub, CI/CD, testing, and cloud tools so AI agents can run workflows from your IDE.">
     <meta name="keywords"
-        content="VS Code Extension, MCP, DevOps, Connect MCP Servers, MCP Dashboard, Developer Tools, AI Agents, Flocca, Model Context Protocol">
+        content="Flocca, MCP, MCP servers, VS Code extension, AI developer tools, Jira MCP, GitHub MCP, CI/CD automation, cloud workflows">
+    <meta name="robots" content="index, follow, max-image-preview:large">
     <link rel="icon" type="image/jpeg" href="/favicon.jpg">
     <link rel="shortcut icon" href="/favicon.jpg">
     <link rel="canonical" href="https://flocca.app/">
@@ -17,16 +18,16 @@
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://flocca.app/">
-    <meta property="og:title" content="Flocca - VS Code Dev Tools Orchestrator">
+    <meta property="og:title" content="Flocca - Connect Your MCPs, Simply and Securely">
     <meta property="og:description"
-        content="Bridge local environments, cloud infrastructure, and AI agents. The unified control center for modern engineering teams.">
+        content="Connect Jira, GitHub, CI/CD, testing, and cloud tools to AI agents with secure MCP workflows from your IDE.">
     <meta property="og:image" content="https://flocca.app/og-image.png">
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Flocca - VS Code Dev Tools Orchestrator">
+    <meta name="twitter:title" content="Flocca - Connect Your MCPs, Simply and Securely">
     <meta name="twitter:description"
-        content="Bridge local environments, cloud infrastructure, and AI agents. The unified control center for modern engineering teams.">
+        content="Connect Jira, GitHub, CI/CD, testing, and cloud tools to AI agents with secure MCP workflows from your IDE.">
     <meta name="twitter:image" content="https://flocca.app/og-image.png">
 
     <!-- Structured Data -->
@@ -35,14 +36,17 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Flocca",
-  "operatingSystem": "VS Code",
   "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "VS Code and compatible IDEs",
+  "url": "https://flocca.app/",
+  "description": "Flocca connects MCP servers across Jira, GitHub, CI/CD, testing, and cloud tools so AI agents can run workflows from your IDE.",
   "offers": {
-    "@type": "Offer",
-    "price": "5.99",
-    "priceCurrency": "USD"
-  },
-  "description": "Flocca acts as a bridge between your local development environment, cloud infrastructure, and AI agents using the Model Context Protocol (MCP)."
+    "@type": "AggregateOffer",
+    "priceCurrency": "USD",
+    "lowPrice": "12.99",
+    "highPrice": "24.99",
+    "offerCount": "2"
+  }
 }
 </script>
 
@@ -90,6 +94,7 @@
                 <a class="text-sm font-semibold hover:text-black/70 transition-colors"
                     href="#integrations">Integrations</a>
                 <a class="text-sm font-semibold hover:text-black/70 transition-colors" href="#pricing">Pricing</a>
+                <a class="text-sm font-semibold hover:text-black/70 transition-colors" href="/blog">Blog</a>
             </div>
             <button
                 class="hidden sm:flex h-10 px-6 items-center justify-center rounded-full bg-primary hover:bg-[#e6e205] transition-colors text-black text-sm font-bold tracking-wide shadow-sm hover:shadow-md">
@@ -119,6 +124,7 @@
             <a href="#integrations"
                 onclick="document.getElementById('mobileMenu').classList.add('hidden')">Integrations</a>
             <a href="#pricing" onclick="document.getElementById('mobileMenu').classList.add('hidden')">Pricing</a>
+            <a href="/blog" onclick="document.getElementById('mobileMenu').classList.add('hidden')">Blog</a>
             <a href="/docs" onclick="document.getElementById('mobileMenu').classList.add('hidden')">Documentation</a>
         </div>
         <button class="mt-auto h-12 w-full rounded-full bg-primary text-black font-bold">Get Started</button>
@@ -130,15 +136,14 @@
         <div class="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16">
             <div class="flex-1 flex flex-col gap-4 lg:max-w-xl">
                 <h1 class="text-5xl md:text-6xl lg:text-7xl font-black leading-[0.95] tracking-tighter mb-2">
-                    Orchestrate Your Dev Tools from <span class="relative inline-block px-2">VS Code<span
-                            class="absolute bottom-2 left-0 w-full h-4 bg-primary/40 -z-10 -rotate-2"></span></span>
+                    Connect Your MCPs, Simply and Securely. Run Workflows Faster.
                 </h1>
                 <h2 class="text-xl md:text-2xl font-bold text-gray-800 leading-tight">
                     Flocca bridges local environments, cloud infrastructure, and AI agents using MCP.
                 </h2>
                 <p class="text-lg text-gray-600 font-medium leading-relaxed max-w-lg">
-                    Copilot, Cursor, Codex, and other AI agents use Flocca’s MCP servers to work across Jira, Figma,
-                    GitHub, CI/CD, and cloud platforms like AWS, Azure, and GCP — all without leaving VS Code.
+                    Work across Jira, Figma, GitHub, CI/CD, and cloud platforms like AWS, Azure, and GCP, all without
+                    leaving your IDE (VS Code and compatible IDEs).
                 </p>
                 <div class="w-full bg-[#1e1e1e] border border-gray-800 rounded-lg p-3 shadow-sm overflow-x-auto my-2">
                     <code
@@ -229,38 +234,6 @@
                 </div>
                 <div
                     class="absolute -inset-4 bg-gradient-to-tr from-primary to-purple-500 opacity-20 blur-2xl -z-10 rounded-[3rem]">
-                </div>
-            </div>
-        </div>
-    </section>
-    <section class="bg-black py-12 border-y border-white/10 relative overflow-hidden">
-        <div class="max-w-7xl mx-auto px-6 md:px-10">
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-8">
-                <h3 class="text-white text-xl md:text-2xl font-bold whitespace-nowrap">Built for Modern Engineering
-                    Teams</h3>
-                <div class="h-px bg-white/20 flex-1 hidden md:block mx-8"></div>
-                <div class="footer-links grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 w-full md:w-auto">
-                    <div class="link-column flex flex-col gap-1">
-                        <h4>Product</h4>
-                        <a href="#features" class="text-gray-400 text-sm">Features</a>
-                        <a href="#integrations" class="text-gray-400 text-sm">Integrations</a>
-                        <a href="/pricing" class="text-gray-400 text-sm">Pricing</a>
-                        <a href="/docs" class="text-gray-400 text-sm">Documentation</a>
-                    </div>
-                    <div class="link-column flex flex-col gap-1">
-                        <h4>Company</h4>
-                        <a href="https://flocca.app" target="_blank" class="text-gray-400 text-sm">About Flocca</a>
-                        <a href="https://twitter.com/flocca_app" target="_blank"
-                            class="text-gray-400 text-sm">Twitter</a>
-                        <a href="mailto:hello@flocca.app" class="text-gray-400 text-sm">Contact</a>
-                    </div>
-                    <div class="link-column flex flex-col gap-1">
-                        <h4>Support</h4>
-                        <a href="/docs/installation" class="text-gray-400 text-sm">Installation</a>
-                        <a href="https://github.com/neinHQ/flocca-vscode/issues" target="_blank"
-                            class="text-gray-400 text-sm">Report an Issue</a>
-                        <a href="mailto:support@flocca.app" class="text-gray-400 text-sm">Email Support</a>
-                    </div>
                 </div>
             </div>
         </div>
@@ -475,6 +448,38 @@
             </div>
         </div>
     </section>
+    <section class="bg-black py-12 border-y border-white/10 relative overflow-hidden">
+        <div class="max-w-7xl mx-auto px-6 md:px-10">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-8">
+                <h3 class="text-white text-xl md:text-2xl font-bold whitespace-nowrap">Built for Modern Engineering
+                    Teams</h3>
+                <div class="h-px bg-white/20 flex-1 hidden md:block mx-8"></div>
+                <div class="footer-links grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 w-full md:w-auto">
+                    <div class="link-column flex flex-col gap-1">
+                        <h4>Product</h4>
+                        <a href="#features" class="text-gray-400 text-sm">Features</a>
+                        <a href="#integrations" class="text-gray-400 text-sm">Integrations</a>
+                        <a href="/pricing" class="text-gray-400 text-sm">Pricing</a>
+                        <a href="/docs" class="text-gray-400 text-sm">Documentation</a>
+                    </div>
+                    <div class="link-column flex flex-col gap-1">
+                        <h4>Company</h4>
+                        <a href="https://flocca.app" target="_blank" class="text-gray-400 text-sm">About Flocca</a>
+                        <a href="https://twitter.com/flocca_app" target="_blank"
+                            class="text-gray-400 text-sm">Twitter</a>
+                        <a href="mailto:hello@flocca.app" class="text-gray-400 text-sm">Contact</a>
+                    </div>
+                    <div class="link-column flex flex-col gap-1">
+                        <h4>Support</h4>
+                        <a href="/docs/installation" class="text-gray-400 text-sm">Installation</a>
+                        <a href="https://github.com/neinHQ/flocca-vscode/issues" target="_blank"
+                            class="text-gray-400 text-sm">Report an Issue</a>
+                        <a href="mailto:support@flocca.app" class="text-gray-400 text-sm">Email Support</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
     <section class="py-24 bg-[#0B0C15] text-white relative overflow-hidden" id="how-it-works">
         <div class="absolute inset-0 bg-gradient-to-b from-[#0B0C15] to-[#12131F] pointer-events-none"></div>
         <div
@@ -483,8 +488,8 @@
         <div class="max-w-7xl mx-auto px-6 md:px-10 relative z-10">
             <div class="mb-16 max-w-3xl">
                 <h2 class="text-4xl md:text-5xl font-black mb-6 tracking-tight">How Flocca Works</h2>
-                <p class="text-xl text-gray-400">Flocca turns your toolchain into MCP-enabled tools that AI agents can
-                    safely use.</p>
+                <p class="text-xl text-gray-400">Flocca connects your apps through MCP so AI agents can run real
+                    workflows securely from your IDE.</p>
             </div>
             <div class="grid md:grid-cols-3 gap-12">
                 <div class="group relative">
@@ -496,8 +501,9 @@
                             class="text-6xl font-black text-white/5 group-hover:text-primary/20 transition-colors mb-6 select-none">
                             01</div>
                         <h3 class="text-2xl font-bold mb-4 text-white group-hover:text-primary transition-colors">
-                            Connect Your Toolchain</h3>
-                        <p class="text-gray-400 mb-6 leading-relaxed">Install Flocca in VS Code and connect your tools.
+                            Connect Your Apps</h3>
+                        <p class="text-gray-400 mb-6 leading-relaxed">Install Flocca in VS Code and connect your apps
+                            in minutes.
                         </p>
                         <ul class="text-sm text-gray-500 space-y-3 mb-6">
                             <li class="flex items-start gap-2"><span
@@ -589,8 +595,8 @@
             <div class="text-center max-w-3xl mx-auto mb-20">
                 <h2 class="text-4xl md:text-5xl font-black mb-6 tracking-tight">Everything you need,<br />right where
                     you type.</h2>
-                <p class="text-xl text-gray-600">Stop context switching. Flocca brings your entire DevOps, Devs, and QA
-                    pipeline into your editor.</p>
+                <p class="text-xl text-gray-600">Stop context switching. Flocca brings your entire Product Requirements,
+                    Software Development, QA and DevOps pipeline into your editor.</p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div
@@ -601,7 +607,7 @@
                     </div>
                     <h3 class="text-2xl font-bold mb-3">The Vault</h3>
                     <p class="text-gray-600 mb-8 leading-relaxed">End-to-end encrypted credential storage. Never commit
-                        an .env file again. Sync secrets across your team securely.</p>
+                        an .env or mcp.json or .vscode file again. Sync secrets across your team securely.</p>
                     <div class="mt-auto bg-gray-50 rounded-xl p-4 border border-gray-100 overflow-hidden relative">
                         <div class="flex items-center gap-2 mb-2">
                             <span class="material-symbols-outlined text-green-600 text-sm">check_circle</span>
@@ -631,8 +637,8 @@
                         <span class="material-symbols-outlined text-3xl">group_add</span>
                     </div>
                     <h3 class="text-2xl font-bold mb-3">Team Sync</h3>
-                    <p class="text-gray-600 mb-8 leading-relaxed">Onboard new devs in minutes, not days. Share workspace
-                        configurations and toolchains instantly.</p>
+                    <p class="text-gray-600 mb-8 leading-relaxed">Onboard new team members in minutes, not days. Share
+                        workspace configurations and connected apps instantly.</p>
                     <div class="mt-auto relative h-24">
                         <div class="absolute bottom-2 left-4 w-10 h-10 rounded-full bg-white border-2 border-primary z-30 shadow-md"
                             data-alt="Team member 1"
@@ -758,11 +764,12 @@
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start gap-10">
             <div>
                 <div class="flex items-center gap-2 mb-4">
-                    <span class="material-symbols-outlined text-primary">terminal</span>
+                    <img src="/logo.png" alt="Flocca Logo" class="h-7 w-7 object-contain rounded-md">
                     <span class="text-xl font-bold">Flocca</span>
                 </div>
                 <p class="text-gray-400 max-w-xs text-sm">
-                    Making developers 10x more productive by bringing the entire DevOps lifecycle into the IDE.
+                    Helping teams move faster by connecting Product Requirements, Software Development, QA, and DevOps
+                    workflows in the IDE.
                 </p>
             </div>
             <div class="flex flex-wrap gap-12 md:gap-24">
@@ -776,6 +783,7 @@
                 <div class="flex flex-col gap-3">
                     <h4 class="font-bold text-gray-200">Resources</h4>
                     <a class="text-gray-400 hover:text-primary transition-colors text-sm" href="/docs">Documentation</a>
+                    <a class="text-gray-400 hover:text-primary transition-colors text-sm" href="/blog">Blog</a>
                     <!-- <a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">API Reference</a> -->
                     <a class="text-gray-400 hover:text-primary transition-colors text-sm" href="#">GitHub</a>
                 </div>
