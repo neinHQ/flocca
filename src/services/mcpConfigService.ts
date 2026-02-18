@@ -31,8 +31,8 @@ export class McpConfigService {
             }
         }
 
-        // Apply defaults if no config from file or missing keys
-        if (!config) {
+        // Normalize config shape (some legacy/malformed files may not have mcpServers).
+        if (!config || !config.mcpServers || typeof config.mcpServers !== 'object') {
             config = { mcpServers: {} };
         }
 
