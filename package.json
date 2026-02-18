@@ -2,7 +2,7 @@
   "name": "flocca",
   "displayName": "Flocca - Connect MCP Servers in VS Code",
   "description": "Connect MCP servers in VS Code to run workflows across Jira, GitHub, cloud, QA, and DevOps tools from one dashboard.",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "publisher": "flocca",
   "icon": "resources/icon.png",
   "repository": {
