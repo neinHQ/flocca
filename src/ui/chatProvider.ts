@@ -4,9 +4,32 @@ import { SubscriptionService } from '../services/subscriptionService';
 import { ServerRegistryService } from '../services/serverRegistryService';
 import { AuthService } from '../services/authService';
 import { TeamService } from '../services/teamService';
+import { McpConfigService } from '../services/mcpConfigService';
+import { CONFIG } from '../config';
+
+type ProxyRestoreDef = {
+    serverName: string;
+    runtime: 'node' | 'python3';
+    serverPath: string;
+    proxyProvider?: string;
+};
 
 export class DashboardProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'flocca-chat';
+    private static readonly PROXY_RESTORE_MAP: Record<string, ProxyRestoreDef> = {
+        github: { serverName: 'github', runtime: 'node', serverPath: 'resources/servers/github/server.js' },
+        jira: { serverName: 'jira', runtime: 'node', serverPath: 'resources/servers/jira/server.js' },
+        confluence: { serverName: 'confluence', runtime: 'node', serverPath: 'resources/servers/confluence/server.js' },
+        slack: { serverName: 'slack', runtime: 'node', serverPath: 'resources/servers/slack/server.js' },
+        gitlab: { serverName: 'gitlab', runtime: 'node', serverPath: 'resources/servers/gitlab/server.js' },
+        bitbucket: { serverName: 'bitbucket', runtime: 'node', serverPath: 'resources/servers/bitbucket/server.js' },
+        teams: { serverName: 'teams', runtime: 'node', serverPath: 'resources/servers/teams/server.js' },
+        notion: { serverName: 'notion', runtime: 'node', serverPath: 'resources/servers/notion/server.js' },
+        sentry: { serverName: 'sentry', runtime: 'node', serverPath: 'resources/servers/sentry/server.js' },
+        stripe: { serverName: 'stripe', runtime: 'node', serverPath: 'resources/servers/stripe/server.js' },
+        figma: { serverName: 'figma', runtime: 'node', serverPath: 'resources/servers/figma/server.js' },
+        aws: { serverName: 'aws', runtime: 'node', serverPath: 'resources/servers/aws/server.js' }
+    };
     private _view?: vscode.WebviewView;
     private _registryService = new ServerRegistryService();
 
@@ -44,8 +67,11 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 case 'showDoc':
                     vscode.commands.executeCommand('flocca.showDocs', message.agentId);
                     break;
+                case 'showSubscription':
+                    this.showSubscriptionManager();
+                    break;
                 case 'logout':
-                    // await this.handleLogout(); 
+                    await this.handleLogout();
                     break;
 
                 // --- Teams ---
@@ -100,6 +126,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
             if (res.user.email) await subs.setEmail(res.user.email);
             if (res.user.entitlements) await subs.applyEntitlements(res.user.entitlements);
             vscode.window.showInformationMessage(`Welcome back, ${res.user.email}!`);
+            await this.restoreConnectionsFromCloud(res.user.id);
             this.updateStatus();
         }
     }
@@ -114,7 +141,69 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
             if (res.user.email) await subs.setEmail(res.user.email);
             if (res.user.entitlements) await subs.applyEntitlements(res.user.entitlements);
             vscode.window.showInformationMessage(`Account created for ${res.user.email}!`);
+            await this.restoreConnectionsFromCloud(res.user.id);
             this.updateStatus();
+        }
+    }
+
+    private async restoreConnectionsFromCloud(userId: string) {
+        try {
+            const auth = new AuthService(this._context);
+            const providers = await auth.getConnectedProviders(userId);
+            if (!providers.length) return;
+
+            const restorable = providers
+                .map((provider) => ({ provider, def: DashboardProvider.PROXY_RESTORE_MAP[provider] }))
+                .filter((item): item is { provider: string; def: ProxyRestoreDef } => !!item.def);
+
+            if (!restorable.length) return;
+
+            const connected = new Set(this._clientManager.getConnectedClients());
+            const configService = new McpConfigService(this._context);
+            const config = await configService.loadConfig();
+            if (!config) return;
+
+            let restoredCount = 0;
+
+            for (const { provider, def } of restorable) {
+                if (connected.has(def.serverName)) continue;
+                const absServerPath = this._context.asAbsolutePath(def.serverPath);
+                const proxyProvider = def.proxyProvider || provider;
+                const proxyEnv = {
+                    FLOCCA_USER_ID: userId,
+                    FLOCCA_PROXY_URL: `${CONFIG.PROXY_BASE}/${proxyProvider}`
+                };
+
+                if (!config.mcpServers[def.serverName]) {
+                    config.mcpServers[def.serverName] = {
+                        command: def.runtime,
+                        args: [absServerPath],
+                        env: proxyEnv
+                    };
+                } else {
+                    config.mcpServers[def.serverName].command = def.runtime;
+                    config.mcpServers[def.serverName].args = [absServerPath];
+                    config.mcpServers[def.serverName].env = {
+                        ...(config.mcpServers[def.serverName].env || {}),
+                        ...proxyEnv
+                    };
+                }
+
+                try {
+                    await this._clientManager.connectLocal(def.serverName, def.runtime, [absServerPath], config.mcpServers[def.serverName].env || proxyEnv);
+                    await vscode.commands.executeCommand('setContext', `flocca.connected.${def.serverName}`, true);
+                    restoredCount += 1;
+                } catch (e) {
+                    console.error(`Failed to auto-restore ${def.serverName}:`, e);
+                }
+            }
+
+            await configService.saveConfig(config);
+            if (restoredCount > 0) {
+                vscode.window.showInformationMessage(`Restored ${restoredCount} cloud MCP connection(s).`);
+            }
+        } catch (e) {
+            console.error('Cloud restore failed:', e);
         }
     }
 
@@ -226,6 +315,27 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    private async handleLogout() {
+        try {
+            const auth = new AuthService(this._context);
+            const subs = new SubscriptionService(this._context);
+
+            const connected = this._clientManager.getConnectedClients();
+            await Promise.allSettled(connected.map((name) => this._clientManager.disconnect(name)));
+
+            await auth.clearStoredSecrets();
+            await subs.clearSession();
+            await vscode.commands.executeCommand('setContext', 'flocca.auth.loggedIn', false);
+            await vscode.commands.executeCommand('setContext', 'flocca.auth.paid', false);
+
+            this._view?.webview.postMessage({ type: 'loggedOut' });
+            vscode.window.showInformationMessage('Logged out of Flocca. Local account and secret data cleared.');
+            await this.updateStatus();
+        } catch (e: any) {
+            vscode.window.showErrorMessage(`Logout failed: ${e.message}`);
+        }
+    }
+
     public async updateStatus() {
         if (!this._view) return;
 
@@ -233,6 +343,18 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         const subService = new SubscriptionService(this._context);
         const isPaid = subService.isPaidUser();
         const email = subService.getEmail();
+        const planTier = subService.getEntitlements()?.planTier || 'free';
+        const planLabel = !email
+            ? 'Not Signed In'
+            : planTier === 'enterprise'
+                ? 'Enterprise'
+                : planTier === 'team'
+                    ? 'Teams'
+                    : isPaid
+                        ? 'Pro'
+                        : 'Free/Trial';
+        await vscode.commands.executeCommand('setContext', 'flocca.auth.loggedIn', !!email);
+        await vscode.commands.executeCommand('setContext', 'flocca.auth.paid', isPaid);
 
         // Get full registry to map IDs to Names/Descriptions for the dynamic list
         const allServers = this._registryService.getRegistry();
@@ -251,6 +373,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 connectedServers,
                 isPaid,
                 email,
+                userId: subService.getUserId(),
+                plan: planLabel,
                 teams,
                 allServers // Sending registry to the frontend to help render names
             }
@@ -259,6 +383,23 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
     public showLogin() {
         this._view?.webview.postMessage({ type: 'showLogin' });
+    }
+
+    public showAccountManager() {
+        this._view?.webview.postMessage({ type: 'showAccount' });
+    }
+
+    public showSubscriptionManager() {
+        this._view?.webview.postMessage({ type: 'showSubscription' });
+    }
+
+    public async restoreConnectionsForCurrentUser() {
+        const subService = new SubscriptionService(this._context);
+        const userId = subService.getUserId();
+        if (userId && userId !== 'unknown') {
+            await this.restoreConnectionsFromCloud(userId);
+            await this.updateStatus();
+        }
     }
 
     private _getHtmlForWebview(webview: vscode.Webview) {
@@ -540,6 +681,36 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 </div>
             </div>
 
+            <div id="modal-account" class="modal-overlay">
+                <div class="modal">
+                    <span class="close-modal" onclick="closeModals()">✕</span>
+                    <h3>Manage Account</h3>
+                    <div style="font-size:12px; line-height:1.6; margin-bottom:10px;">
+                        <div><b>Email:</b> <span id="acct-email">Not Signed In</span></div>
+                        <div><b>User ID:</b> <span id="acct-userid">-</span></div>
+                        <div><b>Plan:</b> <span id="acct-plan">-</span></div>
+                    </div>
+                    <button id="acct-manage-sub-btn" class="btn-block" onclick="openSubscriptionModal()" style="display:none;">Manage Subscription</button>
+                    <button id="acct-upgrade-btn" class="btn-block" onclick="post('connectCommand', 'flocca.upgrade')" style="display:none;">Upgrade to Pro</button>
+                    <button class="btn-block btn-secondary" onclick="doLogout()">Logout</button>
+                </div>
+            </div>
+
+            <div id="modal-subscription" class="modal-overlay">
+                <div class="modal">
+                    <span class="close-modal" onclick="closeModals()">✕</span>
+                    <h3>Manage Subscription</h3>
+                    <div style="font-size:12px; line-height:1.6; margin-bottom:10px;">
+                        <div><b>Current Plan:</b> <span id="sub-plan">-</span></div>
+                        <div style="opacity:.75;">Upgrade seats and plans instantly, or cancel from billing management.</div>
+                    </div>
+                    <button class="btn-block" onclick="post('connectCommand', 'flocca.upgradeTeams')">Upgrade to Teams</button>
+                    <button class="btn-block" onclick="post('connectCommand', 'flocca.upgradeEnterprise')">Upgrade to Enterprise</button>
+                    <button class="btn-block btn-secondary" onclick="post('connectCommand', 'flocca.openBillingManagement')">Open Billing Management</button>
+                    <button class="btn-block btn-secondary" onclick="post('connectCommand', 'flocca.cancelSubscription')">Cancel Subscription</button>
+                </div>
+            </div>
+
             <script>
                 const vscode = acquireVsCodeApi();
                 let catalogData = [];
@@ -625,6 +796,23 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     document.querySelectorAll('.modal-overlay').forEach(e => e.classList.remove('show'));
                 }
                 function switchModal(id) { closeModals(); openModal(id); }
+                function openAccountModal() {
+                    const email = (window.__floccaStatus && window.__floccaStatus.email) || 'Not Signed In';
+                    const userId = (window.__floccaStatus && window.__floccaStatus.userId) || '-';
+                    const plan = (window.__floccaStatus && window.__floccaStatus.plan) || '-';
+                    const isPaid = !!(window.__floccaStatus && window.__floccaStatus.isPaid);
+                    document.getElementById('acct-email').textContent = email;
+                    document.getElementById('acct-userid').textContent = userId;
+                    document.getElementById('acct-plan').textContent = plan;
+                    document.getElementById('acct-manage-sub-btn').style.display = isPaid ? 'block' : 'none';
+                    document.getElementById('acct-upgrade-btn').style.display = !isPaid ? 'block' : 'none';
+                    openModal('modal-account');
+                }
+                function openSubscriptionModal() {
+                    const plan = (window.__floccaStatus && window.__floccaStatus.plan) || '-';
+                    document.getElementById('sub-plan').textContent = plan;
+                    openModal('modal-subscription');
+                }
                 function togglePassword(inputId, btn) {
                     const input = document.getElementById(inputId);
                     if (!input) return;
@@ -766,6 +954,9 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     post('register', {email, password: pass});
                     closeModals();
                 }
+                function doLogout() {
+                    post('logout', {});
+                }
                 function createTeam() {
                     const name = document.getElementById('new-team-name').value;
                     if(name) { post('createTeam', {name}); closeModals(); }
@@ -789,6 +980,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 window.addEventListener('message', event => {
                     const msg = event.data;
                     if (msg.type === 'updateStatus') {
+                        window.__floccaStatus = msg.status || {};
                         const { email, teams, connectedServers, isPaid, allServers } = msg.status;
                         currentEmail = email;
                         myTeams = teams || [];
@@ -810,6 +1002,13 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                         catalogData = msg.servers;
                         renderCatalog(catalogData);
                     } else if (msg.type === 'showLogin') {
+                        openModal('modal-login');
+                    } else if (msg.type === 'showAccount') {
+                        openAccountModal();
+                    } else if (msg.type === 'showSubscription') {
+                        openSubscriptionModal();
+                    } else if (msg.type === 'loggedOut') {
+                        closeModals();
                         openModal('modal-login');
                     } else if (msg.type === 'seatManagerData') {
                         seatManager = msg.data || { teamId: null, summary: null, assignments: [], skus: [] };

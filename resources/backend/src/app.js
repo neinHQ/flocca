@@ -6,6 +6,7 @@ require('dotenv').config();
 const connectRoutes = require('./routes/connect');
 const proxyRoutes = require('./routes/proxy');
 const statusRoutes = require('./routes/status');
+const logsRoutes = require('./routes/logs');
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use('/connect', connectRoutes);
 app.use('/proxy', proxyRoutes);
 app.use('/connections', statusRoutes);
 app.use('/connections', statusRoutes);
+app.use('/logs', logsRoutes);
 app.use('/teams', require('./routes/teams'));
 app.use('/auth', require('./routes/auth'));
 

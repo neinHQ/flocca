@@ -1,6 +1,25 @@
 import * as vscode from 'vscode';
 
 export class AuthService {
+    private static readonly STORED_SECRET_KEYS = [
+        'flocca.atlassian.token',
+        'flocca.slack.token',
+        'flocca.gitlab.token',
+        'flocca.bitbucket.password',
+        'flocca.k8s.token',
+        'flocca.azure.token',
+        'flocca.testrail.key',
+        'flocca.teams.token',
+        'flocca.azure.cloud.token',
+        'flocca.gcp.token',
+        'flocca.elastic.auth',
+        'flocca.obs.auth',
+        'flocca.db.connection',
+        'flocca.notion.token',
+        'flocca.sentry.token',
+        'flocca.figma.token'
+    ];
+
     constructor(private context: vscode.ExtensionContext) { }
 
     async getGitHubToken(createIfNone: boolean = true, forceNewSession: boolean = false): Promise<string | undefined> {
@@ -160,6 +179,57 @@ export class AuthService {
         } catch (e: any) {
             vscode.window.showErrorMessage(`Registration Failed: ${e.message}`);
             return null;
+        }
+    }
+
+    async saveConnection(provider: string, payload: Record<string, any>, userId: string, teamId?: string): Promise<void> {
+        try {
+            const { CONFIG } = require('../config');
+            const res = await fetch(`${CONFIG.API_BASE}/connect/${encodeURIComponent(provider)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Flocca-Client': 'extension'
+                },
+                body: JSON.stringify({
+                    ...payload,
+                    state: userId,
+                    teamId: teamId || undefined
+                })
+            });
+
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(txt || `Failed to persist ${provider} connection`);
+            }
+        } catch (e) {
+            console.error(`Failed to persist provider connection for ${provider}:`, e);
+            throw e;
+        }
+    }
+
+    async getConnectedProviders(userId: string): Promise<string[]> {
+        try {
+            const { CONFIG } = require('../config');
+            const res = await fetch(`${CONFIG.API_BASE}/connections?userId=${encodeURIComponent(userId)}`);
+            if (!res.ok) return [];
+
+            const data = await res.json() as Record<string, { connected?: boolean } | boolean>;
+            return Object.entries(data)
+                .filter(([, value]) => {
+                    if (typeof value === 'boolean') return value;
+                    return !!value?.connected;
+                })
+                .map(([provider]) => provider);
+        } catch (e) {
+            console.error('Failed to fetch connected providers:', e);
+            return [];
+        }
+    }
+
+    async clearStoredSecrets() {
+        for (const key of AuthService.STORED_SECRET_KEYS) {
+            await this.context.secrets.delete(key);
         }
     }
 }

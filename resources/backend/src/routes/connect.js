@@ -171,8 +171,19 @@ router.post('/:provider', async (req, res) => {
             create: { id: userId }
         });
 
-        // Create connection
-        await prisma.connection.create({
+        // Create or update connection
+        await prisma.connection.upsert({
+            where: {
+                userId_provider: {
+                    userId,
+                    provider
+                }
+            },
+            update: {
+                encryptedData: encryptedData,
+                iv: iv.toString('hex'),
+                teamId: req.body.teamId || null
+            },
             data: {
                 provider,
                 userId,
@@ -188,10 +199,18 @@ router.post('/:provider', async (req, res) => {
         hmac.update(`vault-${userId}`);
         const sig = hmac.digest('hex');
 
+        if (req.headers['x-flocca-client'] === 'extension') {
+            return res.json({ success: true, provider, userId });
+        }
+
         res.redirect(`/auth/success?source=vault&id=${userId}&sig=${sig}`);
     } catch (e) {
-        console.error(e);
-        res.status(500).send("Failed to save connection: " + e.message);
+        console.error(`[connect:${provider}] Failed to save connection for user=${userId}:`, e);
+        const message = e?.message || 'unknown error';
+        if (req.headers['x-flocca-client'] === 'extension') {
+            return res.status(500).json({ error: `Failed to save connection: ${message}` });
+        }
+        res.status(500).send("Failed to save connection: " + message);
     }
 });
 

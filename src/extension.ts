@@ -14,6 +14,39 @@ import { TelemetryService } from './services/telemetryService';
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('Congratulations, your extension "flocca" is now active!');
+    const output = vscode.window.createOutputChannel('Flocca');
+    context.subscriptions.push(output);
+    const log = (message: string, data?: unknown) => {
+        const ts = new Date().toISOString();
+        if (data === undefined) {
+            output.appendLine(`[${ts}] ${message}`);
+            return;
+        }
+        try {
+            output.appendLine(`[${ts}] ${message} ${JSON.stringify(data)}`);
+        } catch {
+            output.appendLine(`[${ts}] ${message} ${String(data)}`);
+        }
+    };
+    const revealLogs = () => output.show(true);
+    const reportBackendLog = async (entry: {
+        level?: 'info' | 'error',
+        message: string,
+        provider?: string,
+        phase?: string,
+        userId?: string,
+        context?: Record<string, unknown>
+    }) => {
+        try {
+            await fetch(`${CONFIG.API_BASE}/logs/client`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(entry)
+            });
+        } catch (e: any) {
+            log('Failed to report backend log', { error: e?.message || String(e), entry });
+        }
+    };
 
     const configService = new McpConfigService(context);
     let config = await configService.loadConfig();
@@ -21,6 +54,8 @@ export async function activate(context: vscode.ExtensionContext) {
     const telemetryService = new TelemetryService(context);
     const subsService = new SubscriptionService(context);
     const clientManager = new McpClientManager(context, subsService, telemetryService);
+    await vscode.commands.executeCommand('setContext', 'flocca.auth.loggedIn', !!subsService.getEmail());
+    await vscode.commands.executeCommand('setContext', 'flocca.auth.paid', subsService.isPaidUser());
 
     // Register Dashboard - Initialize it early so we can update status
     const dashboardProvider = new DashboardProvider(context.extensionUri, clientManager, context);
@@ -76,6 +111,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     }
                 } catch (err: any) {
                     console.error(`Failed to connect to MCP server ${name}:`, err);
+                    log(`Startup auto-connect failed for ${name}`, { error: err?.message || String(err), stack: err?.stack });
                     if (name === 'github') vscode.commands.executeCommand('setContext', 'flocca.connected.github', false);
                     if (name === 'jira') vscode.commands.executeCommand('setContext', 'flocca.connected.jira', false);
                     if (name === 'confluence') vscode.commands.executeCommand('setContext', 'flocca.connected.confluence', false);
@@ -427,18 +463,33 @@ export async function activate(context: vscode.ExtensionContext) {
         await subsService.upgradeToPro();
     }));
 
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.manageSubscription', async () => {
+        dashboardProvider.showSubscriptionManager();
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.openBillingManagement', async () => {
+        await subsService.openManageSubscriptionPage();
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.upgradeTeams', async () => {
+        await subsService.upgradeToPlan('teams');
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.upgradeEnterprise', async () => {
+        await subsService.upgradeToPlan('enterprise');
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.cancelSubscription', async () => {
+        await subsService.openCancelSubscriptionPage();
+    }));
+
     // Poll status on startup
-    subsService.pollSubscriptionStatus();
+    void subsService.pollSubscriptionStatus().then(async () => {
+        await vscode.commands.executeCommand('setContext', 'flocca.auth.paid', subsService.isPaidUser());
+    });
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.manageAccounts', async () => {
-        const userId = subsService.getUserId();
-        const email = subsService.getEmail() || 'Not Signed In';
-        const plan = subsService.getStatus() === 'active' ? (subsService.isPaidUser() ? 'Pro' : 'Trial') : 'Expired';
-
-        vscode.window.showInformationMessage(`Flocca Account: ${email}\nUser ID: ${userId}\nPlan: ${plan}`, "Copy ID", "Upgrade").then(selection => {
-            if (selection === "Upgrade") subsService.upgradeToPro();
-            if (selection === "Copy ID") vscode.env.clipboard.writeText(userId);
-        });
+        dashboardProvider.showAccountManager();
     }));
 
     // Trigger Login Modal via Sign In Icon
@@ -482,6 +533,32 @@ export async function activate(context: vscode.ExtensionContext) {
         const { ConnectWebview } = require('./ui/connectWebview');
         ConnectWebview.show(context, provider, async (data: any) => {
             try {
+                const currentUserId = subsService.getUserId();
+                log(`Connect requested for provider=${provider}`, {
+                    hasUrl: !!data?.url,
+                    deployment_mode: data?.deployment_mode,
+                    hasEmail: !!data?.email
+                });
+                void reportBackendLog({
+                    level: 'info',
+                    message: 'connect_attempt',
+                    provider,
+                    phase: 'attempt',
+                    userId: currentUserId,
+                    context: {
+                        hasUrl: !!data?.url,
+                        deployment_mode: data?.deployment_mode,
+                        hasEmail: !!data?.email
+                    }
+                });
+
+                if ((provider === 'jira' || provider === 'confluence') && data?.url) {
+                    const candidate = String(data.url).trim();
+                    if (!/^https?:\/\//i.test(candidate)) {
+                        throw new Error('Base URL must start with http:// or https://');
+                    }
+                }
+
                 const configService = new McpConfigService(context);
                 const config = await configService.loadConfig();
                 if (config) {
@@ -514,13 +591,56 @@ export async function activate(context: vscode.ExtensionContext) {
                         [context.asAbsolutePath(serverPath)],
                         config.mcpServers[serverName].env
                     );
+                    log(`Connected local MCP server=${serverName}`, { provider });
+                    void reportBackendLog({
+                        level: 'info',
+                        message: 'connect_success',
+                        provider,
+                        phase: 'connect_local',
+                        userId: currentUserId,
+                        context: { serverName }
+                    });
+
+                    if (currentUserId && currentUserId !== 'unknown') {
+                        const auth = new AuthService(context);
+                        void auth.saveConnection(provider, data, currentUserId).catch((err) => {
+                            console.error(`Failed to persist ${provider} connection for cross-device restore:`, err);
+                            log(`Failed to persist connection provider=${provider}`, { error: err?.message || String(err) });
+                            void reportBackendLog({
+                                level: 'error',
+                                message: 'connect_persist_failed',
+                                provider,
+                                phase: 'persist',
+                                userId: currentUserId,
+                                context: { error: err?.message || String(err) }
+                            });
+                        });
+                    }
 
                     vscode.commands.executeCommand('setContext', `flocca.connected.${serverName}`, true);
                     await updateState();
                     vscode.window.showInformationMessage(`Successfully connected to ${provider}!`);
                 }
             } catch (e: any) {
-                vscode.window.showErrorMessage(`Failed to connect ${provider}: ${e.message}`);
+                log(`Failed to connect provider=${provider}`, { error: e?.message || String(e), stack: e?.stack });
+                void reportBackendLog({
+                    level: 'error',
+                    message: 'connect_failed',
+                    provider,
+                    phase: 'connect_local',
+                    userId: subsService.getUserId(),
+                    context: {
+                        error: e?.message || String(e),
+                        stack: e?.stack || null
+                    }
+                });
+                const selection = await vscode.window.showErrorMessage(
+                    `Failed to connect ${provider}: ${e.message}`,
+                    'View Logs'
+                );
+                if (selection === 'View Logs') {
+                    revealLogs();
+                }
             }
         });
     };
@@ -806,6 +926,7 @@ export async function activate(context: vscode.ExtensionContext) {
             // This code block is INSIDE activate, so `updateState` is available.
 
             await updateState();
+            await dashboardProvider.restoreConnectionsForCurrentUser();
             vscode.window.showInformationMessage(`Logged in as ${result.user.email}`);
         }
     }));
@@ -834,6 +955,7 @@ export async function activate(context: vscode.ExtensionContext) {
             }
             subs.updateStatusBar();
             await updateState();
+            await dashboardProvider.restoreConnectionsForCurrentUser();
             vscode.window.showInformationMessage(`Registered and claimed account: ${result.user.email}`);
         }
     }));

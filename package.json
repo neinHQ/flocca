@@ -233,6 +233,11 @@
         "command": "flocca.upgrade",
         "title": "Upgrade to Pro",
         "icon": "$(star)"
+      },
+      {
+        "command": "flocca.manageSubscription",
+        "title": "Manage Subscription",
+        "icon": "$(credit-card)"
       }
     ],
     "submenus": [
@@ -251,17 +256,22 @@
         },
         {
           "command": "flocca.signin",
-          "when": "view == flocca-chat",
+          "when": "view == flocca-chat && !flocca.auth.loggedIn",
           "group": "navigation@2"
         },
         {
           "command": "flocca.manageAccounts",
-          "when": "view == flocca-chat",
+          "when": "view == flocca-chat && flocca.auth.loggedIn",
           "group": "navigation@3"
         },
         {
           "command": "flocca.upgrade",
-          "when": "view == flocca-chat",
+          "when": "view == flocca-chat && !flocca.auth.paid",
+          "group": "navigation@4"
+        },
+        {
+          "command": "flocca.manageSubscription",
+          "when": "view == flocca-chat && flocca.auth.paid",
           "group": "navigation@4"
         }
       ],

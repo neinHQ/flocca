@@ -4,6 +4,7 @@ import * as sinon from 'sinon';
 import { DashboardProvider } from '../../ui/chatProvider';
 import { McpClientManager } from '../../services/mcpClientService';
 import { TeamService } from '../../services/teamService';
+import { AuthService } from '../../services/authService';
 
 suite('DashboardProvider Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
@@ -20,11 +21,14 @@ suite('DashboardProvider Test Suite', () => {
         mockState = new Map<string, any>();
         mockState.set('flocca.subscriptionStatus', 'active');
         mockState.set('flocca.userId', 'u1');
+        mockState.set('flocca.email', 'user@example.com');
 
         // 1. Mock McpClientManager
         mockClientManager = {
             getClient: sandbox.stub().returns(undefined), // Default disconnected
-            getConnectedClients: sandbox.stub().returns([])
+            getConnectedClients: sandbox.stub().returns([]),
+            disconnect: sandbox.stub().resolves(),
+            connectLocal: sandbox.stub().resolves()
         };
 
         // 2. Mock Context for Subscription
@@ -34,7 +38,13 @@ suite('DashboardProvider Test Suite', () => {
                 update: sandbox.stub().callsFake(async (key: string, value: any) => {
                     mockState.set(key, value);
                 })
-            }
+            },
+            secrets: {
+                get: sandbox.stub().resolves(undefined),
+                store: sandbox.stub().resolves(),
+                delete: sandbox.stub().resolves()
+            },
+            asAbsolutePath: (p: string) => `/abs/${p}`
         };
 
         // 3. Mock Webview
@@ -247,5 +257,66 @@ suite('DashboardProvider Test Suite', () => {
                 data: sinon.match({ teamId: 't1' })
             })
         );
+    });
+
+    test('showSubscriptionManager posts showSubscription message', () => {
+        // @ts-ignore
+        provider.resolveWebviewView(mockWebviewView, {}, {});
+        provider.showSubscriptionManager();
+
+        assert.ok(
+            mockWebview.postMessage.calledWithMatch({
+                type: 'showSubscription'
+            })
+        );
+    });
+
+    test('logout message disconnects clients, clears state and posts loggedOut', async () => {
+        const executeCommandStub = sandbox.stub(vscode.commands, 'executeCommand').resolves();
+        mockClientManager.getConnectedClients.returns(['github', 'jira']);
+
+        // @ts-ignore
+        provider.resolveWebviewView(mockWebviewView, {}, {});
+        await onDidReceiveMessageCallback({ type: 'logout' });
+
+        assert.strictEqual(mockState.get('flocca.email'), undefined);
+        assert.strictEqual(mockState.get('flocca.subscriptionStatus'), undefined);
+        assert.ok(mockClientManager.disconnect.calledTwice);
+        assert.ok(mockClientManager.disconnect.calledWith('github'));
+        assert.ok(mockClientManager.disconnect.calledWith('jira'));
+        assert.ok(
+            mockWebview.postMessage.calledWithMatch({
+                type: 'loggedOut'
+            })
+        );
+        assert.ok(executeCommandStub.calledWith('setContext', 'flocca.auth.loggedIn', false));
+        assert.ok(executeCommandStub.calledWith('setContext', 'flocca.auth.paid', false));
+    });
+
+    test('login restores cloud-backed MCP connections on new device', async () => {
+        sandbox.stub(AuthService.prototype, 'login').resolves({
+            user: {
+                id: 'u_cloud',
+                email: 'user@example.com',
+                entitlements: { planTier: 'pro', capabilities: ['pro.connectors'] }
+            }
+        } as any);
+        sandbox.stub(AuthService.prototype, 'getConnectedProviders').resolves(['github']);
+        const executeCommandStub = sandbox.stub(vscode.commands, 'executeCommand').resolves();
+
+        // @ts-ignore
+        provider.resolveWebviewView(mockWebviewView, {}, {});
+        await onDidReceiveMessageCallback({ type: 'login', email: 'user@example.com', password: 'pw' });
+
+        assert.ok(mockClientManager.connectLocal.calledWithMatch(
+            'github',
+            'node',
+            sinon.match.array,
+            sinon.match({
+                FLOCCA_USER_ID: 'u_cloud',
+                FLOCCA_PROXY_URL: sinon.match(/\/proxy\/github$/)
+            })
+        ));
+        assert.ok(executeCommandStub.calledWith('setContext', 'flocca.connected.github', true));
     });
 });

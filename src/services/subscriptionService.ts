@@ -16,6 +16,11 @@ export class SubscriptionService {
     private static readonly SUB_STATUS_KEY = 'flocca.subscriptionStatus';
     private static readonly USER_ID_KEY = 'flocca.userId';
     private static readonly ENTITLEMENTS_KEY = 'flocca.entitlements';
+    private static readonly PLAN_MIN_SEATS: Record<string, number> = {
+        individual: 1,
+        teams: 3,
+        enterprise: 10
+    };
 
     private _statusBarItem: vscode.StatusBarItem;
     private static readonly FREE_CAPABILITIES: ReadonlySet<Capability> = new Set([
@@ -192,6 +197,23 @@ export class SubscriptionService {
         this.pollWithBackoff();
     }
 
+    public async openManageSubscriptionPage() {
+        const userId = this.getUserId();
+        const url = `https://www.flocca.app/pricing?userId=${userId}&manage=1`;
+        await vscode.env.openExternal(vscode.Uri.parse(url));
+    }
+
+    public async openCancelSubscriptionPage() {
+        const userId = this.getUserId();
+        const url = `https://www.flocca.app/pricing?userId=${userId}&manage=1&action=cancel`;
+        await vscode.env.openExternal(vscode.Uri.parse(url));
+    }
+
+    public async upgradeToPlan(plan: 'teams' | 'enterprise') {
+        const minSeats = SubscriptionService.PLAN_MIN_SEATS[plan] || 1;
+        await this.openPricingPage(plan, minSeats);
+    }
+
 
 
     private async pollWithBackoff() {
@@ -243,5 +265,14 @@ export class SubscriptionService {
         await this.context.globalState.update(SubscriptionService.SUB_STATUS_KEY, undefined);
         this.updateStatusBar();
         vscode.window.showInformationMessage('Flocca: Trial Expired.');
+    }
+
+    public async clearSession() {
+        await this.context.globalState.update('flocca.email', undefined);
+        await this.context.globalState.update(SubscriptionService.SUB_STATUS_KEY, undefined);
+        await this.context.globalState.update(SubscriptionService.ENTITLEMENTS_KEY, undefined);
+        await this.context.globalState.update(SubscriptionService.USER_ID_KEY, crypto.randomUUID());
+        await this.context.globalState.update(SubscriptionService.TRIAL_START_KEY, Date.now());
+        this.updateStatusBar();
     }
 }
