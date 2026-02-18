@@ -22,6 +22,7 @@ export class SubscriptionService {
         enterprise: 10
     };
 
+    private static _statusBarItem?: vscode.StatusBarItem;
     private _statusBarItem: vscode.StatusBarItem;
     private static readonly FREE_CAPABILITIES: ReadonlySet<Capability> = new Set([
         'free.github',
@@ -48,7 +49,10 @@ export class SubscriptionService {
             this.context.globalState.update(SubscriptionService.TRIAL_START_KEY, Date.now());
         }
 
-        this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+        if (!SubscriptionService._statusBarItem) {
+            SubscriptionService._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+        }
+        this._statusBarItem = SubscriptionService._statusBarItem;
         this._statusBarItem.command = 'flocca.upgrade';
         this.updateStatusBar();
         this._statusBarItem.show();
