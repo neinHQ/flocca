@@ -1,7 +1,7 @@
 {
   "name": "flocca",
-  "displayName": "Flocca — VS Code MCP Client",
-  "description": "The all-in-one MCP dashboard. Connect Jira, GitHub, GitLab, AWS, Azure, GCP, Slack, Teams, Postgres, Sentry, Cypress, Playwright, Pytest, and more to your AI agents in one place.",
+  "displayName": "Flocca - Connect MCP Servers in VS Code",
+  "description": "Connect MCP servers in VS Code to run workflows across Jira, GitHub, cloud, QA, and DevOps tools from one dashboard.",
   "version": "0.0.8",
   "publisher": "flocca",
   "icon": "resources/icon.png",

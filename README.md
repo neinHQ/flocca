@@ -1,51 +1,47 @@
-# Flocca — VS Code MCP Client
+# Flocca - Connect MCP Servers in VS Code
 
-**The all-in-one MCP dashboard. Connect Jira, GitHub, GitLab, AWS, Azure, GCP, Slack, Teams, Postgres, Sentry, Cypress, Playwright, Pytest, and more to your AI agents in one place.**
+**Connect MCP servers in VS Code to run workflows across Jira, GitHub, cloud, QA, and DevOps tools from one dashboard.**
 
+Flocca helps teams connect their apps through MCP so AI agents can run real workflows securely from the IDE.
 
-
-Flocca turns your local development editor into a **Unified Control Center** for your entire development toolchain. Instead of managing individual connections or switching contexts, Flocca brings everything together using the **Model Context Protocol (MCP)**.
-
-Connect your tools once, and give your favorite AI agents (Copilot, Cursor, etc.) the power to:
-*   Read and update **Jira** tickets.
-*   Manage **GitHub** repositories and PRs.
-*   Manage **AWS/Azure** infrastructure.
-*   Run **Appium/Playwright** tests.
-*   Query **Postgres** databases.
-
-...all without your API keys ever leaving your machine (thanks to our secure local vault).
+Use Flocca to:
+* Read and update Jira work items.
+* Search and manage GitHub repositories.
+* Run testing workflows with Playwright and Pytest.
+* Work across cloud and infrastructure tools.
+* Keep credentials managed securely.
 
 ![Flocca Dashboard](resources/dashboard.png)
 
-## 🚀 Key Features
+## Key Features
 
-*   **All-in-One Dashboard**: Why have 10 different extensions? Manage Jira, Cloud, and Code from a single view.
-*   **MCP-Native**: Built on the open standard Model Context Protocol. Future-proof your AI integrations.
-*   **Secure Vault**: Industry-standard AES-256 encryption. Your secrets are stored in your OS keychain, not our servers.
-*   **Visual Workflows**: Chain actions together visually (e.g., "On Git Push" -> "Update Jira" -> "Trigger Jenkins").
+* **Connect MCP servers in one place**: Manage integrations directly in the Flocca sidebar.
+* **MCP-native**: Built on the Model Context Protocol for interoperable agent tooling.
+* **Secure credential handling**: Keep secrets out of source code and local config files.
+* **Team and enterprise ready**: Role-based access and seat-based scaling support.
+* **GitHub-first onboarding**: Fastest path to sign in and get started.
 
-## 🔌 Supported Integrations (MCP Servers)
+## Supported Integrations
 
-*   **Issue Tracking**: Jira, Linear
-*   **Source Control**: GitHub, GitLab, Bitbucket
-*   **Cloud Providers**: AWS, Azure, GCP
-*   **Databases**: PostgreSQL, MongoDB
-*   **Communication**: Slack, Microsoft Teams, Notion
-*   **Observability**: Sentry, Elastic, CloudWatch
-*   **Testing**: Cypress, Playwright, Pytest
+* **Issue Tracking / PM**: Jira, Confluence, Zephyr
+* **Source Control / CI**: GitHub, GitLab, Bitbucket, GitHub Actions
+* **Cloud / Infra**: AWS, Azure, GCP, Kubernetes, Docker
+* **Communication**: Slack, Microsoft Teams, Notion
+* **Data / Observability**: PostgreSQL, Elasticsearch, Sentry
+* **Testing / QA**: Cypress, Playwright, Pytest, TestRail
 
-## 🛠️ Getting Started
+## Getting Started
 
-1.  **Install**: Click the "Install" button above.
-2.  **Open Board**: Click the Flocca icon in the Activity Bar to open your dashboard.
-3.  **Connect**: Select a service (e.g., GitHub) and authenticate via our secure local vault.
-4.  **Orchestrate**: Start chatting with your agents or build workflows!
+1. **Install** the extension from the VS Code Marketplace.
+2. **Open Flocca** from the Activity Bar.
+3. **Sign in** (GitHub recommended for quickest setup).
+4. **Connect your MCP servers** and start running workflows.
 
-## 🔒 Privacy & Security
+## Privacy and Security
 
-*   **Local First**: Flocca runs locally within VS Code.
-*   **Zero Data Retention**: We do not store your code or data on our servers.
-*   **Open Standard**: We fully support the Model Context Protocol (MCP).
+* **Local-first runtime**: Flocca operates inside your IDE workflow.
+* **Credential safety**: Avoid committing secrets like `.env`, `mcp.json`, or `.vscode` configs.
+* **Open standard foundation**: Built around MCP.
 
 ---
 
