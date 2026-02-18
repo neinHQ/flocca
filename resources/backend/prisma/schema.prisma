@@ -13,6 +13,8 @@ model User {
   password  String?      // Hashed
   githubId  String?      @unique
   gitlabId  String?      @unique
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
   createdAt DateTime     @default(now())
 
   // Billing

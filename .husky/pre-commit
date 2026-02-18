@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -e
+
+echo "Running backend Prisma checks before commit..."
+cd resources/backend
+npx prisma migrate deploy
+npx prisma generate
+

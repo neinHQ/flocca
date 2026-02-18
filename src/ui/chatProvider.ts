@@ -394,6 +394,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 }
                 .close-modal { float: right; cursor: pointer; font-size: 16px; opacity: 0.7; }
                 .close-modal:hover { opacity: 1; }
+                .auth-error { color: var(--vscode-inputValidation-errorForeground, #f48771); font-size: 11px; margin: -8px 0 8px; min-height: 14px; }
 
                 /* Catalog Style */
                 .catalog-item {
@@ -438,14 +439,18 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 <div class="modal">
                     <span class="close-modal" onclick="closeModals()">✕</span>
                     <h3>Sign In</h3>
+                    <div style="font-size: 11px; text-align: center; margin-bottom: 8px; opacity: 0.85;">
+                        Recommended: GitHub is the fastest way to sign in.
+                    </div>
+                    <button class="btn-block" onclick="doGithubLogin()" style="background:#24292e; color:white; margin-bottom: 10px;">Continue with GitHub</button>
+                    <div style="font-size: 11px; text-align: center; opacity: 0.65; margin-bottom: 8px;">
+                        or sign in with email
+                    </div>
                     <input type="email" id="login-email" placeholder="Email" />
                     <input type="password" id="login-pass" placeholder="Password" />
-                    <button class="btn-block" onclick="doLogin()">Login</button>
+                    <button id="login-btn" class="btn-block" onclick="doLogin()" disabled>Login</button>
                     <div style="font-size: 11px; text-align: center; opacity: 0.7;">
                         No account? <a href="#" onclick="switchModal('modal-register')">Register</a>
-                    </div>
-                    <div style="margin-top: 15px; border-top: 1px solid var(--vscode-widget-border); padding-top: 10px;">
-                        <button class="btn-block" onclick="doGithubLogin()" style="background:#24292e; color:white;">Continue with GitHub</button>
                     </div>
                 </div>
             </div>
@@ -454,9 +459,18 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 <div class="modal">
                     <span class="close-modal" onclick="closeModals()">✕</span>
                     <h3>Register</h3>
+                    <div style="font-size: 11px; text-align: center; margin-bottom: 8px; opacity: 0.85;">
+                        Recommended: Start with GitHub for the easiest setup.
+                    </div>
+                    <button class="btn-block" onclick="doGithubLogin()" style="background:#24292e; color:white; margin-bottom: 10px;">Continue with GitHub</button>
+                    <div style="font-size: 11px; text-align: center; opacity: 0.65; margin-bottom: 8px;">
+                        or register with email
+                    </div>
                     <input type="email" id="reg-email" placeholder="Email" />
                     <input type="password" id="reg-pass" placeholder="Password" />
-                    <button class="btn-block" onclick="doRegister()">Create Account</button>
+                    <input type="password" id="reg-confirm-pass" placeholder="Confirm Password" />
+                    <div id="register-error" class="auth-error"></div>
+                    <button id="register-btn" class="btn-block" onclick="doRegister()" disabled>Create Account</button>
                     <div style="font-size: 11px; text-align: center; opacity: 0.7;">
                         Has an account? <a href="#" onclick="switchModal('modal-login')">Sign In</a>
                     </div>
@@ -577,6 +591,32 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     document.querySelectorAll('.modal-overlay').forEach(e => e.classList.remove('show'));
                 }
                 function switchModal(id) { closeModals(); openModal(id); }
+                function updateAuthButtons() {
+                    const loginEmail = document.getElementById('login-email');
+                    const loginPass = document.getElementById('login-pass');
+                    const loginBtn = document.getElementById('login-btn');
+                    const regEmail = document.getElementById('reg-email');
+                    const regPass = document.getElementById('reg-pass');
+                    const regConfirm = document.getElementById('reg-confirm-pass');
+                    const regBtn = document.getElementById('register-btn');
+                    const regErr = document.getElementById('register-error');
+
+                    if (loginEmail && loginPass && loginBtn) {
+                        const canLogin = loginEmail.value.trim().length > 0 && loginPass.value.trim().length > 0;
+                        loginBtn.disabled = !canLogin;
+                    }
+
+                    if (regEmail && regPass && regConfirm && regBtn && regErr) {
+                        const hasAll = regEmail.value.trim().length > 0 && regPass.value.length > 0 && regConfirm.value.length > 0;
+                        const matches = regPass.value === regConfirm.value;
+                        regBtn.disabled = !(hasAll && matches);
+                        if (hasAll && !matches) {
+                            regErr.textContent = 'Passwords do not match.';
+                        } else {
+                            regErr.textContent = '';
+                        }
+                    }
+                }
 
                 function renderTeamsList() {
                     const list = document.getElementById('my-teams-list');
@@ -662,6 +702,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 function doLogin() {
                     const email = document.getElementById('login-email').value;
                     const pass = document.getElementById('login-pass').value;
+                    if (!email || !pass) return;
                     post('login', {email, password: pass});
                     closeModals();
                 }
@@ -672,6 +713,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 function doRegister() {
                     const email = document.getElementById('reg-email').value;
                     const pass = document.getElementById('reg-pass').value;
+                    const confirm = document.getElementById('reg-confirm-pass').value;
+                    const err = document.getElementById('register-error');
+                    if (!email || !pass || !confirm) return;
+                    if (pass !== confirm) {
+                        if (err) err.textContent = 'Passwords do not match.';
+                        return;
+                    }
+                    if (err) err.textContent = '';
                     post('register', {email, password: pass});
                     closeModals();
                 }
@@ -750,6 +799,12 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     const v = document.getElementById('search').value.toLowerCase();
                     renderCatalog(catalogData.filter(s => s.name.toLowerCase().includes(v) || s.description.toLowerCase().includes(v)));
                 }
+
+                ['login-email','login-pass','reg-email','reg-pass','reg-confirm-pass'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.addEventListener('input', updateAuthButtons);
+                });
+                updateAuthButtons();
 
                 post('refreshStatus', {});
             </script>

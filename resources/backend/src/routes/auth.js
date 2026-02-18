@@ -10,6 +10,10 @@ const hashPassword = (password) => {
     return crypto.createHash('sha256').update(password).digest('hex');
 };
 
+const hashResetToken = (token) => {
+    return crypto.createHash('sha256').update(token).digest('hex');
+};
+
 // POST /auth/register
 // Input: email, password, anonymousId (optional)
 router.post('/register', async (req, res) => {
@@ -113,6 +117,87 @@ router.post('/login', async (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ error: 'Login failed' });
+    }
+});
+
+// POST /auth/forgot-password
+// Input: email
+// Always returns success to avoid account enumeration.
+router.post('/forgot-password', async (req, res) => {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const genericResponse = {
+        success: true,
+        message: 'If that email exists, a reset link has been generated.'
+    };
+
+    try {
+        const user = await prisma.user.findUnique({ where: { email: String(email) } });
+        if (!user) return res.json(genericResponse);
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const tokenHash = hashResetToken(resetToken);
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                passwordResetTokenHash: tokenHash,
+                passwordResetExpiresAt: expiresAt
+            }
+        });
+
+        const resetBase = process.env.RESET_PASSWORD_URL || '';
+        const resetUrl = resetBase ? `${resetBase}${resetBase.includes('?') ? '&' : '?'}token=${resetToken}` : '';
+        if (resetUrl) {
+            console.log(`[auth] Password reset link generated for ${email}: ${resetUrl}`);
+        } else {
+            console.log(`[auth] Password reset token generated for ${email}. Set RESET_PASSWORD_URL to generate clickable links.`);
+        }
+
+        // Return token only outside production to help local/dev testing.
+        if (process.env.NODE_ENV !== 'production') {
+            return res.json({ ...genericResponse, resetToken });
+        }
+        return res.json(genericResponse);
+    } catch (e) {
+        console.error(e);
+        return res.status(500).json({ error: 'Failed to process password reset request' });
+    }
+});
+
+// POST /auth/reset-password
+// Input: token, password
+router.post('/reset-password', async (req, res) => {
+    const { token, password } = req.body || {};
+    if (!token || !password) return res.status(400).json({ error: 'Token and password required' });
+    if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+    try {
+        const tokenHash = hashResetToken(String(token));
+        const user = await prisma.user.findFirst({
+            where: {
+                passwordResetTokenHash: tokenHash,
+                passwordResetExpiresAt: { gt: new Date() }
+            }
+        });
+
+        if (!user) return res.status(400).json({ error: 'Invalid or expired reset token' });
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                password: hashPassword(String(password)),
+                passwordResetTokenHash: null,
+                passwordResetExpiresAt: null
+            }
+        });
+
+        return res.json({ success: true, message: 'Password reset successful' });
+    } catch (e) {
+        console.error(e);
+        return res.status(500).json({ error: 'Password reset failed' });
     }
 });
 
