@@ -34,10 +34,25 @@ function normalizeError(err) {
     return { isError: true, content: [{ type: 'text', text: `Notion Error: ${msg}` }] };
 }
 
+function createToolAliases(name) {
+    const alias = name
+        .replace(/\./g, '_')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase();
+    return alias !== name ? [alias] : [];
+}
+
+function registerToolWithAliases(server, name, config, handler) {
+    server.registerTool(name, config, handler);
+    for (const alias of createToolAliases(name)) {
+        server.registerTool(alias, config, handler);
+    }
+}
+
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
-    server.registerTool('notion.configure',
+    registerToolWithAliases(server, 'notion.configure',
         { description: 'Configure Notion', inputSchema: { type: 'object', properties: { token: { type: 'string' } }, required: ['token'] } },
         async (args) => {
             config.token = args.token;
@@ -51,7 +66,7 @@ async function main() {
         }
     );
 
-    server.registerTool('notion.search',
+    registerToolWithAliases(server, 'notion.search',
         { description: 'Search pages/databases', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
         async (args) => {
             try {
@@ -61,7 +76,7 @@ async function main() {
         }
     );
 
-    server.registerTool('notion.listDatabases',
+    registerToolWithAliases(server, 'notion.listDatabases',
         { description: 'List databases', inputSchema: { type: 'object', properties: {} } },
         async () => {
             try {
@@ -71,7 +86,7 @@ async function main() {
         }
     );
 
-    server.registerTool('notion.queryDatabase',
+    registerToolWithAliases(server, 'notion.queryDatabase',
         { description: 'Query Database', inputSchema: { type: 'object', properties: { database_id: { type: 'string' } }, required: ['database_id'] } },
         async (args) => {
             try {
@@ -81,7 +96,7 @@ async function main() {
         }
     );
 
-    server.registerTool('notion.getPage',
+    registerToolWithAliases(server, 'notion.getPage',
         { description: 'Get Page', inputSchema: { type: 'object', properties: { page_id: { type: 'string' } }, required: ['page_id'] } },
         async (args) => {
             try {
@@ -91,7 +106,7 @@ async function main() {
         }
     );
 
-    server.registerTool('notion.createPage',
+    registerToolWithAliases(server, 'notion.createPage',
         {
             description: 'Create Page',
             inputSchema: {

@@ -55,10 +55,25 @@ function normalizeError(err) {
     return { isError: true, content: [{ type: 'text', text: `Teams API Error: ${msg}` }] };
 }
 
+function createToolAliases(name) {
+    const alias = name
+        .replace(/\./g, '_')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase();
+    return alias !== name ? [alias] : [];
+}
+
+function registerToolWithAliases(server, name, config, handler) {
+    server.registerTool(name, config, handler);
+    for (const alias of createToolAliases(name)) {
+        server.registerTool(alias, config, handler);
+    }
+}
+
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
-    server.registerTool('teams.health',
+    registerToolWithAliases(server, 'teams.health',
         { description: 'Check connection health', inputSchema: { type: 'object', properties: {} } },
         async () => {
             try {
@@ -73,7 +88,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.configure',
+    registerToolWithAliases(server, 'teams.configure',
         {
             description: 'Configure Teams Session',
             inputSchema: {
@@ -104,7 +119,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.listTeams',
+    registerToolWithAliases(server, 'teams.listTeams',
         { description: 'List joined teams', inputSchema: { type: 'object', properties: {} } },
         async () => {
             try {
@@ -114,7 +129,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.listChannels',
+    registerToolWithAliases(server, 'teams.listChannels',
         {
             description: 'List channels in a team',
             inputSchema: { type: 'object', properties: { team_id: { type: 'string' } }, required: ['team_id'] }
@@ -127,7 +142,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.searchUsers',
+    registerToolWithAliases(server, 'teams.searchUsers',
         {
             description: 'Search users by name',
             inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }
@@ -142,7 +157,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.getUser',
+    registerToolWithAliases(server, 'teams.getUser',
         {
             description: 'Get user details',
             inputSchema: { type: 'object', properties: { user_id: { type: 'string' } }, required: ['user_id'] }
@@ -155,7 +170,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.sendChannelMessage',
+    registerToolWithAliases(server, 'teams.sendChannelMessage',
         {
             description: 'Send message to channel',
             inputSchema: {
@@ -177,7 +192,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.sendDirectMessage',
+    registerToolWithAliases(server, 'teams.sendDirectMessage',
         {
             description: 'Send DM to user',
             inputSchema: {
@@ -218,7 +233,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.replyToMessage',
+    registerToolWithAliases(server, 'teams.replyToMessage',
         {
             description: 'Reply to channel message',
             inputSchema: {
@@ -241,7 +256,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.sendReport',
+    registerToolWithAliases(server, 'teams.sendReport',
         {
             description: 'Send formatted report',
             inputSchema: {
@@ -272,7 +287,7 @@ async function main() {
         }
     );
 
-    server.registerTool('teams.notifyOnWorkflowComplete',
+    registerToolWithAliases(server, 'teams.notifyOnWorkflowComplete',
         {
             description: 'Notify workflow completion',
             inputSchema: {

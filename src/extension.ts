@@ -50,6 +50,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const configService = new McpConfigService(context);
     let config = await configService.loadConfig();
+    // Ensure existing workspaces are kept in VS Code/Copilot MCP-compatible shape.
+    if (config) {
+        await configService.saveConfig(config);
+    }
 
     const telemetryService = new TelemetryService(context);
     const subsService = new SubscriptionService(context);

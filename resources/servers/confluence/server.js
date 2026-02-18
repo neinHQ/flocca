@@ -69,10 +69,25 @@ function normalizeError(err) {
     return { isError: true, content: [{ type: 'text', text: `Confluence Error: ${msg}` }] };
 }
 
+function createToolAliases(name) {
+    const alias = name
+        .replace(/\./g, '_')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase();
+    return alias !== name ? [alias] : [];
+}
+
+function registerToolWithAliases(server, name, config, handler) {
+    server.registerTool(name, config, handler);
+    for (const alias of createToolAliases(name)) {
+        server.registerTool(alias, config, handler);
+    }
+}
+
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
-    server.registerTool('confluence.configure',
+    registerToolWithAliases(server, 'confluence.configure',
         { description: 'Configure Confluence', inputSchema: { type: 'object', properties: { username: { type: 'string' }, token: { type: 'string' }, base_url: { type: 'string' }, deployment_mode: { type: 'string' } }, required: ['token', 'base_url'] } },
         async (args) => {
             config.token = args.token;
@@ -91,7 +106,7 @@ async function main() {
         }
     );
 
-    server.registerTool('confluence.listSpaces',
+    registerToolWithAliases(server, 'confluence.listSpaces',
         { description: 'List Spaces', inputSchema: { type: 'object', properties: {} } },
         async () => {
             try {
@@ -101,7 +116,7 @@ async function main() {
         }
     );
 
-    server.registerTool('confluence.searchPages',
+    registerToolWithAliases(server, 'confluence.searchPages',
         { description: 'Search Pages (CQL)', inputSchema: { type: 'object', properties: { cql: { type: 'string' } }, required: ['cql'] } },
         async (args) => {
             try {
@@ -114,7 +129,7 @@ async function main() {
         }
     );
 
-    server.registerTool('confluence.getPage',
+    registerToolWithAliases(server, 'confluence.getPage',
         { description: 'Get Page', inputSchema: { type: 'object', properties: { page_id: { type: 'string' } }, required: ['page_id'] } },
         async (args) => {
             try {
@@ -124,7 +139,7 @@ async function main() {
         }
     );
 
-    server.registerTool('confluence.createPage',
+    registerToolWithAliases(server, 'confluence.createPage',
         {
             description: 'Create Page',
             inputSchema: {

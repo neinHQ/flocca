@@ -77,74 +77,78 @@ function normalizeError(err) {
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
-    server.registerTool('jira.configure',
-        {
-            description: 'Configure Jira',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    email: { type: 'string' },
-                    token: { type: 'string' },
-                    url: { type: 'string' },
-                    deployment_mode: { type: 'string' }
-                },
-                required: ['email', 'token', 'url']
-            }
-        },
-        async (args) => {
-            config.email = args.email;
-            config.token = args.token;
-            config.url = normalizeBaseUrl(args.url);
-            if (args.deployment_mode) config.deploymentMode = args.deployment_mode.toLowerCase();
-            try {
-                await jiraGet('myself', { headers: getHeaders() });
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: 'authenticated' }) }] };
-            } catch (e) {
-                config.token = undefined;
-                return normalizeError(e);
-            }
+    const configureToolConfig = {
+        description: 'Configure Jira',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                email: { type: 'string' },
+                token: { type: 'string' },
+                url: { type: 'string' },
+                deployment_mode: { type: 'string' }
+            },
+            required: ['email', 'token', 'url']
         }
-    );
+    };
+    const configureToolHandler = async (args) => {
+        config.email = args.email;
+        config.token = args.token;
+        config.url = normalizeBaseUrl(args.url);
+        if (args.deployment_mode) config.deploymentMode = args.deployment_mode.toLowerCase();
+        try {
+            await jiraGet('myself', { headers: getHeaders() });
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: 'authenticated' }) }] };
+        } catch (e) {
+            config.token = undefined;
+            return normalizeError(e);
+        }
+    };
 
-    server.registerTool('jira.searchIssues',
-        {
-            description: 'Search Issues (JQL)',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    jql: { type: 'string' },
-                    limit: { type: 'number' }
-                },
-                required: ['jql']
-            }
-        },
-        async (args) => {
-            try {
-                const res = await jiraGet('search', {
-                    headers: getHeaders(),
-                    params: { jql: args.jql, maxResults: args.limit || 10 }
-                });
-                return { content: [{ type: 'text', text: JSON.stringify(res.data.issues) }] };
-            } catch (e) { return normalizeError(e); }
+    const searchIssuesToolConfig = {
+        description: 'Search Issues (JQL)',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                jql: { type: 'string' },
+                limit: { type: 'number' }
+            },
+            required: ['jql']
         }
-    );
+    };
+    const searchIssuesToolHandler = async (args) => {
+        try {
+            const res = await jiraGet('search', {
+                headers: getHeaders(),
+                params: { jql: args.jql, maxResults: args.limit || 10 }
+            });
+            return { content: [{ type: 'text', text: JSON.stringify(res.data.issues) }] };
+        } catch (e) { return normalizeError(e); }
+    };
 
-    server.registerTool('jira.getIssue',
-        {
-            description: 'Get Issue Details',
-            inputSchema: {
-                type: 'object',
-                properties: { issue_key: { type: 'string' } },
-                required: ['issue_key']
-            }
-        },
-        async (args) => {
-            try {
-                const res = await jiraGet(`issue/${args.issue_key}`, { headers: getHeaders() });
-                return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
-            } catch (e) { return normalizeError(e); }
+    const getIssueToolConfig = {
+        description: 'Get Issue Details',
+        inputSchema: {
+            type: 'object',
+            properties: { issue_key: { type: 'string' } },
+            required: ['issue_key']
         }
-    );
+    };
+    const getIssueToolHandler = async (args) => {
+        try {
+            const res = await jiraGet(`issue/${args.issue_key}`, { headers: getHeaders() });
+            return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
+        } catch (e) { return normalizeError(e); }
+    };
+
+    // Canonical names
+    server.registerTool('jira.configure', configureToolConfig, configureToolHandler);
+    server.registerTool('jira.searchIssues', searchIssuesToolConfig, searchIssuesToolHandler);
+    server.registerTool('jira.getIssue', getIssueToolConfig, getIssueToolHandler);
+
+    // Compatibility aliases for clients that don't expose dotted tool names reliably.
+    server.registerTool('jira_configure', configureToolConfig, configureToolHandler);
+    server.registerTool('jira_search_issues', searchIssuesToolConfig, searchIssuesToolHandler);
+    server.registerTool('jira_get_issue', getIssueToolConfig, getIssueToolHandler);
 
     const transport = new StdioServerTransport();
     await server.connect(transport);

@@ -31,10 +31,25 @@ function normalizeError(err) {
     return { isError: true, content: [{ type: 'text', text: `GitHub Error: ${msg}` }] };
 }
 
+function createToolAliases(name) {
+    const alias = name
+        .replace(/\./g, '_')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase();
+    return alias !== name ? [alias] : [];
+}
+
+function registerToolWithAliases(server, name, config, handler) {
+    server.registerTool(name, config, handler);
+    for (const alias of createToolAliases(name)) {
+        server.registerTool(alias, config, handler);
+    }
+}
+
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
-    server.registerTool('github_actions.configure',
+    registerToolWithAliases(server, 'github_actions.configure',
         { description: 'Configure GHA', inputSchema: { type: 'object', properties: { token: { type: 'string' }, owner: { type: 'string' }, repo: { type: 'string' }, api_url: { type: 'string' } }, required: ['token', 'owner', 'repo'] } },
         async (args) => {
             config.token = args.token;
@@ -48,7 +63,7 @@ async function main() {
         }
     );
 
-    server.registerTool('github_actions.listWorkflows',
+    registerToolWithAliases(server, 'github_actions.listWorkflows',
         { description: 'List Workflows', inputSchema: { type: 'object', properties: {} } },
         async () => {
             try {
@@ -58,7 +73,7 @@ async function main() {
         }
     );
 
-    server.registerTool('github_actions.listRuns',
+    registerToolWithAliases(server, 'github_actions.listRuns',
         { description: 'List Runs', inputSchema: { type: 'object', properties: { workflow_id: { type: 'string' } } } },
         async (args) => {
             try {
@@ -73,7 +88,7 @@ async function main() {
         }
     );
 
-    server.registerTool('github_actions.dispatchWorkflow',
+    registerToolWithAliases(server, 'github_actions.dispatchWorkflow',
         { description: 'Dispatch Workflow', inputSchema: { type: 'object', properties: { workflow_id: { type: 'string' }, ref: { type: 'string' }, inputs: { type: 'object' } }, required: ['workflow_id', 'ref'] } },
         async (args) => {
             try {
@@ -89,7 +104,7 @@ async function main() {
         }
     );
 
-    server.registerTool('github_actions.getRunLogs',
+    registerToolWithAliases(server, 'github_actions.getRunLogs',
         { description: 'Get Logs URL', inputSchema: { type: 'object', properties: { run_id: { type: 'string' } }, required: ['run_id'] } },
         async (args) => {
             try {

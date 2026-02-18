@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 export interface McpServerConfig {
+    type?: 'stdio' | 'sse';
     command?: string;
     url?: string;
     args?: string[];
@@ -9,6 +10,7 @@ export interface McpServerConfig {
 
 export interface McpConfig {
     mcpServers: Record<string, McpServerConfig>;
+    servers?: Record<string, McpServerConfig>;
 }
 
 export class McpConfigService {
@@ -31,18 +33,24 @@ export class McpConfigService {
             }
         }
 
-        // Normalize config shape (some legacy/malformed files may not have mcpServers).
-        if (!config || !config.mcpServers || typeof config.mcpServers !== 'object') {
-            config = { mcpServers: {} };
+        const raw = config as any;
+        let serverMap: Record<string, McpServerConfig> = {};
+        if (raw?.mcpServers && typeof raw.mcpServers === 'object') {
+            serverMap = raw.mcpServers;
+        } else if (raw?.servers && typeof raw.servers === 'object') {
+            serverMap = raw.servers;
         }
+        config = { mcpServers: serverMap, servers: { ...serverMap } };
 
         // Default: Add Local Codebase (Essential for Flocca)
         if (!config.mcpServers['codebase']) {
             config.mcpServers['codebase'] = {
+                type: 'stdio',
                 command: "node",
                 args: [this.context.asAbsolutePath("resources/servers/codebase/server.js")]
             };
         }
+        config.servers = { ...config.mcpServers };
 
         // Validation
         if (!config.mcpServers) {
@@ -63,8 +71,24 @@ export class McpConfigService {
             // Ensure .vscode exists
             await this.fs.createDirectory(vscodeDir);
 
+            const normalizedServers: Record<string, McpServerConfig> = {};
+            for (const [name, server] of Object.entries(config.mcpServers || {})) {
+                const inferredType: 'stdio' | 'sse' | undefined = server.type || (server.url ? 'sse' : (server.command ? 'stdio' : undefined));
+                normalizedServers[name] = {
+                    ...server,
+                    ...(inferredType ? { type: inferredType } : {})
+                };
+            }
+
+            const fileShape = {
+                ...config,
+                mcpServers: normalizedServers,
+                // VS Code/Copilot-compatible MCP config key.
+                servers: normalizedServers
+            };
+
             // Write File
-            const data = new TextEncoder().encode(JSON.stringify(config, null, 2));
+            const data = new TextEncoder().encode(JSON.stringify(fileShape, null, 2));
             await this.fs.writeFile(configUri, data);
         } catch (e) {
             console.error('Failed to save mcp.json:', e);

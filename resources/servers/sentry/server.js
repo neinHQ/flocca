@@ -26,10 +26,25 @@ function normalizeError(err) {
     return { isError: true, content: [{ type: 'text', text: `Sentry Error: ${msg}` }] };
 }
 
+function createToolAliases(name) {
+    const alias = name
+        .replace(/\./g, '_')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase();
+    return alias !== name ? [alias] : [];
+}
+
+function registerToolWithAliases(server, name, config, handler) {
+    server.registerTool(name, config, handler);
+    for (const alias of createToolAliases(name)) {
+        server.registerTool(alias, config, handler);
+    }
+}
+
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
-    server.registerTool('sentry.configure',
+    registerToolWithAliases(server, 'sentry.configure',
         { description: 'Configure Sentry', inputSchema: { type: 'object', properties: { token: { type: 'string' }, org_slug: { type: 'string' }, base_url: { type: 'string' } }, required: ['token', 'org_slug'] } },
         async (args) => {
             config.token = args.token;
@@ -44,7 +59,7 @@ async function main() {
         }
     );
 
-    server.registerTool('sentry.listProjects',
+    registerToolWithAliases(server, 'sentry.listProjects',
         { description: 'List Projects', inputSchema: { type: 'object', properties: {} } },
         async () => {
             try {
@@ -54,7 +69,7 @@ async function main() {
         }
     );
 
-    server.registerTool('sentry.listIssues',
+    registerToolWithAliases(server, 'sentry.listIssues',
         { description: 'List Issues', inputSchema: { type: 'object', properties: { project_slug: { type: 'string' }, query: { type: 'string' } }, required: ['project_slug'] } },
         async (args) => {
             try {
@@ -67,7 +82,7 @@ async function main() {
         }
     );
 
-    server.registerTool('sentry.getIssue',
+    registerToolWithAliases(server, 'sentry.getIssue',
         { description: 'Get Issue Details', inputSchema: { type: 'object', properties: { issue_id: { type: 'string' } }, required: ['issue_id'] } },
         async (args) => {
             try {

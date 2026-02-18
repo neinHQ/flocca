@@ -47,11 +47,26 @@ function normalizeError(err) {
     return { isError: true, content: [{ type: 'text', text: `Azure API Error: ${msg}` }] };
 }
 
+function createToolAliases(name) {
+    const alias = name
+        .replace(/\./g, '_')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase();
+    return alias !== name ? [alias] : [];
+}
+
+function registerToolWithAliases(server, name, config, handler) {
+    server.registerTool(name, config, handler);
+    for (const alias of createToolAliases(name)) {
+        server.registerTool(alias, config, handler);
+    }
+}
+
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     // --- Core ---
-    server.registerTool('azure.configure',
+    registerToolWithAliases(server, 'azure.configure',
         {
             description: 'Configure Azure Session',
             inputSchema: {
@@ -82,7 +97,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.listResourceGroups',
+    registerToolWithAliases(server, 'azure.listResourceGroups',
         { description: 'List Resource Groups', inputSchema: { type: 'object', properties: {} } },
         async () => {
             try {
@@ -96,7 +111,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.listResources',
+    registerToolWithAliases(server, 'azure.listResources',
         {
             description: 'List Resources',
             inputSchema: { type: 'object', properties: { resource_group: { type: 'string' }, type_filter: { type: 'string' } } }
@@ -119,7 +134,7 @@ async function main() {
     );
 
     // --- VMs ---
-    server.registerTool('azure.vm.list',
+    registerToolWithAliases(server, 'azure.vm.list',
         { description: 'List VMs', inputSchema: { type: 'object', properties: { resource_group: { type: 'string' } } } },
         async (args) => {
             try {
@@ -135,7 +150,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.vm.start',
+    registerToolWithAliases(server, 'azure.vm.start',
         { description: 'Start VM', inputSchema: { type: 'object', properties: { name: { type: 'string' }, resource_group: { type: 'string' } }, required: ['name', 'resource_group'] } },
         async (args) => {
             try {
@@ -145,7 +160,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.vm.stop',
+    registerToolWithAliases(server, 'azure.vm.stop',
         { description: 'Stop VM', inputSchema: { type: 'object', properties: { name: { type: 'string' }, resource_group: { type: 'string' } }, required: ['name', 'resource_group'] } },
         async (args) => { // Deallocate is cleaner stop usually
             try {
@@ -155,7 +170,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.vm.restart',
+    registerToolWithAliases(server, 'azure.vm.restart',
         { description: 'Restart VM', inputSchema: { type: 'object', properties: { name: { type: 'string' }, resource_group: { type: 'string' } }, required: ['name', 'resource_group'] } },
         async (args) => {
             try {
@@ -166,7 +181,7 @@ async function main() {
     );
 
     // --- App Service ---
-    server.registerTool('azure.app.listWebApps',
+    registerToolWithAliases(server, 'azure.app.listWebApps',
         { description: 'List Web Apps', inputSchema: { type: 'object', properties: { resource_group: { type: 'string' } } } },
         async (args) => {
             try {
@@ -181,7 +196,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.app.restartWebApp',
+    registerToolWithAliases(server, 'azure.app.restartWebApp',
         { description: 'Restart Web App', inputSchema: { type: 'object', properties: { name: { type: 'string' }, resource_group: { type: 'string' } }, required: ['name', 'resource_group'] } },
         async (args) => {
             try {
@@ -191,7 +206,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.functions.list',
+    registerToolWithAliases(server, 'azure.functions.list',
         { description: 'List Functions', inputSchema: { type: 'object', properties: { function_app: { type: 'string' }, resource_group: { type: 'string' } }, required: ['function_app', 'resource_group'] } },
         async (args) => {
             try {
@@ -206,7 +221,7 @@ async function main() {
     );
 
     // --- AKS ---
-    server.registerTool('azure.aks.listClusters',
+    registerToolWithAliases(server, 'azure.aks.listClusters',
         { description: 'List AKS Clusters', inputSchema: { type: 'object', properties: { resource_group: { type: 'string' } } } },
         async (args) => {
             try {
@@ -221,7 +236,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.aks.getKubeAccessToken',
+    registerToolWithAliases(server, 'azure.aks.getKubeAccessToken',
         { description: 'Get AKS Credentials', inputSchema: { type: 'object', properties: { name: { type: 'string' }, resource_group: { type: 'string' } }, required: ['name', 'resource_group'] } },
         async (args) => {
             try {
@@ -237,7 +252,7 @@ async function main() {
     );
 
     // --- Monitor & Logs ---
-    server.registerTool('azure.monitor.queryMetrics',
+    registerToolWithAliases(server, 'azure.monitor.queryMetrics',
         { description: 'Query Metrics', inputSchema: { type: 'object', properties: { resource_id: { type: 'string' }, metric_names: { type: 'array', items: { type: 'string' } }, time_range: { type: 'string' } }, required: ['resource_id'] } },
         async (args) => {
             try {
@@ -250,7 +265,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.logs.query',
+    registerToolWithAliases(server, 'azure.logs.query',
         { description: 'Query Logs (KQL)', inputSchema: { type: 'object', properties: { workspace_id: { type: 'string' }, query: { type: 'string' } }, required: ['workspace_id', 'query'] } },
         async (args) => {
             try {
@@ -262,7 +277,7 @@ async function main() {
         }
     );
 
-    server.registerTool('azure.incident.summarize',
+    registerToolWithAliases(server, 'azure.incident.summarize',
         { description: 'Summarize Health', inputSchema: { type: 'object', properties: { resource_id: { type: 'string' } }, required: ['resource_id'] } },
         async (args) => {
             // MVP: Check provisioning state via Resource Client and some metrics if possible
