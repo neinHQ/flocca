@@ -123,8 +123,14 @@ export async function activate(context: vscode.ExtensionContext) {
         dashboardProvider.updateStatus();
     };
 
-    // Run Sync on Startup
-    await syncAndNotify();
+    // Run sync in background so startup UI is not blocked by workspace I/O.
+    void (async () => {
+        try {
+            await syncAndNotify();
+        } catch (e) {
+            console.error('Background syncAndNotify failed:', e);
+        }
+    })();
 
     // Setup Test Controller
     setupTestController(context, clientManager);
@@ -317,8 +323,15 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    // Run Sync Check on Startup
-    await updateState();
+    // Trigger an immediate lightweight status refresh, then do heavy sync/connect in background.
+    dashboardProvider.updateStatus();
+    void (async () => {
+        try {
+            await updateState();
+        } catch (e) {
+            console.error('Background updateState failed:', e);
+        }
+    })();
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectGitHub', async () => {
         try {
@@ -413,9 +426,6 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('flocca.upgrade', async () => {
         await subsService.upgradeToPro();
     }));
-
-    // Poll status on startup
-    subsService.pollSubscriptionStatus();
 
     // Poll status on startup
     subsService.pollSubscriptionStatus();

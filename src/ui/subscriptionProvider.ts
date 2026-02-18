@@ -84,7 +84,7 @@ export class SubscriptionProvider {
                 
                 .spacer { flex: 1; }
 
-                #teams-config { 
+                #seat-config { 
                     margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--vscode-widget-border); 
                     display: none; 
                 }
@@ -103,6 +103,8 @@ export class SubscriptionProvider {
                     width: 100%; max-width: 300px; transition: opacity 0.2s;
                 }
                 .btn-primary:hover { opacity: 0.9; }
+
+                .seat-help { font-size: 12px; opacity: 0.7; margin-top: 6px; }
 
             </style>
         </head>
@@ -140,12 +142,28 @@ export class SubscriptionProvider {
                             <li>SSO / SAML Support</li>
                         </ul>
                         <div class="spacer"></div>
-
-                        <div id="teams-config" onclick="event.stopPropagation()">
-                            <label>Number of Seats</label>
-                            <input type="number" id="seats" value="5" min="2" onchange="updateTotal()">
-                        </div>
                     </div>
+
+                    <!-- Enterprise -->
+                    <div class="card" id="plan-enterprise" onclick="selectPlan('enterprise')">
+                        <div class="plan-header">
+                            <div class="plan-name">Enterprise</div>
+                            <div class="price">$24.99<span>/seat/mo</span></div>
+                        </div>
+                        <ul class="features">
+                            <li>Advanced Role-Based Controls</li>
+                            <li>Seat & SKU Assignment</li>
+                            <li>Governance at Scale</li>
+                            <li>Priority Enterprise Support</li>
+                        </ul>
+                        <div class="spacer"></div>
+                    </div>
+                </div>
+
+                <div id="seat-config" onclick="event.stopPropagation()">
+                    <label id="seat-label">Number of Seats</label>
+                    <input type="number" id="seats" value="3" min="3">
+                    <div class="seat-help" id="seat-help">Minimum 3 seats for Teams</div>
                 </div>
 
                 <div style="text-align:center;">
@@ -162,16 +180,33 @@ export class SubscriptionProvider {
                     document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
                     document.getElementById('plan-' + plan).classList.add('selected');
 
-                    const config = document.getElementById('teams-config');
-                    if (plan === 'teams') {
+                    const config = document.getElementById('seat-config');
+                    const seatsInput = document.getElementById('seats');
+                    const seatHelp = document.getElementById('seat-help');
+                    const seatLabel = document.getElementById('seat-label');
+
+                    if (plan === 'teams' || plan === 'enterprise') {
                         config.style.display = 'block';
+                        if (plan === 'teams') {
+                            seatsInput.min = '3';
+                            if (parseInt(seatsInput.value || '0', 10) < 3) seatsInput.value = '3';
+                            seatLabel.textContent = 'Number of Seats (Teams)';
+                            seatHelp.textContent = 'Minimum 3 seats for Teams';
+                        } else {
+                            seatsInput.min = '10';
+                            if (parseInt(seatsInput.value || '0', 10) < 10) seatsInput.value = '10';
+                            seatLabel.textContent = 'Number of Seats (Enterprise)';
+                            seatHelp.textContent = 'Minimum 10 seats for Enterprise';
+                        }
                     } else {
                         config.style.display = 'none';
                     }
                 }
 
                 function submit() {
-                    const quantity = currentPlan === 'teams' ? document.getElementById('seats').value : 1;
+                    const quantity = (currentPlan === 'teams' || currentPlan === 'enterprise')
+                        ? document.getElementById('seats').value
+                        : 1;
                     vscode.postMessage({
                         command: 'checkout',
                         plan: currentPlan,
