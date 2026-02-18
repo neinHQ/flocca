@@ -392,6 +392,31 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     padding: 8px; width: 100%; box-sizing: border-box; margin-bottom: 12px;
                     border-radius: 2px;
                 }
+                .password-wrap { position: relative; margin-bottom: 12px; }
+                .password-wrap input { margin-bottom: 0; padding-right: 36px; }
+                .password-toggle {
+                    position: absolute;
+                    top: 50%;
+                    right: 6px;
+                    transform: translateY(-50%);
+                    width: 26px;
+                    height: 26px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 6px;
+                    background: transparent;
+                    color: var(--vscode-input-foreground);
+                    border: 1px solid transparent;
+                    cursor: pointer;
+                    opacity: 0.75;
+                    padding: 0;
+                }
+                .password-toggle:hover {
+                    opacity: 1;
+                    border-color: var(--vscode-widget-border);
+                    background: var(--vscode-list-hoverBackground);
+                }
                 .close-modal { float: right; cursor: pointer; font-size: 16px; opacity: 0.7; }
                 .close-modal:hover { opacity: 1; }
                 .auth-error { color: var(--vscode-inputValidation-errorForeground, #f48771); font-size: 11px; margin: -8px 0 8px; min-height: 14px; }
@@ -447,7 +472,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                         or sign in with email
                     </div>
                     <input type="email" id="login-email" placeholder="Email" />
-                    <input type="password" id="login-pass" placeholder="Password" />
+                    <div class="password-wrap">
+                        <input type="password" id="login-pass" placeholder="Password" />
+                        <button type="button" class="password-toggle" onclick="togglePassword('login-pass', this)" aria-label="Show password">👁</button>
+                    </div>
                     <button id="login-btn" class="btn-block" onclick="doLogin()" disabled>Login</button>
                     <div style="font-size: 11px; text-align: center; opacity: 0.7;">
                         No account? <a href="#" onclick="switchModal('modal-register')">Register</a>
@@ -467,8 +495,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                         or register with email
                     </div>
                     <input type="email" id="reg-email" placeholder="Email" />
-                    <input type="password" id="reg-pass" placeholder="Password" />
-                    <input type="password" id="reg-confirm-pass" placeholder="Confirm Password" />
+                    <div class="password-wrap">
+                        <input type="password" id="reg-pass" placeholder="Password" />
+                        <button type="button" class="password-toggle" onclick="togglePassword('reg-pass', this)" aria-label="Show password">👁</button>
+                    </div>
+                    <div class="password-wrap">
+                        <input type="password" id="reg-confirm-pass" placeholder="Confirm Password" />
+                        <button type="button" class="password-toggle" onclick="togglePassword('reg-confirm-pass', this)" aria-label="Show password">👁</button>
+                    </div>
                     <div id="register-error" class="auth-error"></div>
                     <button id="register-btn" class="btn-block" onclick="doRegister()" disabled>Create Account</button>
                     <div style="font-size: 11px; text-align: center; opacity: 0.7;">
@@ -591,6 +625,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     document.querySelectorAll('.modal-overlay').forEach(e => e.classList.remove('show'));
                 }
                 function switchModal(id) { closeModals(); openModal(id); }
+                function togglePassword(inputId, btn) {
+                    const input = document.getElementById(inputId);
+                    if (!input) return;
+                    const show = input.type === 'password';
+                    input.type = show ? 'text' : 'password';
+                    btn.textContent = show ? '🙈' : '👁';
+                    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+                }
                 function updateAuthButtons() {
                     const loginEmail = document.getElementById('login-email');
                     const loginPass = document.getElementById('login-pass');
