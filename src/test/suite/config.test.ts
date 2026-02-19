@@ -173,4 +173,55 @@ suite('McpConfigService Test Suite', () => {
         assert.ok(savedData.servers.legacyOnly);
         assert.ok(savedData.servers.serversOnly);
     });
+
+    test('loadConfig rewrites stale extension version args paths', async () => {
+        const mockFolder = { uri: vscode.Uri.file('/workspace'), index: 0, name: 'ws' };
+        const mockConfig = {
+            servers: {
+                codebase: {
+                    command: 'node',
+                    args: [
+                        '/Users/femiguy/.vscode/extensions/flocca.flocca-0.0.8/resources/servers/codebase/server.js'
+                    ]
+                }
+            }
+        };
+
+        mockFs.readFile.resolves(new TextEncoder().encode(JSON.stringify(mockConfig)));
+
+        const service = new McpConfigService(mockContext, mockFs, [mockFolder]);
+        const config = await service.loadConfig();
+
+        assert.ok(config);
+        assert.strictEqual(
+            config!.servers.codebase.args![0],
+            '/abs/resources/servers/codebase/server.js'
+        );
+    });
+
+    test('saveConfig rewrites stale extension version args paths', async () => {
+        const mockFolder = { uri: vscode.Uri.file('/workspace'), index: 0, name: 'ws' };
+        mockFs.createDirectory = sinon.stub().resolves();
+        mockFs.writeFile = sinon.stub().resolves();
+
+        const service = new McpConfigService(mockContext, mockFs, [mockFolder]);
+        await service.saveConfig({
+            servers: {
+                playwright: {
+                    command: 'node',
+                    args: [
+                        '/Users/femiguy/.vscode/extensions/flocca.flocca-0.0.8/resources/servers/playwright/server.js'
+                    ]
+                }
+            }
+        });
+
+        assert.ok(mockFs.writeFile.calledOnce);
+        const args = mockFs.writeFile.firstCall.args;
+        const savedData = JSON.parse(new TextDecoder().decode(args[1]));
+        assert.strictEqual(
+            savedData.servers.playwright.args[0],
+            '/abs/resources/servers/playwright/server.js'
+        );
+    });
 });

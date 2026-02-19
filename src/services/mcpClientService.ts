@@ -12,6 +12,9 @@ export type CallToolResultSchema = any; // Schema.CallToolResult
 export class McpClientManager {
     private _clients: Map<string, Client> = new Map();
     private _transports: Map<string, StdioClientTransport | SSEClientTransport> = new Map();
+    private _serverDefinitions: Map<string, vscode.McpServerDefinition> = new Map();
+    private _mcpDefinitionsChanged = new vscode.EventEmitter<void>();
+    public readonly onDidChangeMcpServerDefinitions = this._mcpDefinitionsChanged.event;
 
     constructor(private context: vscode.ExtensionContext, private subscriptionService: SubscriptionService, private telemetryService: TelemetryService) { }
 
@@ -33,6 +36,17 @@ export class McpClientManager {
         await client.connect(transport);
         this._clients.set(name, client);
         this._transports.set(name, transport);
+        this._serverDefinitions.set(
+            name,
+            new vscode.McpStdioServerDefinition(
+                `Flocca ${name}`,
+                command,
+                args,
+                envVars,
+                '1.0.0'
+            )
+        );
+        this._mcpDefinitionsChanged.fire();
         console.log(`Connected to local MCP server: ${name}`);
         // vscode.window.showInformationMessage(`Connected to local MCP server: ${name}`);
     }
@@ -56,6 +70,10 @@ export class McpClientManager {
         await client.connect(transport);
         this._clients.set(name, client);
         this._transports.set(name, transport);
+        // Remote connections here currently use SSE transport and may not be
+        // compatible with the VS Code MCP HTTP definition transport contract.
+        this._serverDefinitions.delete(name);
+        this._mcpDefinitionsChanged.fire();
         console.log(`Connected to remote MCP server: ${name}`);
         vscode.window.showInformationMessage(`Connected to remote MCP server: ${name}`);
     }
@@ -80,6 +98,8 @@ export class McpClientManager {
             }
         }
         this._transports.delete(name);
+        this._serverDefinitions.delete(name);
+        this._mcpDefinitionsChanged.fire();
         console.log(`Disconnected MCP server: ${name}`);
     }
 
@@ -89,6 +109,10 @@ export class McpClientManager {
 
     getConnectedClients(): string[] {
         return Array.from(this._clients.keys());
+    }
+
+    getMcpServerDefinitions(): vscode.McpServerDefinition[] {
+        return Array.from(this._serverDefinitions.values());
     }
 
     async listTools(): Promise<ListToolsResultSchema[]> {

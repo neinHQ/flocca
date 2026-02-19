@@ -12,6 +12,21 @@ export interface McpConfig {
     servers: Record<string, McpServerConfig>;
 }
 
+function normalizeFloccaServerArgPath(arg: string, context: vscode.ExtensionContext): string {
+    if (typeof arg !== 'string' || !arg.trim()) return arg;
+
+    const normalized = arg.replace(/\\/g, '/');
+    // Only rewrite stale installed-extension paths, not arbitrary user MCP entries.
+    if (!/\/extensions\/flocca\.flocca[-@]/i.test(normalized)) return arg;
+
+    const marker = '/resources/servers/';
+    const idx = normalized.indexOf(marker);
+    if (idx === -1) return arg;
+
+    const relativeServerPath = normalized.slice(idx + 1); // "resources/servers/..."
+    return context.asAbsolutePath(relativeServerPath);
+}
+
 export class McpConfigService {
     constructor(private context: vscode.ExtensionContext, private fs: vscode.FileSystem = vscode.workspace.fs, private workspaceFolders: readonly vscode.WorkspaceFolder[] | undefined = vscode.workspace.workspaceFolders) { }
 
@@ -53,6 +68,11 @@ export class McpConfigService {
             return undefined;
         }
 
+        for (const server of Object.values(config.servers)) {
+            if (!Array.isArray(server.args)) continue;
+            server.args = server.args.map((arg) => normalizeFloccaServerArgPath(arg, this.context));
+        }
+
         return config;
     }
 
@@ -72,6 +92,9 @@ export class McpConfigService {
                 const inferredType: 'stdio' | 'sse' | undefined = server.type || (server.url ? 'sse' : (server.command ? 'stdio' : undefined));
                 normalizedServers[name] = {
                     ...server,
+                    ...(Array.isArray(server.args)
+                        ? { args: server.args.map((arg) => normalizeFloccaServerArgPath(arg, this.context)) }
+                        : {}),
                     ...(inferredType ? { type: inferredType } : {})
                 };
             }

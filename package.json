@@ -66,6 +66,12 @@
         }
       ]
     },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "flocca.connected-servers",
+        "label": "Flocca Connected MCP Servers"
+      }
+    ],
     "commands": [
       {
         "command": "flocca.helloWorld",

@@ -58,6 +58,14 @@ export async function activate(context: vscode.ExtensionContext) {
     const telemetryService = new TelemetryService(context);
     const subsService = new SubscriptionService(context);
     const clientManager = new McpClientManager(context, subsService, telemetryService);
+    if (typeof vscode.lm?.registerMcpServerDefinitionProvider === 'function') {
+        context.subscriptions.push(
+            vscode.lm.registerMcpServerDefinitionProvider('flocca.connected-servers', {
+                onDidChangeMcpServerDefinitions: clientManager.onDidChangeMcpServerDefinitions,
+                provideMcpServerDefinitions: async () => clientManager.getMcpServerDefinitions()
+            })
+        );
+    }
     await vscode.commands.executeCommand('setContext', 'flocca.auth.loggedIn', !!subsService.getEmail());
     await vscode.commands.executeCommand('setContext', 'flocca.auth.paid', subsService.isPaidUser());
 
