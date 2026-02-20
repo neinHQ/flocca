@@ -249,6 +249,11 @@
         "command": "flocca.manageSubscription",
         "title": "Manage Subscription",
         "icon": "$(credit-card)"
+      },
+      {
+        "command": "flocca.fixMcpSetup",
+        "title": "Fix MCP Setup",
+        "icon": "$(tools)"
       }
     ],
     "submenus": [

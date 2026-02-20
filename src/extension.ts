@@ -58,6 +58,70 @@ export async function activate(context: vscode.ExtensionContext) {
     const telemetryService = new TelemetryService(context);
     const subsService = new SubscriptionService(context);
     const clientManager = new McpClientManager(context, subsService, telemetryService);
+    const openCopilotToolConfiguration = async () => {
+        const directCommands = [
+            'workbench.action.chat.manageTools',
+            'workbench.action.chat.configureTools'
+        ];
+        for (const command of directCommands) {
+            try {
+                await vscode.commands.executeCommand(command);
+                vscode.window.showInformationMessage(
+                    'Step 1: Enable "Flocca Connect MCPs". Step 2: Return to Copilot chat and retry your request.'
+                );
+                return;
+            } catch {
+                // Try next fallback command.
+            }
+        }
+        await vscode.commands.executeCommand('workbench.action.openSettings', 'chat.tools');
+        vscode.window.showInformationMessage(
+            'Step 1: In Settings, enable Copilot tools for Flocca. Step 2: Return to Copilot chat and retry your request.'
+        );
+    };
+
+    const runMcpDiagnostics = async () => {
+        const issues: string[] = [];
+        const connected = clientManager.getConnectedClients();
+        const exposed = clientManager.getMcpServerDefinitions().length;
+        const chatConfig = vscode.workspace.getConfiguration('chat');
+        const mcpAccess = chatConfig.get<string>('mcp.access');
+        const legacyMcpEnabled = chatConfig.get<boolean>('mcp.enabled');
+
+        if (mcpAccess === 'none' || legacyMcpEnabled === false) {
+            issues.push('MCP access appears disabled by settings/policy.');
+        }
+        if (connected.length > 0 && exposed === 0) {
+            issues.push('No connected Flocca MCP servers are exposed to Copilot tools.');
+        }
+
+        const invalidToolNames: string[] = [];
+        for (const serverName of connected) {
+            const client = clientManager.getClient(serverName);
+            if (!client) continue;
+            try {
+                // @ts-ignore listTools is provided by MCP SDK client
+                const tools = await client.listTools();
+                const names = Array.isArray(tools?.tools) ? tools.tools.map((t: any) => t?.name).filter(Boolean) : [];
+                for (const name of names) {
+                    if (!/^[a-z0-9_-]+$/.test(name)) {
+                        invalidToolNames.push(`${serverName}:${name}`);
+                    }
+                }
+            } catch {
+                issues.push(`Could not list tools for server "${serverName}".`);
+            }
+        }
+        if (invalidToolNames.length > 0) {
+            issues.push(`Invalid tool names detected: ${invalidToolNames.slice(0, 5).join(', ')}`);
+        }
+
+        return {
+            issues,
+            connectedCount: connected.length,
+            exposedCount: exposed
+        };
+    };
     if (typeof vscode.lm?.registerMcpServerDefinitionProvider === 'function') {
         context.subscriptions.push(
             vscode.lm.registerMcpServerDefinitionProvider('flocca.connected-servers', {
@@ -513,6 +577,31 @@ export async function activate(context: vscode.ExtensionContext) {
         dashboardProvider.showServerCatalog();
     }));
 
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.fixMcpSetup', async () => {
+        const report = await runMcpDiagnostics();
+        if (report.issues.length === 0) {
+            vscode.window.showInformationMessage(
+                `MCP diagnostics passed. Connected: ${report.connectedCount}, Exposed to Copilot: ${report.exposedCount}.`
+            );
+            return;
+        }
+
+        const summary = `MCP setup issues found (${report.issues.length}): ${report.issues.join(' ')}`;
+        const selection = await vscode.window.showWarningMessage(
+            summary,
+            'Open Copilot Tool Config',
+            'Open MCP Settings',
+            'Show Flocca Logs'
+        );
+        if (selection === 'Open Copilot Tool Config') {
+            await openCopilotToolConfiguration();
+        } else if (selection === 'Open MCP Settings') {
+            await vscode.commands.executeCommand('workbench.action.openSettings', 'chat.mcp');
+        } else if (selection === 'Show Flocca Logs') {
+            revealLogs();
+        }
+    }));
+
     // --- Connect Commands ---
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectZephyr', () =>
@@ -540,28 +629,6 @@ export async function activate(context: vscode.ExtensionContext) {
         runtime: 'node' | 'python3',
         envMapper: (data: any) => Record<string, string>
     ) => {
-        const openCopilotToolConfiguration = async () => {
-            const directCommands = [
-                'workbench.action.chat.manageTools',
-                'workbench.action.chat.configureTools'
-            ];
-            for (const command of directCommands) {
-                try {
-                    await vscode.commands.executeCommand(command);
-                    vscode.window.showInformationMessage(
-                        'Step 1: Enable "Flocca Connect MCPs". Step 2: Return to Copilot chat and retry your request.'
-                    );
-                    return;
-                } catch {
-                    // Try next fallback command.
-                }
-            }
-            await vscode.commands.executeCommand('workbench.action.openSettings', 'chat.tools');
-            vscode.window.showInformationMessage(
-                'Step 1: In Settings, enable Copilot tools for Flocca. Step 2: Return to Copilot chat and retry your request.'
-            );
-        };
-
         if (!subsService.checkAccess(provider)) {
             const selection = await vscode.window.showErrorMessage(`${provider} is a Pro feature and your trial has expired.`, { modal: true }, "Upgrade");
             if (selection === "Upgrade") subsService.upgradeToPro();
@@ -659,10 +726,13 @@ export async function activate(context: vscode.ExtensionContext) {
                     await updateState();
                     const selection = await vscode.window.showInformationMessage(
                         `Successfully connected to ${provider}. Next: 1) Open Copilot Tool Config 2) Enable "Flocca Connect MCPs" 3) Return to chat and retry.`,
-                        'Open Copilot Tool Config'
+                        'Open Copilot Tool Config',
+                        'Run MCP Diagnostics'
                     );
                     if (selection === 'Open Copilot Tool Config') {
                         await openCopilotToolConfiguration();
+                    } else if (selection === 'Run MCP Diagnostics') {
+                        await vscode.commands.executeCommand('flocca.fixMcpSetup');
                     }
                 }
             } catch (e: any) {

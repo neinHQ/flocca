@@ -23,7 +23,7 @@ export class ServerRegistryService {
         {
             id: 'gitlab',
             name: 'GitLab',
-            description: 'Manage projects, MRs, and pipelines.',
+            description: 'Projects, MRs, pipelines.',
             icon: 'git-merge',
             type: 'remote',
             connectCommand: 'flocca.connectGitLab'
@@ -39,7 +39,7 @@ export class ServerRegistryService {
         {
             id: 'kubernetes',
             name: 'Kubernetes',
-            description: 'Inspect clusters, pods, logs, and apply manifests.',
+            description: 'Clusters, pods, logs.',
             icon: 'server',
             type: 'remote',
             connectCommand: 'flocca.connectKubernetes'
@@ -47,7 +47,7 @@ export class ServerRegistryService {
         {
             id: 'azuredevops',
             name: 'Azure DevOps',
-            description: 'Boards, Repos, and Pipelines.',
+            description: 'Boards, repos, pipelines.',
             icon: 'cloud',
             type: 'remote',
             connectCommand: 'flocca.connectAzureDevOps'
@@ -55,7 +55,7 @@ export class ServerRegistryService {
         {
             id: 'docker',
             name: 'Docker',
-            description: 'Manage containers and images.',
+            description: 'Containers and images.',
             icon: 'vm',
             type: 'local',
             connectCommand: 'flocca.connectDocker'
@@ -63,7 +63,7 @@ export class ServerRegistryService {
         {
             id: 'testrail',
             name: 'TestRail',
-            description: 'Manage Test Cases, Runs, and Results.',
+            description: 'Test cases and runs.',
             icon: 'beaker',
             type: 'remote',
             connectCommand: 'flocca.connectTestRail'
@@ -71,7 +71,7 @@ export class ServerRegistryService {
         {
             id: 'cypress',
             name: 'Cypress',
-            description: 'E2E Testing Execution & Artifacts.',
+            description: 'Run Cypress E2E tests.',
             icon: 'play-circle',
             type: 'local',
             connectCommand: 'flocca.connectCypress'
@@ -79,7 +79,7 @@ export class ServerRegistryService {
         {
             id: 'teams',
             name: 'Microsoft Teams',
-            description: 'Messaging, Channels, and Users.',
+            description: 'Messages and channels.',
             icon: 'comment',
             type: 'remote',
             connectCommand: 'flocca.connectTeams'
@@ -88,7 +88,7 @@ export class ServerRegistryService {
         {
             id: 'azure',
             name: 'Azure Cloud',
-            description: 'VMs, App Service, AKS, Monitor, Storage.',
+            description: 'VMs, AKS, storage.',
             icon: 'azure', // Codicon has 'azure'
             type: 'remote',
             connectCommand: 'flocca.connectAzure'
@@ -96,7 +96,7 @@ export class ServerRegistryService {
         {
             id: 'jira',
             name: 'Jira',
-            description: 'Manage projects, issues, and agile boards.',
+            description: 'Projects and issues.',
             icon: 'layout', // approximation
             type: 'remote',
             connectCommand: 'flocca.connectJira'
@@ -104,7 +104,7 @@ export class ServerRegistryService {
         {
             id: 'slack',
             name: 'Slack',
-            description: 'Send messages and manage channels.',
+            description: 'Messages and channels.',
             icon: 'comment-discussion',
             type: 'local',
             connectCommand: 'flocca.connectSlack'
@@ -112,7 +112,7 @@ export class ServerRegistryService {
         {
             id: 'confluence',
             name: 'Confluence',
-            description: 'Search and read documentation pages.',
+            description: 'Search docs pages.',
             icon: 'book',
             type: 'remote',
             connectCommand: 'flocca.connectConfluence'
@@ -120,7 +120,7 @@ export class ServerRegistryService {
         {
             id: 'postgres',
             name: 'PostgreSQL',
-            description: 'Read-only access to SQL databases.',
+            description: 'Read-only SQL access.',
             icon: 'database',
             type: 'local',
             connectCommand: 'flocca.connectPostgres' // Assuming we have or will have this
@@ -144,7 +144,7 @@ export class ServerRegistryService {
         {
             id: 'notion',
             name: 'Notion',
-            description: 'Access workspaces and pages.',
+            description: 'Workspaces and pages.',
             icon: 'notebook',
             type: 'remote',
             connectCommand: 'flocca.connectNotion'
@@ -152,7 +152,7 @@ export class ServerRegistryService {
         {
             id: 'sentry',
             name: 'Sentry',
-            description: 'Monitor Issues and Releases.',
+            description: 'Issues and releases.',
             icon: 'bug',
             type: 'remote',
             connectCommand: 'flocca.connectSentry'
@@ -160,7 +160,7 @@ export class ServerRegistryService {
         {
             id: 'github_actions',
             name: 'GitHub Actions',
-            description: 'Workflows, Runs, and CI/CD.',
+            description: 'Workflows and runs.',
             icon: 'play',
             type: 'remote',
             connectCommand: 'flocca.connectGHA'
@@ -168,7 +168,7 @@ export class ServerRegistryService {
         {
             id: 'aws',
             name: 'AWS Cloud',
-            description: 'EC2, S3, Lambda, CloudWatch, ECS, EKS.',
+            description: 'EC2, S3, Lambda, ECS.',
             icon: 'server',
             type: 'remote',
             connectCommand: 'flocca.connectAWS'
@@ -176,7 +176,7 @@ export class ServerRegistryService {
         {
             id: 'gcp',
             name: 'Google Cloud',
-            description: 'Compute, Storage, and Kubernetes Engine.',
+            description: 'Compute and storage.',
             icon: 'cloud',
             type: 'remote',
             connectCommand: 'flocca.connectGCP'
@@ -184,7 +184,7 @@ export class ServerRegistryService {
         {
             id: 'elastic',
             name: 'Elasticsearch',
-            description: 'Search and analyze data in real-time.',
+            description: 'Search and analytics.',
             icon: 'search',
             type: 'remote',
             connectCommand: 'flocca.connectElastic'
@@ -192,7 +192,7 @@ export class ServerRegistryService {
         {
             id: 'observability',
             name: 'Observability',
-            description: 'Prometheus Metrics and Grafana Dashboards.',
+            description: 'Metrics and dashboards.',
             icon: 'graph',
             type: 'remote',
             connectCommand: 'flocca.connectObservability'
@@ -208,7 +208,7 @@ export class ServerRegistryService {
         {
             id: 'zephyr',
             name: 'Zephyr Scale',
-            description: 'Test Management for Jira (Cloud/Server).',
+            description: 'Jira test management.',
             icon: 'beaker',
             type: 'remote',
             connectCommand: 'flocca.connectZephyr'
@@ -224,7 +224,7 @@ export class ServerRegistryService {
         {
             id: 'figma',
             name: 'Figma',
-            description: 'Design file access and introspection.',
+            description: 'Design file access.',
             icon: 'paint-can', // approximation
             type: 'remote',
             connectCommand: 'flocca.connectFigma'
@@ -232,7 +232,7 @@ export class ServerRegistryService {
         {
             id: 'stripe',
             name: 'Stripe',
-            description: 'Manage payments and subscriptions.',
+            description: 'Payments and billing.',
             icon: 'credit-card',
             type: 'remote',
             connectCommand: 'flocca.connectStripe',
