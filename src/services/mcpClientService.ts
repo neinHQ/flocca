@@ -70,9 +70,20 @@ export class McpClientManager {
         await client.connect(transport);
         this._clients.set(name, client);
         this._transports.set(name, transport);
-        // Remote connections here currently use SSE transport and may not be
-        // compatible with the VS Code MCP HTTP definition transport contract.
-        this._serverDefinitions.delete(name);
+        try {
+            this._serverDefinitions.set(
+                name,
+                new vscode.McpHttpServerDefinition(
+                    `Flocca ${name}`,
+                    vscode.Uri.parse(url),
+                    headers,
+                    '1.0.0'
+                )
+            );
+        } catch (e) {
+            console.error(`Failed to create MCP HTTP definition for ${name}:`, e);
+            this._serverDefinitions.delete(name);
+        }
         this._mcpDefinitionsChanged.fire();
         console.log(`Connected to remote MCP server: ${name}`);
         vscode.window.showInformationMessage(`Connected to remote MCP server: ${name}`);

@@ -540,6 +540,28 @@ export async function activate(context: vscode.ExtensionContext) {
         runtime: 'node' | 'python3',
         envMapper: (data: any) => Record<string, string>
     ) => {
+        const openCopilotToolConfiguration = async () => {
+            const directCommands = [
+                'workbench.action.chat.manageTools',
+                'workbench.action.chat.configureTools'
+            ];
+            for (const command of directCommands) {
+                try {
+                    await vscode.commands.executeCommand(command);
+                    vscode.window.showInformationMessage(
+                        'Step 1: Enable "Flocca Connect MCPs". Step 2: Return to Copilot chat and retry your request.'
+                    );
+                    return;
+                } catch {
+                    // Try next fallback command.
+                }
+            }
+            await vscode.commands.executeCommand('workbench.action.openSettings', 'chat.tools');
+            vscode.window.showInformationMessage(
+                'Step 1: In Settings, enable Copilot tools for Flocca. Step 2: Return to Copilot chat and retry your request.'
+            );
+        };
+
         if (!subsService.checkAccess(provider)) {
             const selection = await vscode.window.showErrorMessage(`${provider} is a Pro feature and your trial has expired.`, { modal: true }, "Upgrade");
             if (selection === "Upgrade") subsService.upgradeToPro();
@@ -635,7 +657,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
                     vscode.commands.executeCommand('setContext', `flocca.connected.${serverName}`, true);
                     await updateState();
-                    vscode.window.showInformationMessage(`Successfully connected to ${provider}!`);
+                    const selection = await vscode.window.showInformationMessage(
+                        `Successfully connected to ${provider}. Next: 1) Open Copilot Tool Config 2) Enable "Flocca Connect MCPs" 3) Return to chat and retry.`,
+                        'Open Copilot Tool Config'
+                    );
+                    if (selection === 'Open Copilot Tool Config') {
+                        await openCopilotToolConfiguration();
+                    }
                 }
             } catch (e: any) {
                 log(`Failed to connect provider=${provider}`, { error: e?.message || String(e), stack: e?.stack });

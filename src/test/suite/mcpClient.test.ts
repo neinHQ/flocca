@@ -78,7 +78,7 @@ suite('McpClientManager Test Suite', () => {
         disposable.dispose();
     });
 
-    test('connectRemote does not register LM MCP server definition yet', async () => {
+    test('connectRemote registers LM MCP server definition', async () => {
         let events = 0;
         const disposable = clientManager.onDidChangeMcpServerDefinitions(() => { events += 1; });
 
@@ -86,7 +86,7 @@ suite('McpClientManager Test Suite', () => {
         assert.strictEqual(connectStub.calledOnce, true);
         assert.strictEqual(showInfoStub.calledOnce, true);
         assert.strictEqual(clientManager.getConnectedClients().includes('jira'), true);
-        assert.strictEqual(clientManager.getMcpServerDefinitions().length, 0, 'Remote SSE servers are intentionally excluded');
+        assert.strictEqual(clientManager.getMcpServerDefinitions().length, 1, 'Remote servers should be exposed to Copilot');
         assert.strictEqual(events, 1, 'Should still emit change event for provider refresh');
 
         disposable.dispose();
