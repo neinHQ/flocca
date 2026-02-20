@@ -28,9 +28,9 @@ describe('Teams MCP Server Smoke Test', () => {
                     if (msg.result && msg.id === 1) {
                         const tools = msg.result.tools;
                         const names = tools.map(t => t.name);
-                        expect(names).toContain('teams.configure');
-                        expect(names).toContain('teams.listTeams');
-                        expect(names).toContain('teams.sendChannelMessage');
+                        expect(names).toContain('teams_configure');
+                        expect(names).toContain('teams_list_teams');
+                        expect(names).toContain('teams_send_channel_message');
                         done();
                     }
                 } catch (e) {

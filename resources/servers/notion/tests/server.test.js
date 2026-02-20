@@ -28,9 +28,9 @@ describe('Notion MCP Server Smoke Test', () => {
                     if (msg.result && msg.id === 1) {
                         const tools = msg.result.tools;
                         const names = tools.map(t => t.name);
-                        expect(names).toContain('notion.configure');
-                        expect(names).toContain('notion.search');
-                        expect(names).toContain('notion.getPage');
+                        expect(names).toContain('notion_configure');
+                        expect(names).toContain('notion_search');
+                        expect(names).toContain('notion_get_page');
                         done();
                     }
                 } catch (e) {

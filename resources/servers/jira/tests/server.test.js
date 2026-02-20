@@ -28,9 +28,9 @@ describe('Jira MCP Server Smoke Test', () => {
                     if (msg.result && msg.id === 1) {
                         const tools = msg.result.tools;
                         const names = tools.map(t => t.name);
-                        expect(names).toContain('jira.configure');
-                        expect(names).toContain('jira.searchIssues');
-                        expect(names).toContain('jira.getIssue');
+                        expect(names).toContain('jira_configure');
+                        expect(names).toContain('jira_search_issues');
+                        expect(names).toContain('jira_get_issue');
                         done();
                     }
                 } catch (e) {

@@ -35,8 +35,12 @@ function createToolAliases(name) {
 }
 
 function registerToolWithAliases(server, name, config, handler) {
-    server.registerTool(name, config, handler);
-    for (const alias of createToolAliases(name)) {
+    const aliases = createToolAliases(name);
+    if (aliases.length === 0) {
+        server.registerTool(name, config, handler);
+        return;
+    }
+    for (const alias of aliases) {
         server.registerTool(alias, config, handler);
     }
 }

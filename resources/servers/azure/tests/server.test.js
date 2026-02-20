@@ -28,9 +28,9 @@ describe('Azure MCP Server Smoke Test', () => {
                     if (msg.result && msg.id === 1) {
                         const tools = msg.result.tools;
                         const names = tools.map(t => t.name);
-                        expect(names).toContain('azure.configure');
-                        expect(names).toContain('azure.listResources');
-                        expect(names).toContain('azure.vm.list');
+                        expect(names).toContain('azure_configure');
+                        expect(names).toContain('azure_list_resources');
+                        expect(names).toContain('azure_vm_list');
                         done();
                     }
                 } catch (e) {

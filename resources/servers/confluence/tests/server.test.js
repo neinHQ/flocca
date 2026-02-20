@@ -28,9 +28,9 @@ describe('Confluence MCP Server Smoke Test', () => {
                     if (msg.result && msg.id === 1) {
                         const tools = msg.result.tools;
                         const names = tools.map(t => t.name);
-                        expect(names).toContain('confluence.configure');
-                        expect(names).toContain('confluence.createPage');
-                        expect(names).toContain('confluence.listSpaces');
+                        expect(names).toContain('confluence_configure');
+                        expect(names).toContain('confluence_create_page');
+                        expect(names).toContain('confluence_list_spaces');
                         done();
                     }
                 } catch (e) {

@@ -28,9 +28,9 @@ describe('GHA MCP Server Smoke Test', () => {
                     if (msg.result && msg.id === 1) {
                         const tools = msg.result.tools;
                         const names = tools.map(t => t.name);
-                        expect(names).toContain('github_actions.configure');
-                        expect(names).toContain('github_actions.listWorkflows');
-                        expect(names).toContain('github_actions.listRuns');
+                        expect(names).toContain('github_actions_configure');
+                        expect(names).toContain('github_actions_list_workflows');
+                        expect(names).toContain('github_actions_list_runs');
                         done();
                     }
                 } catch (e) {

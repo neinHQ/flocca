@@ -140,12 +140,7 @@ async function main() {
         } catch (e) { return normalizeError(e); }
     };
 
-    // Canonical names
-    server.registerTool('jira.configure', configureToolConfig, configureToolHandler);
-    server.registerTool('jira.searchIssues', searchIssuesToolConfig, searchIssuesToolHandler);
-    server.registerTool('jira.getIssue', getIssueToolConfig, getIssueToolHandler);
-
-    // Compatibility aliases for clients that don't expose dotted tool names reliably.
+    // VS Code/Copilot-compatible tool names.
     server.registerTool('jira_configure', configureToolConfig, configureToolHandler);
     server.registerTool('jira_search_issues', searchIssuesToolConfig, searchIssuesToolHandler);
     server.registerTool('jira_get_issue', getIssueToolConfig, getIssueToolHandler);

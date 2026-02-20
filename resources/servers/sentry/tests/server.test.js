@@ -28,9 +28,9 @@ describe('Sentry MCP Server Smoke Test', () => {
                     if (msg.result && msg.id === 1) {
                         const tools = msg.result.tools;
                         const names = tools.map(t => t.name);
-                        expect(names).toContain('sentry.configure');
-                        expect(names).toContain('sentry.listIssues');
-                        expect(names).toContain('sentry.getIssue');
+                        expect(names).toContain('sentry_configure');
+                        expect(names).toContain('sentry_list_issues');
+                        expect(names).toContain('sentry_get_issue');
                         done();
                     }
                 } catch (e) {
