@@ -1,5 +1,6 @@
 
 const axios = require('axios');
+const z = require('zod');
 const { McpServer } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
 
@@ -80,14 +81,10 @@ async function main() {
     const configureToolConfig = {
         description: 'Configure Jira',
         inputSchema: {
-            type: 'object',
-            properties: {
-                email: { type: 'string' },
-                token: { type: 'string' },
-                url: { type: 'string' },
-                deployment_mode: { type: 'string' }
-            },
-            required: ['email', 'token', 'url']
+            email: z.string(),
+            token: z.string(),
+            url: z.string(),
+            deployment_mode: z.string().optional()
         }
     };
     const configureToolHandler = async (args) => {
@@ -107,12 +104,8 @@ async function main() {
     const searchIssuesToolConfig = {
         description: 'Search Issues (JQL)',
         inputSchema: {
-            type: 'object',
-            properties: {
-                jql: { type: 'string' },
-                limit: { type: 'number' }
-            },
-            required: ['jql']
+            jql: z.string(),
+            limit: z.number().int().positive().optional()
         }
     };
     const searchIssuesToolHandler = async (args) => {
@@ -128,14 +121,17 @@ async function main() {
     const getIssueToolConfig = {
         description: 'Get Issue Details',
         inputSchema: {
-            type: 'object',
-            properties: { issue_key: { type: 'string' } },
-            required: ['issue_key']
+            issue_key: z.string().optional(),
+            issueKey: z.string().optional()
         }
     };
     const getIssueToolHandler = async (args) => {
         try {
-            const res = await jiraGet(`issue/${args.issue_key}`, { headers: getHeaders() });
+            const issueKey = args.issue_key || args.issueKey;
+            if (!issueKey) {
+                throw new Error('issue_key (or issueKey) is required');
+            }
+            const res = await jiraGet(`issue/${issueKey}`, { headers: getHeaders() });
             return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
         } catch (e) { return normalizeError(e); }
     };
