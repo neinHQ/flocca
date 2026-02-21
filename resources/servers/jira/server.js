@@ -32,17 +32,52 @@ function getHeaders() {
         };
     }
 
-    if (!config.email || !config.token || !config.url) throw new Error("Jira Not Configured. Missing email, token, or url.");
-    const auth = Buffer.from(`${config.email}:${config.token}`).toString('base64');
-    return {
-        'Authorization': `Basic ${auth}`,
+    if (!config.token || !config.url) throw new Error("Jira Not Configured. Missing token or url.");
+    const baseHeaders = {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
     };
+    // Cloud default path: email + API token => Basic auth.
+    if (config.email) {
+        const auth = Buffer.from(`${config.email}:${config.token}`).toString('base64');
+        return { ...baseHeaders, 'Authorization': `Basic ${auth}` };
+    }
+    // Server/Data Center PAT path: Bearer token.
+    return { ...baseHeaders, 'Authorization': `Bearer ${config.token}` };
+}
+
+function getHeaderCandidates() {
+    if (PROXY_URL && USER_ID) return [getHeaders()];
+    if (!config.token || !config.url) throw new Error("Jira Not Configured. Missing token or url.");
+
+    const baseHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    };
+    const candidates = [];
+
+    const basicCandidate = config.email
+        ? { ...baseHeaders, 'Authorization': `Basic ${Buffer.from(`${config.email}:${config.token}`).toString('base64')}` }
+        : undefined;
+    const bearerCandidate = { ...baseHeaders, 'Authorization': `Bearer ${config.token}` };
+
+    // Server/Data Center commonly uses PAT/Bearer; Cloud commonly uses Basic.
+    if (config.deploymentMode === 'server' || config.deploymentMode === 'self_hosted') {
+        candidates.push(bearerCandidate);
+        if (basicCandidate) candidates.push(basicCandidate);
+    } else {
+        if (basicCandidate) candidates.push(basicCandidate);
+        candidates.push(bearerCandidate);
+    }
+
+    return candidates;
 }
 
 function normalizeBaseUrl(url) {
-    return (url || '').replace(/\/+$/, '');
+    const trimmed = (url || '').trim().replace(/\/+$/, '');
+    if (!trimmed) return trimmed;
+    if (!/^https?:\/\//i.test(trimmed)) return `https://${trimmed}`;
+    return trimmed;
 }
 
 function getApiVersions() {
@@ -53,17 +88,25 @@ function getApiVersions() {
 async function jiraGet(pathSuffix, options = {}) {
     const versions = getApiVersions();
     let lastError;
+    const headerCandidates = getHeaderCandidates();
 
     for (const version of versions) {
-        try {
-            const url = `${config.url}/rest/api/${version}/${pathSuffix.replace(/^\/+/, '')}`;
-            return await axios.get(url, options);
-        } catch (err) {
-            lastError = err;
-            const status = err?.response?.status;
-            // If endpoint doesn't exist, try next API version.
-            if (status === 404 || status === 405) continue;
-            throw err;
+        for (const headers of headerCandidates) {
+            try {
+                const url = `${config.url}/rest/api/${version}/${pathSuffix.replace(/^\/+/, '')}`;
+                return await axios.get(url, {
+                    ...options,
+                    headers: { ...(options.headers || {}), ...headers }
+                });
+            } catch (err) {
+                lastError = err;
+                const status = err?.response?.status;
+                // If endpoint doesn't exist, try next API version.
+                if (status === 404 || status === 405) break;
+                // If auth mode failed, try next header candidate.
+                if (status === 401 || status === 403) continue;
+                throw err;
+            }
         }
     }
 
@@ -81,7 +124,7 @@ async function main() {
     const configureToolConfig = {
         description: 'Configure Jira',
         inputSchema: {
-            email: z.string(),
+            email: z.string().optional(),
             token: z.string(),
             url: z.string(),
             deployment_mode: z.string().optional()
