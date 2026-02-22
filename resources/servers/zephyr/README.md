@@ -1,7 +1,7 @@
 ## Zephyr MCP Server (Zephyr Scale Cloud)
 
 ### Configure at runtime
-Call `zephyr.configure` with Atlassian OAuth access token (in-memory only):
+Call `zephyr_configure` with Atlassian OAuth access token (in-memory only):
 ```json
 {
   "deployment": "cloud",
@@ -17,16 +17,16 @@ Call `zephyr.configure` with Atlassian OAuth access token (in-memory only):
 Validation: Jira `/rest/api/3/myself` + Zephyr Scale capability check. No secrets are persisted or logged.
 
 ### Tools
-- Core: `zephyr.configure`, `zephyr.health`
-- Discovery: `zephyr.getContext`, `zephyr.listFolders`
-- Test cases: `zephyr.searchTestCases`, `zephyr.getTestCase`, `zephyr.createTestCase`, `zephyr.updateTestCase`
-- Cycles/Executions: `zephyr.createTestCycle`, `zephyr.addTestsToCycle`, `zephyr.listTestExecutions`, `zephyr.updateExecutionStatus`
-- Automation results: `zephyr.publishAutomationResults`
+- Core: `zephyr_configure`, `zephyr_health`
+- Discovery: `zephyr_get_context`, `zephyr_list_folders`
+- Test cases: `zephyr_search_test_cases`, `zephyr_get_test_case`, `zephyr_create_test_case`, `zephyr_update_test_case`
+- Cycles/Executions: `zephyr_create_test_cycle`, `zephyr_add_tests_to_cycle`, `zephyr_list_test_executions`, `zephyr_update_execution_status`
+- Automation results: `zephyr_publish_automation_results`
 
 ### Error shape
 `{ "error": { "message": "...", "code": "AUTH_FAILED|PERMISSION_DENIED|NOT_FOUND|RATE_LIMITED|UNSUPPORTED_PRODUCT|INVALID_REQUEST|READ_ONLY_MODE|ZEPHYR_ERROR", "details": "...", "http_status": 400 } }`
 
 ### Notes
-- Read-only mode can be enabled via `read_only` in `zephyr.configure` (create/update operations will be blocked).
+- Read-only mode can be enabled via `read_only` in `zephyr_configure` (create/update operations will be blocked).
 - Attachment uploads are capped (~5MB) and batches are capped (500 results).
 - MVP targets Zephyr Scale Cloud endpoints (`/rest/atm/1.0`). Zephyr Squad/Enterprise is out of scope for now.

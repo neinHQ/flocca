@@ -1,7 +1,7 @@
 ## TestRail MCP Server
 
 ### Configure at runtime
-Call `testrail.configure` first:
+Call `testrail_configure` first:
 ```json
 {
   "base_url": "https://mycompany.testrail.io",
@@ -14,18 +14,18 @@ Call `testrail.configure` first:
 Values are stored in memory only for the session.
 
 ### Tools
-- `testrail.health`
-- `testrail.configure`
-- `testrail.listTestCases`
-- `testrail.getTestCase`
-- `testrail.createTestCase`
-- `testrail.createTestRun`
-- `testrail.closeTestRun`
-- `testrail.addTestResult`
-- `testrail.mapAutomatedResults` (batch add results for cases in a run)
-- `testrail.searchCases`
-- `testrail.searchRuns`
-- `testrail.listTestPlans` (phase-2 placeholder)
+- `testrail_health`
+- `testrail_configure`
+- `testrail_list_test_cases`
+- `testrail_get_test_case`
+- `testrail_create_test_case`
+- `testrail_create_test_run`
+- `testrail_close_test_run`
+- `testrail_add_test_result`
+- `testrail_map_automated_results` (batch add results for cases in a run)
+- `testrail_search_cases`
+- `testrail_search_runs`
+- `testrail_list_test_plans` (phase-2 placeholder)
 
 ### Error shape
 All errors return:
@@ -35,5 +35,5 @@ All errors return:
 Auth objects are never returned or logged.
 
 ### Example workflows
-- Run Pytest/Playwright → `testrail.createTestRun` → `testrail.mapAutomatedResults` → `testrail.closeTestRun`
-- Generate new cases → `testrail.createTestCase` → include in runs
+- Run Pytest/Playwright → `testrail_create_test_run` → `testrail_map_automated_results` → `testrail_close_test_run`
+- Generate new cases → `testrail_create_test_case` → include in runs

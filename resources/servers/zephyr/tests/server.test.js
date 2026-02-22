@@ -28,9 +28,9 @@ describe('Zephyr MCP Server Smoke Test', () => {
                     if (msg.result && msg.id === 1) {
                         const tools = msg.result.tools;
                         const names = tools.map(t => t.name);
-                        expect(names).toContain('zephyr.configure');
-                        expect(names).toContain('zephyr.health');
-                        expect(names).toContain('zephyr.searchTestCases');
+                        expect(names).toContain('zephyr_configure');
+                        expect(names).toContain('zephyr_health');
+                        expect(names).toContain('zephyr_search_test_cases');
                         done();
                     }
                 } catch (e) {

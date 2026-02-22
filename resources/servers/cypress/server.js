@@ -49,7 +49,7 @@ function runCypress(args, cwd) {
 async function handleToolCall(name, args) {
     try {
         switch (name) {
-            case 'cypress.health':
+            case 'cypress_health':
                 // Check if we can run `cypress -v` or verify project root
                 const healthInfo = { ok: true, configured: !!config.projectRoot };
                 if (config.projectRoot) {
@@ -64,7 +64,7 @@ async function handleToolCall(name, args) {
                 }
                 return { content: [{ type: 'text', text: JSON.stringify(healthInfo) }] };
 
-            case 'cypress.configure':
+            case 'cypress_configure':
                 if (args.project_root) config.projectRoot = args.project_root;
                 if (args.browser) config.browser = args.browser;
                 if (args.exec_path) config.execPath = args.exec_path;
@@ -76,7 +76,7 @@ async function handleToolCall(name, args) {
                 }
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, config }) }] };
 
-            case 'cypress.listSpecs':
+            case 'cypress_list_specs':
                 if (!config.projectRoot) return normalizeError('Configure project_root first');
                 // Look for common patterns
                 const patterns = ['**/*.cy.{js,ts,jsx,tsx}', '**/*.spec.{js,ts,jsx,tsx}'];
@@ -89,7 +89,7 @@ async function handleToolCall(name, args) {
                 const uniqueSpecs = [...new Set(specs)].sort();
                 return { content: [{ type: 'text', text: JSON.stringify({ specs: uniqueSpecs }) }] };
 
-            case 'cypress.runSpec':
+            case 'cypress_run_spec':
                 if (!config.projectRoot) return normalizeError('Configure project_root first');
                 // Args: spec, headed, browser, record
                 const runArgs = ['run', '--spec', args.spec, '--browser', args.browser || config.browser, '--reporter', 'json'];
@@ -129,7 +129,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'cypress.runAll':
+            case 'cypress_run_all':
                 // Very similar to runSpec but without specific spec or specific tags
                 if (!config.projectRoot) return normalizeError('Configure project_root first');
                 const allArgs = ['run', '--browser', args.browser || config.browser, '--reporter', 'json'];
@@ -157,7 +157,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'cypress.getVideo':
+            case 'cypress_get_video':
                 // Find video for spec
                 // Default video folder: cypress/videos
                 if (!config.projectRoot) return normalizeError('Configure project_root first');
@@ -171,7 +171,7 @@ async function handleToolCall(name, args) {
                 }
                 return { content: [{ type: 'text', text: null }] };
 
-            case 'cypress.getScreenshot':
+            case 'cypress_get_screenshot':
                 if (!config.projectRoot) return normalizeError('Configure project_root first');
                 // Screenshots usually in cypress/screenshots/<spec>/<test>.png
                 const shotPattern = `**/*${args.test_title.replace(/[^a-z0-9]/gi, '*')}.png`;
@@ -210,9 +210,9 @@ rl.on('line', (line) => {
                 jsonrpc: "2.0", id: req.id,
                 result: {
                     tools: [
-                        { name: "cypress.health", description: "Check availability", inputSchema: { type: "object", properties: {} } },
+                        { name: "cypress_health", description: "Check availability", inputSchema: { type: "object", properties: {} } },
                         {
-                            name: "cypress.configure",
+                            name: "cypress_configure",
                             description: "Configure Cypress Session",
                             inputSchema: {
                                 type: "object",
@@ -224,9 +224,9 @@ rl.on('line', (line) => {
                                 }
                             }
                         },
-                        { name: "cypress.listSpecs", description: "List spec files", inputSchema: { type: "object", properties: {} } },
+                        { name: "cypress_list_specs", description: "List spec files", inputSchema: { type: "object", properties: {} } },
                         {
-                            name: "cypress.runSpec",
+                            name: "cypress_run_spec",
                             description: "Run a single spec",
                             inputSchema: {
                                 type: "object",
@@ -240,7 +240,7 @@ rl.on('line', (line) => {
                             }
                         },
                         {
-                            name: "cypress.runAll",
+                            name: "cypress_run_all",
                             description: "Run all specs",
                             inputSchema: {
                                 type: "object",
@@ -251,12 +251,12 @@ rl.on('line', (line) => {
                             }
                         },
                         {
-                            name: "cypress.getVideo",
+                            name: "cypress_get_video",
                             description: "Get video artifact path",
                             inputSchema: { type: "object", properties: { spec: { type: "string" } }, required: ["spec"] }
                         },
                         {
-                            name: "cypress.getScreenshot",
+                            name: "cypress_get_screenshot",
                             description: "Get screenshot artifact path",
                             inputSchema: { type: "object", properties: { spec: { type: "string" }, test_title: { type: "string" } }, required: ["spec", "test_title"] }
                         }

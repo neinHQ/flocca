@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
@@ -29,7 +30,7 @@ function normalizeError(message, code = 'ZEPHYR_ENTERPRISE_ERROR', details, http
 
 function requireConfigured() {
     if (!sessionConfig.base_url || !sessionConfig.auth) {
-        throw { message: 'Zephyr Enterprise not configured. Call zephyr_enterprise.configure first.', code: 'AUTH_FAILED' };
+        throw { message: 'Zephyr Enterprise not configured. Call zephyr_enterprise_configure first.', code: 'AUTH_FAILED' };
     }
 }
 
@@ -81,30 +82,50 @@ async function zFetch(pathPart, { method = 'GET', query, body, headers } = {}) {
 }
 
 async function validateConfig(args) {
+    const base = (args.base_url || '').replace(/\/+$/, '');
     if (!base) throw { message: 'Missing base_url', code: 'INVALID_REQUEST' };
     if (!args.auth) throw { message: 'Missing auth', code: 'INVALID_REQUEST' };
-    // Project is now optional
 
     sessionConfig.base_url = base;
     sessionConfig.auth = args.auth;
-    sessionConfig.project = args.project;
+    sessionConfig.project = args.project || undefined;
     sessionConfig.read_only = !!args.read_only;
 
     // Validate API availability and auth via /projects
-    const projects = await zFetch('public/rest/api/1.0/projects');
-    sessionConfig.version = projects.releaseVersion || projects.version;
-    const match = (projects || []).find
-        ? projects.find((p) => (args.project.id && p.id === args.project.id) || (args.project.key && p.key === args.project.key))
-        : undefined;
-    if (!match) throw { message: 'Project not accessible', code: 'INVALID_REQUEST', details: projects };
+    const projectsResp = await zFetch('public/rest/api/1.0/projects');
+    const projects = Array.isArray(projectsResp) ? projectsResp : (projectsResp?.values || []);
+    sessionConfig.version = projectsResp?.releaseVersion || projectsResp?.version;
+
+    if (sessionConfig.project) {
+        const match = projects.find((p) =>
+            (sessionConfig.project.id && p.id === sessionConfig.project.id) ||
+            (sessionConfig.project.key && p.key === sessionConfig.project.key)
+        );
+        if (!match) throw { message: 'Project not accessible', code: 'INVALID_REQUEST', details: projectsResp };
+        sessionConfig.project = { id: match.id, key: match.key };
+    } else if (projects.length > 0) {
+        sessionConfig.project = { id: projects[0].id, key: projects[0].key };
+    } else {
+        throw { message: 'No accessible Zephyr Enterprise projects found', code: 'INVALID_REQUEST', details: projectsResp };
+    }
+
     sessionConfig.identity = sessionConfig.auth.username || 'api_token_user';
 }
 
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'zephyr_enterprise.health',
+        'zephyr_enterprise_health',
         { description: 'Health check for Zephyr Enterprise MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -117,7 +138,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr_enterprise.configure',
+        'zephyr_enterprise_configure',
         {
             description: 'Configure Zephyr Enterprise session.',
             inputSchema: {
@@ -159,7 +180,7 @@ async function main() {
 
     // Discovery
     server.registerTool(
-        'zephyr_enterprise.getContext',
+        'zephyr_enterprise_get_context',
         { description: 'Return Zephyr Enterprise context.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -173,7 +194,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr_enterprise.listProjects',
+        'zephyr_enterprise_list_projects',
         { description: 'List Zephyr Enterprise projects.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -187,7 +208,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr_enterprise.listFolders',
+        'zephyr_enterprise_list_folders',
         { description: 'List folders for a project.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' } }, additionalProperties: false } },
         async (args) => {
             try {
@@ -203,7 +224,7 @@ async function main() {
 
     // Test cases
     server.registerTool(
-        'zephyr_enterprise.searchTestCases',
+        'zephyr_enterprise_search_test_cases',
         {
             description: 'Search test cases.',
             inputSchema: {
@@ -231,7 +252,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr_enterprise.getTestCase',
+        'zephyr_enterprise_get_test_case',
         { description: 'Get test case details.', inputSchema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -245,7 +266,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr_enterprise.createTestCase',
+        'zephyr_enterprise_create_test_case',
         {
             description: 'Create a test case.',
             inputSchema: {
@@ -284,7 +305,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr_enterprise.updateTestCase',
+        'zephyr_enterprise_update_test_case',
         {
             description: 'Update a test case (partial).',
             inputSchema: {
@@ -323,7 +344,7 @@ async function main() {
 
     // Cycles and executions
     server.registerTool(
-        'zephyr_enterprise.createCycle',
+        'zephyr_enterprise_create_cycle',
         {
             description: 'Create a test cycle.',
             inputSchema: {
@@ -347,7 +368,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr_enterprise.addTestCasesToCycle',
+        'zephyr_enterprise_add_test_cases_to_cycle',
         {
             description: 'Add test cases to cycle.',
             inputSchema: {
@@ -371,7 +392,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr_enterprise.listExecutions',
+        'zephyr_enterprise_list_executions',
         { description: 'List executions for a cycle.', inputSchema: { type: 'object', properties: { cycle_id: { type: 'number' } }, required: ['cycle_id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -385,7 +406,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr_enterprise.updateExecution',
+        'zephyr_enterprise_update_execution',
         {
             description: 'Update execution status/comment/time.',
             inputSchema: {
@@ -415,7 +436,7 @@ async function main() {
 
     // Evidence
     server.registerTool(
-        'zephyr_enterprise.attachEvidence',
+        'zephyr_enterprise_attach_evidence',
         {
             description: 'Attach evidence to execution.',
             inputSchema: {
@@ -451,7 +472,7 @@ async function main() {
 
     // Automation ingestion
     server.registerTool(
-        'zephyr_enterprise.publishAutomationResults',
+        'zephyr_enterprise_publish_automation_results',
         {
             description: 'Publish automation results in bulk.',
             inputSchema: {

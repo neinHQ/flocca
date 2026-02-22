@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
@@ -19,7 +20,7 @@ function normalizeError(message, code = 'GCP_ERROR', details, http_status) {
 
 function requireConfigured() {
     if (!sessionConfig.project_id || !sessionConfig.token) {
-        throw new Error('GCP not configured. Call gcp.configure first.');
+        throw new Error('GCP not configured. Call gcp_configure first.');
     }
 }
 
@@ -88,9 +89,18 @@ function timeRangeFilter(time_range) {
 
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'gcp.health',
+        'gcp_health',
         { description: 'Health check for GCP MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -104,7 +114,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.configure',
+        'gcp_configure',
         {
             description: 'Configure GCP session with bearer token.',
             inputSchema: {
@@ -149,7 +159,7 @@ async function main() {
 
     // Resource discovery
     server.registerTool(
-        'gcp.listServices',
+        'gcp_list_services',
         { description: 'List enabled services (APIs).', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -164,7 +174,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.listRegions',
+        'gcp_list_regions',
         { description: 'List GCP regions.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -179,7 +189,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.listZones',
+        'gcp_list_zones',
         { description: 'List GCP zones.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -195,7 +205,7 @@ async function main() {
 
     // Cloud Run
     server.registerTool(
-        'gcp.cloudrun.listServices',
+        'gcp_cloudrun_list_services',
         { description: 'List Cloud Run services for a region.', inputSchema: { type: 'object', properties: { region: { type: 'string' } }, required: ['region'], additionalProperties: false } },
         async (args) => {
             try {
@@ -215,7 +225,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.cloudrun.getService',
+        'gcp_cloudrun_get_service',
         { description: 'Get Cloud Run service details.', inputSchema: { type: 'object', properties: { region: { type: 'string' }, name: { type: 'string' } }, required: ['region', 'name'], additionalProperties: false } },
         async (args) => {
             try {
@@ -236,7 +246,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.cloudrun.invoke',
+        'gcp_cloudrun_invoke',
         {
             description: 'Invoke a Cloud Run service URL.',
             inputSchema: {
@@ -276,7 +286,7 @@ async function main() {
 
     // Cloud Functions
     server.registerTool(
-        'gcp.functions.listFunctions',
+        'gcp_functions_list_functions',
         { description: 'List Cloud Functions in a region.', inputSchema: { type: 'object', properties: { region: { type: 'string' } }, required: ['region'], additionalProperties: false } },
         async (args) => {
             try {
@@ -291,7 +301,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.functions.getFunction',
+        'gcp_functions_get_function',
         { description: 'Get Cloud Function details.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, region: { type: 'string' } }, required: ['name', 'region'], additionalProperties: false } },
         async (args) => {
             try {
@@ -305,7 +315,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.functions.invoke',
+        'gcp_functions_invoke',
         {
             description: 'Invoke HTTP-triggered Cloud Function.',
             inputSchema: {
@@ -338,7 +348,7 @@ async function main() {
 
     // Compute Engine
     server.registerTool(
-        'gcp.compute.listInstances',
+        'gcp_compute_list_instances',
         { description: 'List Compute Engine instances.', inputSchema: { type: 'object', properties: { zone: { type: 'string' } }, additionalProperties: false } },
         async (args) => {
             try {
@@ -354,7 +364,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.compute.getInstance',
+        'gcp_compute_get_instance',
         { description: 'Get a Compute Engine instance.', inputSchema: { type: 'object', properties: { zone: { type: 'string' }, name: { type: 'string' } }, required: ['zone', 'name'], additionalProperties: false } },
         async (args) => {
             try {
@@ -372,7 +382,7 @@ async function main() {
     }
 
     server.registerTool(
-        'gcp.compute.startInstance',
+        'gcp_compute_start_instance',
         { description: 'Start a Compute Engine instance.', inputSchema: { type: 'object', properties: { zone: { type: 'string' }, name: { type: 'string' } }, required: ['zone', 'name'], additionalProperties: false } },
         async (args) => {
             try {
@@ -386,7 +396,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.compute.stopInstance',
+        'gcp_compute_stop_instance',
         { description: 'Stop a Compute Engine instance.', inputSchema: { type: 'object', properties: { zone: { type: 'string' }, name: { type: 'string' } }, required: ['zone', 'name'], additionalProperties: false } },
         async (args) => {
             try {
@@ -400,7 +410,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.compute.resetInstance',
+        'gcp_compute_reset_instance',
         { description: 'Reset a Compute Engine instance.', inputSchema: { type: 'object', properties: { zone: { type: 'string' }, name: { type: 'string' } }, required: ['zone', 'name'], additionalProperties: false } },
         async (args) => {
             try {
@@ -415,7 +425,7 @@ async function main() {
 
     // GKE
     server.registerTool(
-        'gcp.gke.listClusters',
+        'gcp_gke_list_clusters',
         { description: 'List GKE clusters.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -429,7 +439,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.gke.getCluster',
+        'gcp_gke_get_cluster',
         { description: 'Get a GKE cluster.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, location: { type: 'string' } }, required: ['name', 'location'], additionalProperties: false } },
         async (args) => {
             try {
@@ -443,7 +453,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.gke.getKubeAccessToken',
+        'gcp_gke_get_kube_access_token',
         { description: 'Return kube API info with bearer token for client handoff.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, location: { type: 'string' } }, required: ['name', 'location'], additionalProperties: false } },
         async (args) => {
             try {
@@ -458,7 +468,7 @@ async function main() {
 
     // GCS
     server.registerTool(
-        'gcp.storage.listBuckets',
+        'gcp_storage_list_buckets',
         { description: 'List GCS buckets.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -472,7 +482,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.storage.listObjects',
+        'gcp_storage_list_objects',
         { description: 'List objects in a bucket/prefix.', inputSchema: { type: 'object', properties: { bucket: { type: 'string' }, prefix: { type: 'string' } }, required: ['bucket'], additionalProperties: false } },
         async (args) => {
             try {
@@ -486,7 +496,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.storage.getObject',
+        'gcp_storage_get_object',
         { description: 'Get object content (text).', inputSchema: { type: 'object', properties: { bucket: { type: 'string' }, object: { type: 'string' } }, required: ['bucket', 'object'], additionalProperties: false } },
         async (args) => {
             try {
@@ -503,7 +513,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.storage.putObject',
+        'gcp_storage_put_object',
         {
             description: 'Upload text content to GCS.',
             inputSchema: {
@@ -533,7 +543,7 @@ async function main() {
 
     // Pub/Sub
     server.registerTool(
-        'gcp.pubsub.listTopics',
+        'gcp_pubsub_list_topics',
         { description: 'List Pub/Sub topics.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -547,7 +557,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.pubsub.publishMessage',
+        'gcp_pubsub_publish_message',
         {
             description: 'Publish a message to Pub/Sub topic.',
             inputSchema: {
@@ -570,7 +580,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.pubsub.pullMessages',
+        'gcp_pubsub_pull_messages',
         {
             description: 'Pull messages from a subscription.',
             inputSchema: {
@@ -593,7 +603,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.pubsub.ackMessage',
+        'gcp_pubsub_ack_message',
         {
             description: 'Acknowledge Pub/Sub messages.',
             inputSchema: {
@@ -617,7 +627,7 @@ async function main() {
 
     // Monitoring
     server.registerTool(
-        'gcp.monitoring.queryMetrics',
+        'gcp_monitoring_query_metrics',
         {
             description: 'Query Cloud Monitoring metrics via timeSeries:list.',
             inputSchema: {
@@ -655,7 +665,7 @@ async function main() {
 
     // Logging
     server.registerTool(
-        'gcp.logging.queryLogs',
+        'gcp_logging_query_logs',
         {
             description: 'Query Cloud Logging entries.',
             inputSchema: {
@@ -698,7 +708,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.logging.getLogContext',
+        'gcp_logging_get_log_context',
         {
             description: 'Get log context around an insertId.',
             inputSchema: { type: 'object', properties: { insertId: { type: 'string' }, before: { type: 'number' }, after: { type: 'number' } }, required: ['insertId'], additionalProperties: false }
@@ -737,7 +747,7 @@ async function main() {
 
     // Incident helpers
     server.registerTool(
-        'gcp.incident.findRecentErrors',
+        'gcp_incident_find_recent_errors',
         {
             description: 'Search recent errors in Cloud Logging.',
             inputSchema: {
@@ -762,7 +772,7 @@ async function main() {
     );
 
     server.registerTool(
-        'gcp.incident.summarizeServiceHealth',
+        'gcp_incident_summarize_service_health',
         {
             description: 'Summarize service health via logging + metrics.',
             inputSchema: { type: 'object', properties: { service: { type: 'string' }, minutes: { type: 'number' } }, required: ['service'], additionalProperties: false }

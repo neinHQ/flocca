@@ -72,10 +72,10 @@ async function handleToolCall(name, args) {
         const namespace = args.namespace || config.namespace || 'default';
 
         switch (name) {
-            case 'kubernetes.health':
+            case 'kubernetes_health':
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
 
-            case 'kubernetes.configure':
+            case 'kubernetes_configure':
                 if (args.api_server) config.apiServer = args.api_server;
                 if (args.auth) {
                     config.authType = args.auth.type || 'bearer';
@@ -93,7 +93,7 @@ async function handleToolCall(name, args) {
                     return { isError: true, content: [{ type: 'text', text: `Verification Failed: ${e.message}` }] };
                 }
 
-            case 'kubernetes.listNamespaces':
+            case 'kubernetes_list_namespaces':
                 const nsList = await core.listNamespace();
                 return {
                     content: [{
@@ -105,7 +105,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'kubernetes.listPods':
+            case 'kubernetes_list_pods':
                 const podRes = await core.listNamespacedPod(namespace, undefined, undefined, undefined, undefined, args.label_selector);
                 return {
                     content: [{
@@ -121,7 +121,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'kubernetes.getResource':
+            case 'kubernetes_get_resource':
                 // Note: Only simplified get for Pod/Deployment for MVP. Generic requires Discovery or dynamic client.
                 let res;
                 if (args.kind.toLowerCase() === 'deployment') {
@@ -135,7 +135,7 @@ async function handleToolCall(name, args) {
                 }
                 return { content: [{ type: 'text', text: JSON.stringify(res.body, null, 2) }] };
 
-            case 'kubernetes.getPodLogs':
+            case 'kubernetes_get_pod_logs':
                 const logRes = await core.readNamespacedPodLog(
                     args.name,
                     namespace,
@@ -151,7 +151,7 @@ async function handleToolCall(name, args) {
                 );
                 return { content: [{ type: 'text', text: logRes.body }] };
 
-            case 'kubernetes.applyManifest':
+            case 'kubernetes_apply_manifest':
                 const client = k8s.KubernetesObjectApi.makeApiClient(kc);
                 const results = [];
                 const docs = yaml.loadAll(args.manifest); // Supports multi-doc string
@@ -179,7 +179,7 @@ async function handleToolCall(name, args) {
                 }
                 return { content: [{ type: 'text', text: results.join('\n') }] };
 
-            case 'kubernetes.deleteResource':
+            case 'kubernetes_delete_resource':
                 if (args.kind.toLowerCase() === 'deployment') {
                     await apps.deleteNamespacedDeployment(args.name, namespace);
                 } else if (args.kind.toLowerCase() === 'pod') {
@@ -191,7 +191,7 @@ async function handleToolCall(name, args) {
                 }
                 return { content: [{ type: 'text', text: `Deleted ${args.kind}/${args.name}` }] };
 
-            case 'kubernetes.scaleDeployment':
+            case 'kubernetes_scale_deployment':
                 // Patch the scale subresource
                 // Requires the patch content type header usually?
                 // Client node has a method patchNamespacedDeploymentScale
@@ -208,7 +208,7 @@ async function handleToolCall(name, args) {
 
                 return { content: [{ type: 'text', text: `Scaled ${args.name} to ${args.replicas} replicas.` }] };
 
-            case 'kubernetes.getDeploymentStatus':
+            case 'kubernetes_get_deployment_status':
                 const statusDep = await apps.readNamespacedDeployment(args.name, namespace);
                 const s = statusDep.body.status;
                 return {
@@ -254,12 +254,12 @@ async function handleRequest(request) {
             result: {
                 tools: [
                     {
-                        name: "kubernetes.health",
+                        name: "kubernetes_health",
                         description: "Check connection health",
                         inputSchema: { type: "object", properties: {} }
                     },
                     {
-                        name: "kubernetes.configure",
+                        name: "kubernetes_configure",
                         description: "Configure Cluster Connection",
                         inputSchema: {
                             type: "object",
@@ -271,12 +271,12 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "kubernetes.listNamespaces",
+                        name: "kubernetes_list_namespaces",
                         description: "List Namespaces",
                         inputSchema: { type: "object", properties: {} }
                     },
                     {
-                        name: "kubernetes.listPods",
+                        name: "kubernetes_list_pods",
                         description: "List Pods",
                         inputSchema: {
                             type: "object",
@@ -284,7 +284,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "kubernetes.getResource",
+                        name: "kubernetes_get_resource",
                         description: "Get Resource Spec",
                         inputSchema: {
                             type: "object",
@@ -293,7 +293,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "kubernetes.getPodLogs",
+                        name: "kubernetes_get_pod_logs",
                         description: "Get Pod Logs",
                         inputSchema: {
                             type: "object",
@@ -302,7 +302,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "kubernetes.applyManifest",
+                        name: "kubernetes_apply_manifest",
                         description: "Apply YAML Manifest",
                         inputSchema: {
                             type: "object",
@@ -311,7 +311,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "kubernetes.deleteResource",
+                        name: "kubernetes_delete_resource",
                         description: "Delete Resource",
                         inputSchema: {
                             type: "object",
@@ -320,7 +320,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "kubernetes.scaleDeployment",
+                        name: "kubernetes_scale_deployment",
                         description: "Scale Deployment",
                         inputSchema: {
                             type: "object",
@@ -329,7 +329,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "kubernetes.getDeploymentStatus",
+                        name: "kubernetes_get_deployment_status",
                         description: "Get Deployment Status",
                         inputSchema: {
                             type: "object",

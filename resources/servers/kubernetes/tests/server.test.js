@@ -1,17 +1,16 @@
-
 const cp = require('child_process');
 const path = require('path');
 
 const serverPath = path.join(__dirname, '../server.js');
 
-describe('Zephyr Enterprise MCP Server Smoke Test', () => {
+describe('Kubernetes MCP Server', () => {
     let server;
 
     afterEach(() => {
         if (server) server.kill();
     });
 
-    it('should list registered tools', (done) => {
+    it('registers VS Code compatible tool names', (done) => {
         server = cp.spawn('node', [serverPath], {
             env: { ...process.env },
             stdio: ['pipe', 'pipe', 'pipe']
@@ -21,20 +20,24 @@ describe('Zephyr Enterprise MCP Server Smoke Test', () => {
         server.stdout.on('data', (data) => {
             buffer += data.toString();
             const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
             for (const line of lines) {
                 if (!line.trim()) continue;
                 try {
                     const msg = JSON.parse(line);
                     if (msg.result && msg.id === 1) {
-                        const tools = msg.result.tools;
-                        const names = tools.map(t => t.name);
-                        expect(names).toContain('zephyr_enterprise_configure');
-                        expect(names).toContain('zephyr_enterprise_health');
-                        expect(names).toContain('zephyr_enterprise_search_test_cases');
+                        const names = (msg.result.tools || []).map((t) => t.name);
+                        expect(names.length).toBeGreaterThan(0);
+                        expect(names).toContain('kubernetes_configure');
+                        expect(names).toContain('kubernetes_list_pods');
+                        for (const name of names) {
+                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                        }
                         done();
                     }
-                } catch (e) {
-                    // ignore
+                } catch {
+                    // ignore non-JSON lines
                 }
             }
         });
@@ -49,7 +52,6 @@ describe('Zephyr Enterprise MCP Server Smoke Test', () => {
                 clientInfo: { name: 'test', version: '1.0' }
             }
         });
-
         server.stdin.write(initReq + '\n');
 
         const listReq = JSON.stringify({
@@ -57,7 +59,6 @@ describe('Zephyr Enterprise MCP Server Smoke Test', () => {
             id: 1,
             method: 'tools/list'
         });
-
         server.stdin.write(listReq + '\n');
-    }, 10000);
+    }, 15000);
 });

@@ -1,7 +1,7 @@
 ## Zephyr Enterprise MCP Server (Enterprise-only)
 
 ### Configure at runtime
-Use `zephyr_enterprise.configure` (in-memory only):
+Use `zephyr_enterprise_configure` (in-memory only):
 ```json
 {
   "deployment": "enterprise",
@@ -14,12 +14,12 @@ Use `zephyr_enterprise.configure` (in-memory only):
 Validation: `/public/rest/api/1.0/projects` for auth/version/project access. No secrets persisted or logged.
 
 ### Tools
-- Core: `zephyr_enterprise.configure`, `zephyr_enterprise.health`
-- Discovery: `zephyr_enterprise.getContext`, `zephyr_enterprise.listProjects`, `zephyr_enterprise.listFolders`
-- Test cases: `zephyr_enterprise.searchTestCases`, `zephyr_enterprise.getTestCase`, `zephyr_enterprise.createTestCase`, `zephyr_enterprise.updateTestCase`
-- Cycles/Executions: `zephyr_enterprise.createCycle`, `zephyr_enterprise.addTestCasesToCycle`, `zephyr_enterprise.listExecutions`, `zephyr_enterprise.updateExecution`
-- Evidence: `zephyr_enterprise.attachEvidence` (size cap ~5MB)
-- Automation ingest: `zephyr_enterprise.publishAutomationResults` (batch cap ~2000)
+- Core: `zephyr_enterprise_configure`, `zephyr_enterprise_health`
+- Discovery: `zephyr_enterprise_get_context`, `zephyr_enterprise_list_projects`, `zephyr_enterprise_list_folders`
+- Test cases: `zephyr_enterprise_search_test_cases`, `zephyr_enterprise_get_test_case`, `zephyr_enterprise_create_test_case`, `zephyr_enterprise_update_test_case`
+- Cycles/Executions: `zephyr_enterprise_create_cycle`, `zephyr_enterprise_add_test_cases_to_cycle`, `zephyr_enterprise_list_executions`, `zephyr_enterprise_update_execution`
+- Evidence: `zephyr_enterprise_attach_evidence` (size cap ~5MB)
+- Automation ingest: `zephyr_enterprise_publish_automation_results` (batch cap ~2000)
 
 ### Error shape
 `{ "error": { "message": "...", "code": "AUTH_FAILED|PERMISSION_DENIED|NOT_FOUND|RATE_LIMITED|INVALID_REQUEST|READ_ONLY_MODE|ZEPHYR_ENTERPRISE_ERROR", "details": "...", "http_status": 400 } }`

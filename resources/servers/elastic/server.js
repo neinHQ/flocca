@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
@@ -22,7 +23,7 @@ function normalizeError(message, code = 'ELASTICSEARCH_ERROR', http_status, deta
 }
 
 function requireConfigured() {
-    if (!sessionConfig.url) throw new Error('Elasticsearch is not configured. Call elastic.configure first.');
+    if (!sessionConfig.url) throw new Error('Elasticsearch is not configured. Call elastic_configure first.');
 }
 
 function authHeaders() {
@@ -98,9 +99,18 @@ function parseHits(data) {
 
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'elastic.health',
+        'elastic_health',
         { description: 'Health check for Elastic/OpenSearch MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -114,7 +124,7 @@ async function main() {
     );
 
     server.registerTool(
-        'elastic.configure',
+        'elastic_configure',
         {
             description: 'Configure Elasticsearch/OpenSearch connection for this session.',
             inputSchema: {
@@ -155,7 +165,7 @@ async function main() {
     );
 
     server.registerTool(
-        'elastic.listIndices',
+        'elastic_list_indices',
         {
             description: 'List indices (optionally filtered by pattern).',
             inputSchema: { type: 'object', properties: { pattern: { type: 'string' } }, additionalProperties: false }
@@ -178,7 +188,7 @@ async function main() {
     );
 
     server.registerTool(
-        'elastic.getIndexStats',
+        'elastic_get_index_stats',
         {
             description: 'Get stats for indices.',
             inputSchema: { type: 'object', properties: { indices: { type: 'array', items: { type: 'string' } } }, required: ['indices'], additionalProperties: false }
@@ -202,7 +212,7 @@ async function main() {
     );
 
     server.registerTool(
-        'elastic.getMappings',
+        'elastic_get_mappings',
         {
             description: 'Get field mappings for an index.',
             inputSchema: {
@@ -229,7 +239,7 @@ async function main() {
     );
 
     server.registerTool(
-        'elastic.searchLogs',
+        'elastic_search_logs',
         {
             description: 'Search logs with query_string and optional time_range.',
             inputSchema: {
@@ -274,7 +284,7 @@ async function main() {
     );
 
     server.registerTool(
-        'elastic.searchStructured',
+        'elastic_search_structured',
         {
             description: 'Run a structured JSON search query.',
             inputSchema: {
@@ -301,7 +311,7 @@ async function main() {
     );
 
     server.registerTool(
-        'elastic.aggregate',
+        'elastic_aggregate',
         {
             description: 'Run aggregation-only queries.',
             inputSchema: {
@@ -324,7 +334,7 @@ async function main() {
     );
 
     server.registerTool(
-        'elastic.findRecentErrors',
+        'elastic_find_recent_errors',
         {
             description: 'Fetch recent error-level logs for a service.',
             inputSchema: {
@@ -366,7 +376,7 @@ async function main() {
     );
 
     server.registerTool(
-        'elastic.getLogContext',
+        'elastic_get_log_context',
         {
             description: 'Fetch a log document and surrounding context.',
             inputSchema: {

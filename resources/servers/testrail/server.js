@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
@@ -27,7 +28,7 @@ class TRLError extends Error {
 
 function requireConfigured() {
     if (!sessionConfig.baseUrl || !sessionConfig.auth || !sessionConfig.projectId) {
-        throw new TRLError('TestRail is not configured. Call testrail.configure first.', { code: 400 });
+        throw new TRLError('TestRail is not configured. Call testrail_configure first.', { code: 400 });
     }
 }
 
@@ -105,9 +106,18 @@ async function validateConfig(args) {
 
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'testrail.health',
+        'testrail_health',
         {
             description: 'Health check for TestRail MCP server.',
             inputSchema: { type: 'object', properties: {}, additionalProperties: false }
@@ -116,7 +126,7 @@ async function main() {
     );
 
     server.registerTool(
-        'testrail.configure',
+        'testrail_configure',
         {
             description: 'Configure TestRail connection for this session.',
             inputSchema: {
@@ -150,13 +160,13 @@ async function main() {
                 sessionConfig.runDefaults = args.run_defaults;
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.configure');
+                return errorResult(err, 'testrail_configure');
             }
         }
     );
 
     server.registerTool(
-        'testrail.listTestCases',
+        'testrail_list_test_cases',
         {
             description: 'List TestRail test cases with optional suite/section filters.',
             inputSchema: {
@@ -192,13 +202,13 @@ async function main() {
                 }));
                 return { content: [{ type: 'text', text: JSON.stringify({ cases }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.listTestCases');
+                return errorResult(err, 'testrail_list_test_cases');
             }
         }
     );
 
     server.registerTool(
-        'testrail.getTestCase',
+        'testrail_get_test_case',
         {
             description: 'Get full details for a TestRail case.',
             inputSchema: { type: 'object', properties: { case_id: { type: 'number' } }, required: ['case_id'], additionalProperties: false }
@@ -218,13 +228,13 @@ async function main() {
                 };
                 return { content: [{ type: 'text', text: JSON.stringify(result) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.getTestCase');
+                return errorResult(err, 'testrail_get_test_case');
             }
         }
     );
 
     server.registerTool(
-        'testrail.createTestCase',
+        'testrail_create_test_case',
         {
             description: 'Create a new TestRail case.',
             inputSchema: {
@@ -257,13 +267,13 @@ async function main() {
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, url: data.url }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.createTestCase');
+                return errorResult(err, 'testrail_create_test_case');
             }
         }
     );
 
     server.registerTool(
-        'testrail.createTestRun',
+        'testrail_create_test_run',
         {
             description: 'Create a test run.',
             inputSchema: {
@@ -296,13 +306,13 @@ async function main() {
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, url: data.url }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.createTestRun');
+                return errorResult(err, 'testrail_create_test_run');
             }
         }
     );
 
     server.registerTool(
-        'testrail.closeTestRun',
+        'testrail_close_test_run',
         {
             description: 'Close a test run.',
             inputSchema: { type: 'object', properties: { run_id: { type: 'number' } }, required: ['run_id'], additionalProperties: false }
@@ -313,13 +323,13 @@ async function main() {
                 const data = await trlFetch(`index.php?/api/v2/close_run/${args.run_id}`, { method: 'POST' });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, is_completed: data.is_completed }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.closeTestRun');
+                return errorResult(err, 'testrail_close_test_run');
             }
         }
     );
 
     server.registerTool(
-        'testrail.addTestResult',
+        'testrail_add_test_result',
         {
             description: 'Add a test result to a test.',
             inputSchema: {
@@ -351,13 +361,13 @@ async function main() {
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, status_id: data.status_id }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.addTestResult');
+                return errorResult(err, 'testrail_add_test_result');
             }
         }
     );
 
     server.registerTool(
-        'testrail.mapAutomatedResults',
+        'testrail_map_automated_results',
         {
             description: 'Map automated test results to TestRail cases and post in batch.',
             inputSchema: {
@@ -398,13 +408,13 @@ async function main() {
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ count: (data || []).length }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.mapAutomatedResults');
+                return errorResult(err, 'testrail_map_automated_results');
             }
         }
     );
 
     server.registerTool(
-        'testrail.searchCases',
+        'testrail_search_cases',
         {
             description: 'Search cases by title, section, priority, or custom fields (simple filter).',
             inputSchema: {
@@ -421,7 +431,7 @@ async function main() {
         async (args) => {
             try {
                 requireConfigured();
-                const list = await server.tools['testrail.listTestCases'].handler(args);
+                const list = await server.tools['testrail_list_test_cases'].handler(args);
                 if (list.isError) return list;
                 const parsed = JSON.parse(list.content[0].text);
                 let cases = parsed.cases || [];
@@ -430,13 +440,13 @@ async function main() {
                 if (args.priority_id) cases = cases.filter((c) => c.priority_id === args.priority_id);
                 return { content: [{ type: 'text', text: JSON.stringify({ cases }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.searchCases');
+                return errorResult(err, 'testrail_search_cases');
             }
         }
     );
 
     server.registerTool(
-        'testrail.searchRuns',
+        'testrail_search_runs',
         {
             description: 'Search runs by name/status creator/date (simple filter).',
             inputSchema: {
@@ -457,14 +467,14 @@ async function main() {
                 if (args.is_completed !== undefined) runs = runs.filter((r) => !!r.is_completed === !!args.is_completed);
                 return { content: [{ type: 'text', text: JSON.stringify({ runs }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.searchRuns');
+                return errorResult(err, 'testrail_search_runs');
             }
         }
     );
 
     // Optional MVP placeholders for plans (phase 2)
     server.registerTool(
-        'testrail.listTestPlans',
+        'testrail_list_test_plans',
         {
             description: 'List test plans (optional MVP).',
             inputSchema: { type: 'object', properties: {}, additionalProperties: false }
@@ -475,7 +485,7 @@ async function main() {
                 const data = await trlFetch(`index.php?/api/v2/get_plans/${sessionConfig.projectId}`);
                 return { content: [{ type: 'text', text: JSON.stringify({ plans: data || [] }) }] };
             } catch (err) {
-                return errorResult(err, 'testrail.listTestPlans');
+                return errorResult(err, 'testrail_list_test_plans');
             }
         }
     );

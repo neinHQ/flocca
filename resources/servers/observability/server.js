@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
@@ -108,9 +109,18 @@ function parseDurationSeconds(dur) {
 
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'observability.health',
+        'observability_health',
         { description: 'Health check for observability MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -132,7 +142,7 @@ async function main() {
     );
 
     server.registerTool(
-        'observability.configure',
+        'observability_configure',
         {
             description: 'Configure Prometheus and/or Grafana backends.',
             inputSchema: {
@@ -199,7 +209,7 @@ async function main() {
     );
 
     server.registerTool(
-        'observability.queryPrometheus',
+        'observability_query_prometheus',
         {
             description: 'Run a PromQL instant query.',
             inputSchema: {
@@ -226,7 +236,7 @@ async function main() {
     );
 
     server.registerTool(
-        'observability.queryRange',
+        'observability_query_range',
         {
             description: 'Run a PromQL range query.',
             inputSchema: {
@@ -256,7 +266,7 @@ async function main() {
     );
 
     server.registerTool(
-        'observability.listPrometheusSeries',
+        'observability_list_prometheus_series',
         {
             description: 'List Prometheus series/labels for given matchers.',
             inputSchema: { type: 'object', properties: { match: { type: 'array', items: { type: 'string' } } }, required: ['match'], additionalProperties: false }
@@ -273,7 +283,7 @@ async function main() {
 
     // Grafana
     server.registerTool(
-        'observability.listDashboards',
+        'observability_list_dashboards',
         {
             description: 'List Grafana dashboards (optional folder filter).',
             inputSchema: { type: 'object', properties: { folder: { type: 'string' } }, additionalProperties: false }
@@ -295,7 +305,7 @@ async function main() {
     );
 
     server.registerTool(
-        'observability.getDashboard',
+        'observability_get_dashboard',
         {
             description: 'Get Grafana dashboard JSON by UID.',
             inputSchema: { type: 'object', properties: { uid: { type: 'string' } }, required: ['uid'], additionalProperties: false }
@@ -311,7 +321,7 @@ async function main() {
     );
 
     server.registerTool(
-        'observability.renderPanelSnapshot',
+        'observability_render_panel_snapshot',
         {
             description: 'Return a render URL for a Grafana panel.',
             inputSchema: {
@@ -341,7 +351,7 @@ async function main() {
 
     // Alerts (Prometheus/Alertmanager compatible)
     server.registerTool(
-        'observability.getRecentAlerts',
+        'observability_get_recent_alerts',
         {
             description: 'Fetch active/recent alerts from Prometheus/Alertmanager.',
             inputSchema: { type: 'object', properties: { state: { type: 'string' }, limit: { type: 'number' } }, additionalProperties: false }
@@ -368,7 +378,7 @@ async function main() {
     );
 
     server.registerTool(
-        'observability.getServiceHealthSummary',
+        'observability_get_service_health_summary',
         {
             description: 'Summarize service health via Prometheus metrics.',
             inputSchema: {

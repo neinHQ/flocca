@@ -51,17 +51,17 @@ async function handleRequest(request) {
             result: {
                 tools: [
                     {
-                        name: "db.connect",
+                        name: "db_connect",
                         description: "Connect to database",
                         inputSchema: { type: "object", properties: { connectionString: { type: "string" } }, required: ["connectionString"] }
                     },
                     {
-                        name: "db.getSchema",
+                        name: "db_get_schema",
                         description: "Get intropspected schema",
                         inputSchema: { type: "object", properties: {} }
                     },
                     {
-                        name: "db.query",
+                        name: "db_query",
                         description: "Execute SQL query",
                         inputSchema: { type: "object", properties: { text: { type: "string" }, confirm: { type: "boolean" } }, required: ["text"] }
                     }
@@ -72,11 +72,11 @@ async function handleRequest(request) {
         const { name, arguments: args } = request.params;
         try {
             let resultText = "";
-            if (name === "db.connect") {
+            if (name === "db_connect") {
                 resultText = "Connected (Mock)";
-            } else if (name === "db.getSchema") {
+            } else if (name === "db_get_schema") {
                 resultText = "Table: users\n  - id: serial\n  - name: text";
-            } else if (name === "db.query") {
+            } else if (name === "db_query") {
                 const query = args.text.toUpperCase();
                 const isDestructive = /INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE/.test(query);
 

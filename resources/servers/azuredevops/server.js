@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
 
@@ -22,7 +23,7 @@ class AzureError extends Error {
 
 function requireConfigured() {
     if (!sessionConfig.serviceUrl || !sessionConfig.project || !sessionConfig.token) {
-        throw new AzureError('Azure DevOps is not configured. Call azuredevops.configure first.', { status: 400 });
+        throw new AzureError('Azure DevOps is not configured. Call azuredevops_configure first.', { status: 400 });
     }
 }
 
@@ -103,9 +104,18 @@ async function validateConfig({ service_url, project, token }) {
 
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'azuredevops.health',
+        'azuredevops_health',
         {
             description: 'Health check for Azure DevOps MCP server.',
             inputSchema: { type: 'object', properties: {}, additionalProperties: false }
@@ -114,7 +124,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.configure',
+        'azuredevops_configure',
         {
             description: 'Configure Azure DevOps connection for this session.',
             inputSchema: {
@@ -142,7 +152,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.listRepositories',
+        'azuredevops_list_repositories',
         {
             description: 'List repositories in the configured project.',
             inputSchema: { type: 'object', properties: {}, additionalProperties: false }
@@ -162,7 +172,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.getRepositoryItems',
+        'azuredevops_get_repository_items',
         {
             description: 'List files/folders within a repository path.',
             inputSchema: {
@@ -196,7 +206,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.getFileContent',
+        'azuredevops_get_file_content',
         {
             description: 'Get file contents from a repository.',
             inputSchema: {
@@ -229,7 +239,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.createBranch',
+        'azuredevops_create_branch',
         {
             description: 'Create a new branch from a target branch.',
             inputSchema: {
@@ -275,7 +285,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.createPullRequest',
+        'azuredevops_create_pull_request',
         {
             description: 'Create a pull request.',
             inputSchema: {
@@ -320,7 +330,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.listWorkItems',
+        'azuredevops_list_work_items',
         {
             description: 'List work items using WIQL or simple query.',
             inputSchema: {
@@ -350,7 +360,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.getWorkItem',
+        'azuredevops_get_work_item',
         {
             description: 'Get a work item by ID.',
             inputSchema: {
@@ -373,7 +383,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.updateWorkItem',
+        'azuredevops_update_work_item',
         {
             description: 'Update a work item fields (atomic).',
             inputSchema: {
@@ -408,7 +418,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.runPipeline',
+        'azuredevops_run_pipeline',
         {
             description: 'Trigger a pipeline run for a given branch.',
             inputSchema: {
@@ -444,7 +454,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.getPipelineRuns',
+        'azuredevops_get_pipeline_runs',
         {
             description: 'List pipeline runs.',
             inputSchema: {
@@ -467,7 +477,7 @@ async function main() {
     );
 
     server.registerTool(
-        'azuredevops.getPipelineRunStatus',
+        'azuredevops_get_pipeline_run_status',
         {
             description: 'Get status of a pipeline run.',
             inputSchema: {

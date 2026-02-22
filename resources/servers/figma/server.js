@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
@@ -25,7 +26,7 @@ function normalizeError(message, code = 'FIGMA_ERROR', details, http_status) {
 function requireConfigured() {
     if (process.env.FLOCCA_PROXY_URL && process.env.FLOCCA_USER_ID) return; // Proxy Mode doesn't need local token
     if (!sessionConfig.token) {
-        throw { message: 'Figma not configured. Call figma.configure first.', code: 'AUTH_FAILED' };
+        throw { message: 'Figma not configured. Call figma_configure first.', code: 'AUTH_FAILED' };
     }
 }
 
@@ -183,9 +184,18 @@ function generateSelectors(frameSpec) {
 
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'figma.configure',
+        'figma_configure',
         {
             description: 'Configure Figma MCP session.',
             inputSchema: {
@@ -214,7 +224,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.health',
+        'figma_health',
         { description: 'Health check.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -229,7 +239,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.getFileMetadata',
+        'figma_get_file_metadata',
         { description: 'Get Figma file metadata.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' } }, additionalProperties: false } },
         async (args) => {
             try {
@@ -247,7 +257,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.listPages',
+        'figma_list_pages',
         { description: 'List pages in a file.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' } }, additionalProperties: false } },
         async (args) => {
             try {
@@ -265,7 +275,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.findFrames',
+        'figma_find_frames',
         { description: 'Find frames by name.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'], additionalProperties: false } },
         async (args) => {
             try {
@@ -284,7 +294,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.getFrameSpec',
+        'figma_get_frame_spec',
         { description: 'Return QA-friendly frame spec.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' } }, required: ['node_id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -308,7 +318,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.getComponentVariants',
+        'figma_get_component_variants',
         { description: 'List component variants.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' } }, required: ['node_id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -328,7 +338,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.extractDesignTokens',
+        'figma_extract_design_tokens',
         { description: 'Extract color/typography tokens.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' } }, additionalProperties: false } },
         async (args) => {
             try {
@@ -349,7 +359,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.suggestTestScenarios',
+        'figma_suggest_test_scenarios',
         { description: 'Suggest QA scenarios for a frame.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' } }, required: ['node_id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -369,7 +379,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.generateStableSelectors',
+        'figma_generate_stable_selectors',
         { description: 'Suggest selector strategies for Playwright.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' } }, required: ['node_id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -389,7 +399,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.exportFrameImage',
+        'figma_export_frame_image',
         { description: 'Export a frame as image.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' }, format: { type: 'string' }, scale: { type: 'number' } }, required: ['node_id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -405,7 +415,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.exportNodeImagesBatch',
+        'figma_export_node_images_batch',
         { description: 'Batch export node images.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_ids: { type: 'array', items: { type: 'string' } }, format: { type: 'string' }, scale: { type: 'number' } }, required: ['node_ids'], additionalProperties: false } },
         async (args) => {
             try {
@@ -422,7 +432,7 @@ async function main() {
     );
 
     server.registerTool(
-        'figma.diffVersions',
+        'figma_diff_versions',
         { description: 'Diff two versions for changed nodes.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, from_version: { type: 'string' }, to_version: { type: 'string' } }, required: ['from_version', 'to_version'], additionalProperties: false } },
         async (args) => {
             try {

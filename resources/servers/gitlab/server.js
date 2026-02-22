@@ -57,13 +57,13 @@ function send(response) {
 async function handleToolCall(name, args) {
     try {
         switch (name) {
-            case 'gitlab.health':
+            case 'gitlab_health':
                 const user = await api.get('/user');
                 return {
                     content: [{ type: 'text', text: JSON.stringify({ ok: true, user: user.data.username }) }]
                 };
 
-            case 'gitlab.listProjects':
+            case 'gitlab_list_projects':
                 const params = { simple: true, membership: args.membership_only };
                 if (args.search) params.search = args.search;
                 const projects = await api.get('/projects', { params });
@@ -81,7 +81,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'gitlab.getRepositoryTree':
+            case 'gitlab_get_repository_tree':
                 const treeParams = {
                     ref: args.ref,
                     path: args.path || '',
@@ -92,7 +92,7 @@ async function handleToolCall(name, args) {
                     content: [{ type: 'text', text: JSON.stringify(tree.data, null, 2) }]
                 };
 
-            case 'gitlab.getFile':
+            case 'gitlab_get_file':
                 // file_path must be URL encoded
                 const encodedPath = encodeURIComponent(args.file_path);
                 const file = await api.get(`/projects/${args.project_id}/repository/files/${encodedPath}`, {
@@ -103,7 +103,7 @@ async function handleToolCall(name, args) {
                     content: [{ type: 'text', text: content }]
                 };
 
-            case 'gitlab.createBranch':
+            case 'gitlab_create_branch':
                 const branch = await api.post(`/projects/${args.project_id}/repository/branches`, null, {
                     params: { branch: args.branch_name, ref: args.ref }
                 });
@@ -111,7 +111,7 @@ async function handleToolCall(name, args) {
                     content: [{ type: 'text', text: `Branch created: ${branch.data.name}` }]
                 };
 
-            case 'gitlab.createMergeRequest':
+            case 'gitlab_create_merge_request':
                 const mr = await api.post(`/projects/${args.project_id}/merge_requests`, {
                     source_branch: args.source_branch,
                     target_branch: args.target_branch,
@@ -129,7 +129,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'gitlab.listMergeRequests':
+            case 'gitlab_list_merge_requests':
                 const mrParams = { state: args.state || 'opened', scope: 'all' };
                 if (args.author_id) mrParams.author_id = args.author_id;
                 const mrs = await api.get(`/projects/${args.project_id}/merge_requests`, { params: mrParams });
@@ -146,7 +146,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'gitlab.triggerPipeline':
+            case 'gitlab_trigger_pipeline':
                 const pipeline = await api.post(`/projects/${args.project_id}/pipeline`, null, {
                     params: { ref: args.ref }
                 });
@@ -161,7 +161,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'gitlab.getPipelineStatus':
+            case 'gitlab_get_pipeline_status':
                 const pStatus = await api.get(`/projects/${args.project_id}/pipelines/${args.pipeline_id}`);
                 return {
                     content: [{
@@ -205,12 +205,12 @@ async function handleRequest(request) {
             result: {
                 tools: [
                     {
-                        name: "gitlab.health",
+                        name: "gitlab_health",
                         description: "Check connection health",
                         inputSchema: { type: "object", properties: {} }
                     },
                     {
-                        name: "gitlab.listProjects",
+                        name: "gitlab_list_projects",
                         description: "List accessible projects",
                         inputSchema: {
                             type: "object",
@@ -221,7 +221,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "gitlab.getRepositoryTree",
+                        name: "gitlab_get_repository_tree",
                         description: "List files/directories",
                         inputSchema: {
                             type: "object",
@@ -234,7 +234,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "gitlab.getFile",
+                        name: "gitlab_get_file",
                         description: "Get raw file content",
                         inputSchema: {
                             type: "object",
@@ -247,7 +247,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "gitlab.createBranch",
+                        name: "gitlab_create_branch",
                         description: "Create a new branch",
                         inputSchema: {
                             type: "object",
@@ -260,7 +260,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "gitlab.createMergeRequest",
+                        name: "gitlab_create_merge_request",
                         description: "Create a Merge Request",
                         inputSchema: {
                             type: "object",
@@ -275,7 +275,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "gitlab.listMergeRequests",
+                        name: "gitlab_list_merge_requests",
                         description: "List Merge Requests",
                         inputSchema: {
                             type: "object",
@@ -288,7 +288,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "gitlab.triggerPipeline",
+                        name: "gitlab_trigger_pipeline",
                         description: "Trigger a CI pipeline",
                         inputSchema: {
                             type: "object",
@@ -300,7 +300,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "gitlab.getPipelineStatus",
+                        name: "gitlab_get_pipeline_status",
                         description: "Get status of a pipeline",
                         inputSchema: {
                             type: "object",

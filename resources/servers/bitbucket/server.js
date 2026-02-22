@@ -26,7 +26,7 @@ function getApi() {
     const userId = process.env.FLOCCA_USER_ID;
 
     if ((!config.username || !config.password) && !(proxyUrl && userId)) {
-        throw new Error("Bitbucket credentials not configured. Use bitbucket.configure or set BITBUCKET_USERNAME/PASSWORD.");
+        throw new Error("Bitbucket credentials not configured. Use bitbucket_configure or set BITBUCKET_USERNAME/PASSWORD.");
     }
 
     if (proxyUrl && userId) {
@@ -81,7 +81,7 @@ async function handleToolCall(name, args) {
         const workspace = args.workspace || config.workspace;
 
         switch (name) {
-            case 'bitbucket.configure':
+            case 'bitbucket_configure':
                 if (args.service_url) config.serviceUrl = normalizeServiceUrl(args.service_url);
                 if (args.auth) {
                     config.username = args.auth.username;
@@ -97,7 +97,7 @@ async function handleToolCall(name, args) {
                     return { isError: true, content: [{ type: 'text', text: `Auth Verification Failed: ${e.message}` }] };
                 }
 
-            case 'bitbucket.listRepositories':
+            case 'bitbucket_list_repositories':
                 // Cloud: /repositories/{workspace}
                 // Server: /projects/{project}/repos
                 let listUrl;
@@ -116,7 +116,7 @@ async function handleToolCall(name, args) {
                 }));
                 return { content: [{ type: 'text', text: JSON.stringify(repoList, null, 2) }] };
 
-            case 'bitbucket.listBranches':
+            case 'bitbucket_list_branches':
                 // Cloud: /repositories/{w}/{r}/refs/branches
                 // Server: /projects/{p}/repos/{r}/branches
                 const branchUrl = isCloud()
@@ -134,7 +134,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'bitbucket.getRepositoryTree':
+            case 'bitbucket_get_repository_tree':
                 // Cloud: /repositories/{w}/{r}/src/{commit}/{path}
                 // Server: /projects/{p}/repos/{r}/browse/{path}?at={ref}
                 let treeData;
@@ -152,7 +152,7 @@ async function handleToolCall(name, args) {
                 }
                 return { content: [{ type: 'text', text: JSON.stringify(treeData, null, 2) }] };
 
-            case 'bitbucket.getFileContent':
+            case 'bitbucket_get_file_content':
                 // Cloud: Same as tree but returns raw if file
                 // Server: /browse endpoint returns lines or `raw` param?
                 // For simplicity, let's use the 'format=meta' check or try fetching text.
@@ -171,7 +171,7 @@ async function handleToolCall(name, args) {
                     return { content: [{ type: 'text', text: fileRes.data }] };
                 }
 
-            case 'bitbucket.createBranch':
+            case 'bitbucket_create_branch':
                 // Cloud: POST /repositories/{w}/{r}/refs/branches
                 // Body: { name, target: { hash } }
                 if (!isCloud()) throw new Error("Branch creation implementation limited to Cloud for MVP.");
@@ -196,7 +196,7 @@ async function handleToolCall(name, args) {
                 });
                 return { content: [{ type: 'text', text: `Branch created: ${brRes.data.name}` }] };
 
-            case 'bitbucket.createPullRequest':
+            case 'bitbucket_create_pull_request':
                 const prBody = {
                     title: args.title,
                     description: args.description,
@@ -221,7 +221,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'bitbucket.listPullRequests':
+            case 'bitbucket_list_pull_requests':
                 const prListUrl = isCloud()
                     ? `${getRepoPath(workspace, args.repo_slug)}/pullrequests`
                     : `${getRepoPath(workspace, args.repo_slug)}/pull-requests`;
@@ -240,7 +240,7 @@ async function handleToolCall(name, args) {
                     }]
                 };
 
-            case 'bitbucket.runPipeline':
+            case 'bitbucket_run_pipeline':
                 if (!isCloud()) throw new Error("Pipelines only supported on Bitbucket Cloud");
                 const pipeUrl = `${getRepoPath(workspace, args.repo_slug)}/pipelines`;
                 const pipeRes = await api.post(pipeUrl, {
@@ -283,7 +283,7 @@ async function handleRequest(request) {
             result: {
                 tools: [
                     {
-                        name: "bitbucket.configure",
+                        name: "bitbucket_configure",
                         description: "Configure Bitbucket credentials",
                         inputSchema: {
                             type: "object",
@@ -295,7 +295,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "bitbucket.listRepositories",
+                        name: "bitbucket_list_repositories",
                         description: "List repositories",
                         inputSchema: {
                             type: "object",
@@ -304,7 +304,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "bitbucket.listBranches",
+                        name: "bitbucket_list_branches",
                         description: "List branches",
                         inputSchema: {
                             type: "object",
@@ -313,7 +313,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "bitbucket.getRepositoryTree",
+                        name: "bitbucket_get_repository_tree",
                         description: "List files",
                         inputSchema: {
                             type: "object",
@@ -322,7 +322,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "bitbucket.getFileContent",
+                        name: "bitbucket_get_file_content",
                         description: "Get file content",
                         inputSchema: {
                             type: "object",
@@ -331,7 +331,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "bitbucket.createBranch",
+                        name: "bitbucket_create_branch",
                         description: "Create Branch",
                         inputSchema: {
                             type: "object",
@@ -340,7 +340,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "bitbucket.createPullRequest",
+                        name: "bitbucket_create_pull_request",
                         description: "Create Pull Request",
                         inputSchema: {
                             type: "object",
@@ -349,7 +349,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "bitbucket.listPullRequests",
+                        name: "bitbucket_list_pull_requests",
                         description: "List Pull Requests",
                         inputSchema: {
                             type: "object",
@@ -358,7 +358,7 @@ async function handleRequest(request) {
                         }
                     },
                     {
-                        name: "bitbucket.runPipeline",
+                        name: "bitbucket_run_pipeline",
                         description: "Run Pipeline",
                         inputSchema: {
                             type: "object",

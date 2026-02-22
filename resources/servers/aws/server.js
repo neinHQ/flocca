@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
@@ -39,7 +40,7 @@ function requireConfigured() {
     // If Proxy is used, we might rely on stored credentials in Vault, so local credentials might be missing.
     // However, region is still usually needed for endpoints.
     if ((!sessionConfig.region || !sessionConfig.credentials) && !process.env.FLOCCA_PROXY_URL) {
-        throw new Error('AWS is not configured. Call aws.configure first.');
+        throw new Error('AWS is not configured. Call aws_configure first.');
     }
     // If Proxy, we default region if missing
     if (process.env.FLOCCA_PROXY_URL && !sessionConfig.region) {
@@ -137,9 +138,18 @@ function allowed(service) {
 
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'aws.health',
+        'aws_health',
         {
             description: 'Health check for AWS MCP server.',
             inputSchema: { type: 'object', properties: {}, additionalProperties: false }
@@ -158,7 +168,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.configure',
+        'aws_configure',
         {
             description: 'Configure AWS for this session using temporary credentials.',
             inputSchema: {
@@ -205,7 +215,7 @@ async function main() {
 
     // S3
     server.registerTool(
-        'aws.s3.listBuckets',
+        'aws_s3_list_buckets',
         { description: 'List S3 buckets.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -222,7 +232,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.s3.listObjects',
+        'aws_s3_list_objects',
         {
             description: 'List S3 objects in a bucket/prefix.',
             inputSchema: {
@@ -255,7 +265,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.s3.getObject',
+        'aws_s3_get_object',
         {
             description: 'Get an S3 object (returns text content).',
             inputSchema: {
@@ -280,7 +290,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.s3.putObject',
+        'aws_s3_put_object',
         {
             description: 'Upload text content to S3.',
             inputSchema: {
@@ -315,7 +325,7 @@ async function main() {
 
     // Lambda
     server.registerTool(
-        'aws.lambda.listFunctions',
+        'aws_lambda_list_functions',
         { description: 'List Lambda functions.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -332,7 +342,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.lambda.getFunction',
+        'aws_lambda_get_function',
         { description: 'Get Lambda function configuration.', inputSchema: { type: 'object', properties: { function_name: { type: 'string' } }, required: ['function_name'], additionalProperties: false } },
         async (args) => {
             try {
@@ -348,7 +358,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.lambda.invoke',
+        'aws_lambda_invoke',
         {
             description: 'Invoke a Lambda function.',
             inputSchema: {
@@ -398,7 +408,7 @@ async function main() {
 
     // CloudWatch Logs
     server.registerTool(
-        'aws.logs.listLogGroups',
+        'aws_logs_list_log_groups',
         { description: 'List CloudWatch log groups.', inputSchema: { type: 'object', properties: { prefix: { type: 'string' } }, additionalProperties: false } },
         async (args) => {
             try {
@@ -414,7 +424,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.logs.getLogStreams',
+        'aws_logs_get_log_streams',
         {
             description: 'List log streams for a log group.',
             inputSchema: { type: 'object', properties: { log_group_name: { type: 'string' } }, required: ['log_group_name'], additionalProperties: false }
@@ -433,7 +443,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.logs.getLogEvents',
+        'aws_logs_get_log_events',
         {
             description: 'Get log events (with optional filter pattern).',
             inputSchema: {
@@ -473,7 +483,7 @@ async function main() {
 
     // ECS
     server.registerTool(
-        'aws.ecs.listClusters',
+        'aws_ecs_list_clusters',
         { description: 'List ECS clusters.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -489,7 +499,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.ecs.listServices',
+        'aws_ecs_list_services',
         {
             description: 'List ECS services for a cluster.',
             inputSchema: { type: 'object', properties: { cluster: { type: 'string' } }, required: ['cluster'], additionalProperties: false }
@@ -508,7 +518,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.ecs.describeService',
+        'aws_ecs_describe_service',
         {
             description: 'Describe an ECS service.',
             inputSchema: { type: 'object', properties: { cluster: { type: 'string' }, service: { type: 'string' } }, required: ['cluster', 'service'], additionalProperties: false }
@@ -527,7 +537,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.ecs.updateService',
+        'aws_ecs_update_service',
         {
             description: 'Update an ECS service (e.g., desired count).',
             inputSchema: {
@@ -556,7 +566,7 @@ async function main() {
 
     // EKS
     server.registerTool(
-        'aws.eks.listClusters',
+        'aws_eks_list_clusters',
         { description: 'List EKS clusters.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -572,7 +582,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.eks.describeCluster',
+        'aws_eks_describe_cluster',
         { description: 'Describe an EKS cluster.', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'], additionalProperties: false } },
         async (args) => {
             try {
@@ -588,7 +598,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.eks.updateKubeconfigToken',
+        'aws_eks_update_kubeconfig_token',
         {
             description: 'Placeholder for EKS auth token (not implemented).',
             inputSchema: { type: 'object', properties: { cluster: { type: 'string' } }, required: ['cluster'], additionalProperties: false }
@@ -598,7 +608,7 @@ async function main() {
 
     // EC2
     server.registerTool(
-        'aws.ec2.listInstances',
+        'aws_ec2_list_instances',
         { description: 'List EC2 instances.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -618,7 +628,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.ec2.describeInstance',
+        'aws_ec2_describe_instance',
         { description: 'Describe a single EC2 instance.', inputSchema: { type: 'object', properties: { instance_id: { type: 'string' } }, required: ['instance_id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -635,7 +645,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.ec2.startInstance',
+        'aws_ec2_start_instance',
         { description: 'Start an EC2 instance.', inputSchema: { type: 'object', properties: { instance_id: { type: 'string' } }, required: ['instance_id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -651,7 +661,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.ec2.stopInstance',
+        'aws_ec2_stop_instance',
         { description: 'Stop an EC2 instance.', inputSchema: { type: 'object', properties: { instance_id: { type: 'string' } }, required: ['instance_id'], additionalProperties: false } },
         async (args) => {
             try {
@@ -668,7 +678,7 @@ async function main() {
 
     // IAM (read-only)
     server.registerTool(
-        'aws.iam.getCallerIdentity',
+        'aws_iam_get_caller_identity',
         { description: 'Return STS caller identity.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -683,7 +693,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.iam.listRoles',
+        'aws_iam_list_roles',
         { description: 'List IAM roles (paginated first page).', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -699,7 +709,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.iam.getRole',
+        'aws_iam_get_role',
         { description: 'Get IAM role.', inputSchema: { type: 'object', properties: { role_name: { type: 'string' } }, required: ['role_name'], additionalProperties: false } },
         async (args) => {
             try {
@@ -716,7 +726,7 @@ async function main() {
 
     // SQS
     server.registerTool(
-        'aws.sqs.listQueues',
+        'aws_sqs_list_queues',
         { description: 'List SQS queues.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -732,7 +742,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.sqs.receiveMessages',
+        'aws_sqs_receive_messages',
         {
             description: 'Receive messages from SQS.',
             inputSchema: {
@@ -764,7 +774,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.sqs.sendMessage',
+        'aws_sqs_send_message',
         {
             description: 'Send a message to SQS.',
             inputSchema: {
@@ -789,7 +799,7 @@ async function main() {
 
     // SNS
     server.registerTool(
-        'aws.sns.listTopics',
+        'aws_sns_list_topics',
         { description: 'List SNS topics.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -805,7 +815,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.sns.publish',
+        'aws_sns_publish',
         {
             description: 'Publish a message to SNS.',
             inputSchema: {
@@ -830,7 +840,7 @@ async function main() {
 
     // Incident helpers
     server.registerTool(
-        'aws.incident.findErrors',
+        'aws_incident_find_errors',
         {
             description: 'Find recent errors in CloudWatch Logs for a service.',
             inputSchema: {
@@ -868,7 +878,7 @@ async function main() {
     );
 
     server.registerTool(
-        'aws.incident.summarizeServiceHealth',
+        'aws_incident_summarize_service_health',
         {
             description: 'Summarize service health using CloudWatch metrics.',
             inputSchema: {

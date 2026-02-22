@@ -51,7 +51,7 @@ function handleRequest(request) {
             result: {
                 tools: [
                     {
-                        name: "playwright.runAll",
+                        name: "playwright_run_all",
                         description: "Run all Playwright tests",
                         inputSchema: { type: "object", properties: {} }
                     }
@@ -60,7 +60,7 @@ function handleRequest(request) {
         });
     } else if (request.method === 'tools/call') {
         const { name } = request.params;
-        if (name === "playwright.runAll") {
+        if (name === "playwright_run_all") {
             child_process.exec("npx playwright test", (error, stdout, stderr) => {
                 let output = stdout + "\n" + stderr;
                 if (error) {

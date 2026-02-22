@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 const { spawn } = require('child_process');
 
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
@@ -30,7 +31,7 @@ function mapDockerError(stderr = '') {
         return normalizeError('Container not found', 'CONTAINER_NOT_FOUND', 'Verify the container ID or name exists.');
     }
     if (stderr.includes('No such image')) {
-        return normalizeError('Image not found', 'IMAGE_MISSING', 'Try pulling the image first using docker.pullImage.');
+        return normalizeError('Image not found', 'IMAGE_MISSING', 'Try pulling the image first using docker_pull_image.');
     }
     return normalizeError(msg);
 }
@@ -78,15 +79,24 @@ async function main() {
     }
 
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'docker.health',
+        'docker_health',
         { description: 'Health check for Docker MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => ({ content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] })
     );
 
     server.registerTool(
-        'docker.configure',
+        'docker_configure',
         {
             description: 'Configure Docker daemon connectivity.',
             inputSchema: {
@@ -119,7 +129,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.listContainers',
+        'docker_list_containers',
         {
             description: 'List running and stopped containers.',
             inputSchema: { type: 'object', properties: {}, additionalProperties: false }
@@ -135,7 +145,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.runContainer',
+        'docker_run_container',
         {
             description: 'Run a container with given parameters.',
             inputSchema: {
@@ -200,7 +210,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.stopContainer',
+        'docker_stop_container',
         {
             description: 'Stop a container.',
             inputSchema: { type: 'object', properties: { container_id: { type: 'string' } }, required: ['container_id'], additionalProperties: false }
@@ -213,7 +223,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.removeContainer',
+        'docker_remove_container',
         {
             description: 'Remove a container.',
             inputSchema: {
@@ -234,7 +244,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.exec',
+        'docker_exec',
         {
             description: 'Exec a command in a running container.',
             inputSchema: {
@@ -256,7 +266,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.listImages',
+        'docker_list_images',
         { description: 'List local images.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             const res = await runDocker(['images', '--format', '{{json .}}']);
@@ -269,7 +279,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.pullImage',
+        'docker_pull_image',
         {
             description: 'Pull an image.',
             inputSchema: { type: 'object', properties: { image: { type: 'string' } }, required: ['image'], additionalProperties: false }
@@ -282,7 +292,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.buildImage',
+        'docker_build_image',
         {
             description: 'Build an image from context.',
             inputSchema: {
@@ -307,7 +317,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.removeImage',
+        'docker_remove_image',
         {
             description: 'Remove an image.',
             inputSchema: { type: 'object', properties: { image: { type: 'string' }, force: { type: 'boolean', default: false } }, required: ['image'], additionalProperties: false }
@@ -323,7 +333,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.getLogs',
+        'docker_get_logs',
         {
             description: 'Get container logs (stdout+stderr).',
             inputSchema: {
@@ -347,7 +357,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.inspectContainer',
+        'docker_inspect_container',
         {
             description: 'Inspect a container.',
             inputSchema: { type: 'object', properties: { container_id: { type: 'string' } }, required: ['container_id'], additionalProperties: false }
@@ -363,7 +373,7 @@ async function main() {
 
     // Networks
     server.registerTool(
-        'docker.listNetworks',
+        'docker_list_networks',
         { description: 'List Docker networks.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             const res = await runDocker(['network', 'ls', '--format', '{{json .}}']);
@@ -376,7 +386,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.createNetwork',
+        'docker_create_network',
         {
             description: 'Create a Docker network.',
             inputSchema: { type: 'object', properties: { name: { type: 'string' }, driver: { type: 'string', default: 'bridge' } }, required: ['name'], additionalProperties: false }
@@ -390,7 +400,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.removeNetwork',
+        'docker_remove_network',
         {
             description: 'Remove a Docker network.',
             inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'], additionalProperties: false }
@@ -404,7 +414,7 @@ async function main() {
 
     // Volumes
     server.registerTool(
-        'docker.listVolumes',
+        'docker_list_volumes',
         { description: 'List Docker volumes.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             const res = await runDocker(['volume', 'ls', '--format', '{{json .}}']);
@@ -417,7 +427,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.createVolume',
+        'docker_create_volume',
         {
             description: 'Create a Docker volume.',
             inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'], additionalProperties: false }
@@ -430,7 +440,7 @@ async function main() {
     );
 
     server.registerTool(
-        'docker.removeVolume',
+        'docker_remove_volume',
         {
             description: 'Remove a Docker volume.',
             inputSchema: { type: 'object', properties: { name: { type: 'string' }, force: { type: 'boolean', default: false } }, required: ['name'], additionalProperties: false }

@@ -59,32 +59,32 @@ async function handleRequest(request) {
             result: {
                 tools: [
                     {
-                        name: "code.readFile",
+                        name: "code_read_file",
                         description: "Read file content",
                         inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] }
                     },
                     {
-                        name: "code.listFiles",
+                        name: "code_list_files",
                         description: "List files in directory",
                         inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] }
                     },
                     {
-                        name: "code.writeFile",
+                        name: "code_write_file",
                         description: "Write content to file (Patch Applier)",
                         inputSchema: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"] }
                     },
                     {
-                        name: "git.checkout",
+                        name: "git_checkout",
                         description: "Checkout branch",
                         inputSchema: { type: "object", properties: { branch: { type: "string" }, create: { type: "boolean" } }, required: ["branch"] }
                     },
                     {
-                        name: "git.commit",
+                        name: "git_commit",
                         description: "Commit changes",
                         inputSchema: { type: "object", properties: { message: { type: "string" } }, required: ["message"] }
                     },
                     {
-                        name: "git.push",
+                        name: "git_push",
                         description: "Push changes",
                         inputSchema: { type: "object", properties: {} }
                     }
@@ -96,28 +96,28 @@ async function handleRequest(request) {
         try {
             let resultText = "";
 
-            if (name === "code.readFile") {
+            if (name === "code_read_file") {
                 const content = fs.readFileSync(args.path, 'utf-8');
                 resultText = content;
-            } else if (name === "code.listFiles") {
+            } else if (name === "code_list_files") {
                 const files = fs.readdirSync(args.path);
                 resultText = files.join("\n");
-            } else if (name === "code.writeFile") {
+            } else if (name === "code_write_file") {
                 const dir = path.dirname(args.path);
                 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                 fs.writeFileSync(args.path, args.content);
                 resultText = `Wrote to ${args.path}`;
-            } else if (name === "git.checkout") {
+            } else if (name === "git_checkout") {
                 const cmd = args.create ? `checkout -b ${args.branch}` : `checkout ${args.branch}`;
                 const res = await runGit(cmd);
                 resultText = res.output;
                 if (!res.success) throw new Error(res.output);
-            } else if (name === "git.commit") {
+            } else if (name === "git_commit") {
                 // Determine what to add. For atomic patch, maybe specific files, but for MVP "git add ."
                 await runGit("add .");
                 const res = await runGit(`commit - m "${args.message}"`);
                 resultText = res.output;
-            } else if (name === "git.push") {
+            } else if (name === "git_push") {
                 // Assuming upstream is origin
                 // Needs branch name, but let's try generic push or current
                 const res = await runGit("push");

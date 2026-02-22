@@ -1,4 +1,5 @@
 const path = require('path');
+const z = require('zod');
 
 const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
@@ -26,7 +27,7 @@ function normalizeError(message, code = 'ZEPHYR_ERROR', details, http_status) {
 
 function requireConfigured() {
     if (!sessionConfig.site_url || !sessionConfig.token || !sessionConfig.jira_project_key) {
-        throw { message: 'Zephyr not configured. Call zephyr.configure first.', code: 'AUTH_FAILED' };
+        throw { message: 'Zephyr not configured. Call zephyr_configure first.', code: 'AUTH_FAILED' };
     }
 }
 
@@ -104,9 +105,18 @@ function ensureWritable() {
 
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'zephyr.health',
+        'zephyr_health',
         { description: 'Health check for Zephyr MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -119,7 +129,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr.configure',
+        'zephyr_configure',
         {
             description: 'Configure Zephyr Scale cloud session.',
             inputSchema: {
@@ -162,7 +172,7 @@ async function main() {
 
     // Discovery
     server.registerTool(
-        'zephyr.getContext',
+        'zephyr_get_context',
         { description: 'Return Zephyr/Jira context.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
@@ -177,7 +187,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr.listFolders',
+        'zephyr_list_folders',
         { description: 'List Zephyr folders (test case folders).', inputSchema: { type: 'object', properties: { project_key: { type: 'string' } }, additionalProperties: false } },
         async (args) => {
             try {
@@ -193,7 +203,7 @@ async function main() {
 
     // Test cases
     server.registerTool(
-        'zephyr.searchTestCases',
+        'zephyr_search_test_cases',
         {
             description: 'Search Zephyr test cases.',
             inputSchema: {
@@ -229,7 +239,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr.getTestCase',
+        'zephyr_get_test_case',
         { description: 'Get a test case by key.', inputSchema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'], additionalProperties: false } },
         async (args) => {
             try {
@@ -243,7 +253,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr.createTestCase',
+        'zephyr_create_test_case',
         {
             description: 'Create a test case.',
             inputSchema: {
@@ -289,7 +299,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr.updateTestCase',
+        'zephyr_update_test_case',
         {
             description: 'Update a test case (partial allowed).',
             inputSchema: {
@@ -330,7 +340,7 @@ async function main() {
 
     // Cycles (Zephyr Scale uses test runs)
     server.registerTool(
-        'zephyr.createTestCycle',
+        'zephyr_create_test_cycle',
         {
             description: 'Create a test cycle (test run).',
             inputSchema: {
@@ -359,7 +369,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr.addTestsToCycle',
+        'zephyr_add_tests_to_cycle',
         {
             description: 'Add test cases to a cycle (test run).',
             inputSchema: {
@@ -383,7 +393,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr.listTestExecutions',
+        'zephyr_list_test_executions',
         { description: 'List test executions for a cycle.', inputSchema: { type: 'object', properties: { cycle_key: { type: 'string' } }, required: ['cycle_key'], additionalProperties: false } },
         async (args) => {
             try {
@@ -397,7 +407,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr.updateExecutionStatus',
+        'zephyr_update_execution_status',
         {
             description: 'Update execution status with optional comment and attachments.',
             inputSchema: {
@@ -452,7 +462,7 @@ async function main() {
     );
 
     server.registerTool(
-        'zephyr.publishAutomationResults',
+        'zephyr_publish_automation_results',
         {
             description: 'Publish automation results (batch).',
             inputSchema: {

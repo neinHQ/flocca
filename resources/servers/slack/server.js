@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const z = require('zod');
 
 // Load SDK via absolute path so we can use CJS without changing package type
 const sdkServerPath = path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server');
@@ -200,9 +201,18 @@ async function main() {
     const server = new McpServer(SERVER_INFO, {
         capabilities: { tools: {} }
     });
+    const originalRegisterTool = server.registerTool.bind(server);
+    const permissiveInputSchema = z.object({}).passthrough();
+    server.registerTool = (name, config, handler) => {
+        const nextConfig = { ...(config || {}) };
+        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
+            nextConfig.inputSchema = permissiveInputSchema;
+        }
+        return originalRegisterTool(name, nextConfig, handler);
+    };
 
     server.registerTool(
-        'slack.healthCheck',
+        'slack_health_check',
         {
             description: 'Returns "ok" when the Slack MCP server is reachable.',
             inputSchema: {
@@ -212,15 +222,15 @@ async function main() {
             }
         },
         async () => {
-            console.log('[slack.healthCheck] <- request');
+            console.log('[slack_health_check] <- request');
             const result = { content: [{ type: 'text', text: 'ok' }] };
-            console.log('[slack.healthCheck] ->', JSON.stringify(result));
+            console.log('[slack_health_check] ->', JSON.stringify(result));
             return result;
         }
     );
 
     server.registerTool(
-        'slack.listChannels',
+        'slack_list_channels',
         {
             description: 'List all accessible Slack channels (public + private where the bot is invited).',
             inputSchema: {
@@ -247,7 +257,7 @@ async function main() {
             }
         },
         async () => {
-            console.log('[slack.listChannels] <-');
+            console.log('[slack_list_channels] <-');
             const channels = [];
             let cursor;
             do {
@@ -266,13 +276,13 @@ async function main() {
             } while (cursor);
 
             const result = { channels };
-            console.log('[slack.listChannels] ->', JSON.stringify({ count: channels.length }));
+            console.log('[slack_list_channels] ->', JSON.stringify({ count: channels.length }));
             return { content: [{ type: 'text', text: JSON.stringify(result) }] };
         }
     );
 
     server.registerTool(
-        'slack.listUsers',
+        'slack_list_users',
         {
             description: 'List Slack workspace users with optional filtering.',
             inputSchema: {
@@ -303,7 +313,7 @@ async function main() {
             }
         },
         async (args) => {
-            console.log('[slack.listUsers] <-', JSON.stringify(args || {}));
+            console.log('[slack_list_users] <-', JSON.stringify(args || {}));
             const includeBots = args?.includeBots || false;
             const onlyActive = args?.onlyActive || false;
 
@@ -329,13 +339,13 @@ async function main() {
             } while (cursor);
 
             const result = { users };
-            console.log('[slack.listUsers] ->', JSON.stringify({ count: users.length }));
+            console.log('[slack_list_users] ->', JSON.stringify({ count: users.length }));
             return { content: [{ type: 'text', text: JSON.stringify(result) }] };
         }
     );
 
     server.registerTool(
-        'slack.sendMessage',
+        'slack_send_message',
         {
             description: 'Send a message to a Slack channel or user.',
             inputSchema: {
@@ -357,7 +367,7 @@ async function main() {
             }
         },
         async (args) => {
-            console.log('[slack.sendMessage] <-', JSON.stringify(args));
+            console.log('[slack_send_message] <-', JSON.stringify(args));
             try {
                 const channelId = await resolveChannel(token, args.channel);
                 const data = await slackFetch(token, 'https://slack.com/api/chat.postMessage', {
@@ -366,16 +376,16 @@ async function main() {
                 });
 
                 const result = { ok: data.ok, ts: data.ts };
-                console.log('[slack.sendMessage] ->', JSON.stringify(result));
+                console.log('[slack_send_message] ->', JSON.stringify(result));
                 return { content: [{ type: 'text', text: JSON.stringify(result) }] };
             } catch (err) {
-                return errorResult(err, 'slack.sendMessage');
+                return errorResult(err, 'slack_send_message');
             }
         }
     );
 
     server.registerTool(
-        'slack.sendThreadReply',
+        'slack_send_thread_reply',
         {
             description: 'Post a threaded reply to an existing Slack message.',
             inputSchema: {
@@ -398,7 +408,7 @@ async function main() {
             }
         },
         async (args) => {
-            console.log('[slack.sendThreadReply] <-', JSON.stringify(args));
+            console.log('[slack_send_thread_reply] <-', JSON.stringify(args));
             try {
                 const channelId = await resolveChannel(token, args.channel);
                 const data = await slackFetch(token, 'https://slack.com/api/chat.postMessage', {
@@ -411,16 +421,16 @@ async function main() {
                 });
 
                 const result = { ok: data.ok, ts: data.ts };
-                console.log('[slack.sendThreadReply] ->', JSON.stringify(result));
+                console.log('[slack_send_thread_reply] ->', JSON.stringify(result));
                 return { content: [{ type: 'text', text: JSON.stringify(result) }] };
             } catch (err) {
-                return errorResult(err, 'slack.sendThreadReply');
+                return errorResult(err, 'slack_send_thread_reply');
             }
         }
     );
 
     server.registerTool(
-        'slack.getThreadMessages',
+        'slack_get_thread_messages',
         {
             description: 'Get all messages in a Slack thread.',
             inputSchema: {
@@ -451,7 +461,7 @@ async function main() {
             }
         },
         async (args) => {
-            console.log('[slack.getThreadMessages] <-', JSON.stringify(args));
+            console.log('[slack_get_thread_messages] <-', JSON.stringify(args));
             try {
                 const channelId = await resolveChannel(token, args.channel);
                 const messages = [];
@@ -473,16 +483,16 @@ async function main() {
                 } while (cursor);
 
                 const result = { messages };
-                console.log('[slack.getThreadMessages] ->', JSON.stringify({ count: messages.length }));
+                console.log('[slack_get_thread_messages] ->', JSON.stringify({ count: messages.length }));
                 return { content: [{ type: 'text', text: JSON.stringify(result) }] };
             } catch (err) {
-                return errorResult(err, 'slack.getThreadMessages');
+                return errorResult(err, 'slack_get_thread_messages');
             }
         }
     );
 
     server.registerTool(
-        'slack.searchMessages',
+        'slack_search_messages',
         {
             description: 'Search Slack messages using Slack search syntax.',
             inputSchema: {
@@ -515,7 +525,7 @@ async function main() {
             }
         },
         async (args) => {
-            console.log('[slack.searchMessages] <-', JSON.stringify(args));
+            console.log('[slack_search_messages] <-', JSON.stringify(args));
             try {
                 const count = args.count || 20;
                 const data = await slackFetch(token, 'https://slack.com/api/search.messages', {
@@ -535,16 +545,16 @@ async function main() {
                 })) : [];
 
                 const result = { matches };
-                console.log('[slack.searchMessages] ->', JSON.stringify({ count: matches.length }));
+                console.log('[slack_search_messages] ->', JSON.stringify({ count: matches.length }));
                 return { content: [{ type: 'text', text: JSON.stringify(result) }] };
             } catch (err) {
-                return errorResult(err, 'slack.searchMessages');
+                return errorResult(err, 'slack_search_messages');
             }
         }
     );
 
     server.registerTool(
-        'slack.uploadFile',
+        'slack_upload_file',
         {
             description: 'Upload a file to Slack with optional message.',
             inputSchema: {
@@ -577,7 +587,7 @@ async function main() {
             }
         },
         async (args) => {
-            console.log('[slack.uploadFile] <-', JSON.stringify({ ...args, file_path: '[redacted]' }));
+            console.log('[slack_upload_file] <-', JSON.stringify({ ...args, file_path: '[redacted]' }));
             try {
                 if (!fs.existsSync(args.file_path)) {
                     throw new SlackApiError('File not found', { slackError: 'file_not_found', status: 400 });
@@ -594,10 +604,10 @@ async function main() {
                     ok: data.ok,
                     file: data.file ? { id: data.file.id, permalink: data.file.permalink } : undefined
                 };
-                console.log('[slack.uploadFile] ->', JSON.stringify(result));
+                console.log('[slack_upload_file] ->', JSON.stringify(result));
                 return { content: [{ type: 'text', text: JSON.stringify(result) }] };
             } catch (err) {
-                return errorResult(err, 'slack.uploadFile');
+                return errorResult(err, 'slack_upload_file');
             }
         }
     );

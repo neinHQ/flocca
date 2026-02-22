@@ -28,9 +28,12 @@ describe('Figma MCP Server Smoke Test', () => {
                     if (msg.result && msg.id === 1) {
                         const tools = msg.result.tools;
                         const names = tools.map(t => t.name);
-                        expect(names).toContain('figma.configure');
-                        expect(names).toContain('figma.health');
-                        expect(names).toContain('figma.getFileMetadata');
+                        expect(names).toContain('figma_configure');
+                        expect(names).toContain('figma_health');
+                        expect(names).toContain('figma_get_file_metadata');
+                        names.forEach((name) => {
+                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                        });
                         done();
                     }
                 } catch (e) {
