@@ -231,6 +231,16 @@
         "icon": "$(plug)"
       },
       {
+        "command": "flocca.disconnectServer",
+        "title": "Disconnect MCP Server",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "flocca.disconnect",
+        "title": "Disconnect MCP Server (Select...)",
+        "icon": "$(debug-disconnect)"
+      },
+      {
         "command": "flocca.signin",
         "title": "Sign In / Register",
         "icon": "$(sign-in)"

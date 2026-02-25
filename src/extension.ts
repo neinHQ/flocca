@@ -9,6 +9,7 @@ import { WorkflowProvider } from './ui/workflowProvider';
 import { DocProvider } from './ui/docProvider';
 import { SubscriptionService } from './services/subscriptionService';
 import { CONFIG } from './config';
+import { disconnectServerFlow } from './services/disconnectService';
 
 import { TelemetryService } from './services/telemetryService';
 
@@ -407,6 +408,38 @@ export async function activate(context: vscode.ExtensionContext) {
         dashboardProvider.updateStatus();
     };
 
+    const disconnectServer = async (serverName: string) => {
+        await disconnectServerFlow(serverName, {
+            getConnectedClients: () => clientManager.getConnectedClients(),
+            disconnect: (name: string) => clientManager.disconnect(name),
+            markDisconnected: (name: string) => Promise.resolve(context.globalState.update(`flocca.disconnected.${name}`, true)),
+            setConnectedContext: async (name: string, connected: boolean) => {
+                await vscode.commands.executeCommand('setContext', `flocca.connected.${name}`, connected);
+            },
+            refreshDashboard: () => dashboardProvider.updateStatus(),
+            chooseDisconnect: async (name: string) => {
+                const selection = await vscode.window.showWarningMessage(
+                    `Disconnect ${name}?`,
+                    { modal: true },
+                    'Disconnect',
+                    'Disconnect + Remove from MCP'
+                );
+                if (selection === 'Disconnect') {
+                    return 'disconnect';
+                }
+                if (selection === 'Disconnect + Remove from MCP') {
+                    return 'disconnectAndRemove';
+                }
+                return 'cancel';
+            },
+            info: (message: string) => { vscode.window.showInformationMessage(message); },
+            warn: (message: string) => { vscode.window.showWarningMessage(message); },
+            error: (message: string) => { vscode.window.showErrorMessage(message); },
+            loadConfig: () => new McpConfigService(context).loadConfig(),
+            saveConfig: (cfg) => new McpConfigService(context).saveConfig(cfg)
+        });
+    };
+
     // --- Disconnect Command ---
     context.subscriptions.push(vscode.commands.registerCommand('flocca.disconnect', async () => {
         const connected = clientManager.getConnectedClients();
@@ -417,22 +450,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
         const selected = await vscode.window.showQuickPick(connected, { placeHolder: 'Select server to disconnect' });
         if (selected) {
-            await clientManager.disconnect(selected);
-            // Mark as disconnected preference
-            await context.globalState.update(`flocca.disconnected.${selected}`, true);
-
-            // Remove from config (Optional: keeps config clean, prevents auto-reconnect if logic changes)
-            const configService = new McpConfigService(context);
-            const config = await configService.loadConfig();
-            if (config && config.servers[selected]) {
-                delete config.servers[selected];
-                await configService.saveConfig(config);
-            }
-
-            vscode.commands.executeCommand('setContext', `flocca.connected.${selected}`, false);
-            dashboardProvider.updateStatus();
-            vscode.window.showInformationMessage(`Disconnected from ${selected}.`);
+            await disconnectServer(selected);
         }
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.disconnectServer', async (serverName?: string) => {
+        await disconnectServer(String(serverName || ''));
     }));
 
     // Trigger an immediate lightweight status refresh, then do heavy sync/connect in background.

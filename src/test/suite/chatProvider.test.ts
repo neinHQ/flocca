@@ -107,6 +107,21 @@ suite('DashboardProvider Test Suite', () => {
         assert.ok(executeCommandStub.calledWith('flocca.connectGitHub'));
     });
 
+    test('connectCommand message forwards args when provided', async () => {
+        const executeCommandStub = sandbox.stub(vscode.commands, 'executeCommand');
+
+        // @ts-ignore
+        provider.resolveWebviewView(mockWebviewView, {}, {});
+
+        await onDidReceiveMessageCallback({
+            type: 'connectCommand',
+            command: 'flocca.disconnectServer',
+            args: ['github']
+        });
+
+        assert.ok(executeCommandStub.calledWith('flocca.disconnectServer', 'github'));
+    });
+
     test('openSeatManager loads and posts seat manager data', async () => {
         const getSeatSummaryStub = sandbox.stub(TeamService.prototype, 'getSeatSummary').resolves({
             plan: 'teams',

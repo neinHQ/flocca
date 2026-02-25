@@ -63,5 +63,6 @@ suite('Connection & Subscription Test Suite', () => {
         assert.ok(commands.includes('flocca.connectPytest'));
         assert.ok(commands.includes('flocca.connectPlaywright'));
         assert.ok(commands.includes('flocca.disconnect'));
+        assert.ok(commands.includes('flocca.disconnectServer'));
     });
 });

@@ -96,7 +96,15 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
                 // --- Connection ---
                 case 'connectCommand':
-                    vscode.commands.executeCommand(message.command);
+                    if (!message.command || typeof message.command !== 'string') {
+                        vscode.window.showWarningMessage('Invalid command request from dashboard.');
+                        break;
+                    }
+                    if (Array.isArray(message.args)) {
+                        await vscode.commands.executeCommand(message.command, ...message.args);
+                    } else {
+                        await vscode.commands.executeCommand(message.command);
+                    }
                     break;
 
                 // --- Data ---
@@ -474,6 +482,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     cursor: wait;
                 }
 
+                button.disconnect {
+                    background: var(--btn-connecting);
+                }
+
                 /* Override for specific action buttons if needed, but keeping consistent base */
                 .btn-block { width: 100%; margin-bottom: 8px; padding: 8px; }
                 
@@ -728,6 +740,22 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     else { vscode.postMessage({ type, ...data }); }
                 }
 
+                function runCommand(btn, command, args, pendingText) {
+                    if (!btn || btn.disabled) return;
+                    const originalText = btn.textContent;
+                    btn.disabled = true;
+                    if (pendingText) {
+                        btn.textContent = pendingText;
+                        btn.classList.add('connecting');
+                    }
+                    post('connectCommand', { command, args });
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.textContent = originalText;
+                        btn.classList.remove('connecting');
+                    }, 1500);
+                }
+
                 // Default Servers to always show
                 const defaultServers = [
                     { id: 'github', name: 'GitHub', desc: 'Local Server', command: 'flocca.connectGitHub' },
@@ -806,9 +834,12 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                             const card = document.createElement('div');
                             card.className = 'card' + (isConnected ? ' connected' : '');
 
-                            let btnText = isConnected ? '✓ Connected' : 'Connect';
-                            let btnClass = isConnected ? 'connected' : '';
-                            let btnHtml = \`<button class="\${btnClass}" \${isConnected ? 'disabled' : ''} onclick="post('connectCommand', '\${srv.command}')">\${btnText}</button>\`;
+                            let btnHtml = '';
+                            if (isConnected) {
+                                btnHtml = \`<button class="disconnect" onclick="runCommand(this, 'flocca.disconnectServer', ['\${srv.id}'], 'Disconnecting...')">Disconnect</button>\`;
+                            } else {
+                                btnHtml = \`<button onclick="post('connectCommand', '\${srv.command}')">Connect</button>\`;
+                            }
 
                             card.innerHTML = \`
                                 <div>
@@ -1073,7 +1104,9 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                         const el = document.createElement('div');
                         el.className = 'catalog-item';
                         const isConn = connectedList.includes(s.id);
-                        const btn = isConn ? '<button class="connected" disabled>✓ Connected</button>' : \`<button onclick="post('connectCommand', '\${s.connectCommand}')">Connect</button>\`;
+                        const btn = isConn
+                            ? \`<button class="disconnect" onclick="runCommand(this, 'flocca.disconnectServer', ['\${s.id}'], 'Disconnecting...')">Disconnect</button>\`
+                            : \`<button onclick="post('connectCommand', '\${s.connectCommand}')">Connect</button>\`;
                         
                         // Info Icon
                         const infoBtn = \`<span class="info-icon" onclick="post('showDoc', {agentId: '\${s.id}'})" title="Read Documentation">ⓘ</span>\`;
