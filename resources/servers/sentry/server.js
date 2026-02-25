@@ -10,6 +10,15 @@ let config = {
     orgSlug: process.env.SENTRY_ORG_SLUG
 };
 
+function normalizeBaseUrl(url) {
+    const raw = String(url || '').trim().replace(/\/+$/, '');
+    if (!raw) return raw;
+    // Accept root host and normalize to API root.
+    if (/\/api\/0$/i.test(raw)) return raw;
+    return `${raw}/api/0`;
+}
+config.baseUrl = normalizeBaseUrl(config.baseUrl);
+
 function getHeaders() {
     if (process.env.FLOCCA_PROXY_URL && process.env.FLOCCA_USER_ID) {
         return {
@@ -53,7 +62,7 @@ async function main() {
         async (args) => {
             config.token = args.token;
             config.orgSlug = args.org_slug;
-            if (args.base_url) config.baseUrl = args.base_url;
+            if (args.base_url) config.baseUrl = normalizeBaseUrl(args.base_url);
 
             try {
                 // Verify by getting org
@@ -105,4 +114,9 @@ if (require.main === module) {
     main().catch(console.error);
 }
 
-module.exports = { main };
+module.exports = {
+    main,
+    __test: {
+        normalizeBaseUrl
+    }
+};

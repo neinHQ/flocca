@@ -31,3 +31,4 @@ Validation: `/public/rest/api/1.0/projects` for auth/version/project access. No 
 - Version stored from `/projects` response when available.
 - Compatibility alias supported: `zephyr_enterprise.searchTestCases` -> `zephyr_enterprise_search_test_cases`.
 - `zephyr_enterprise_search_test_cases` falls back to wildcard search (`"*"`) when `query` is missing/empty.
+- `base_url` is normalized if an API suffix is pasted (for example `/public/rest/api/1.0` is stripped automatically).

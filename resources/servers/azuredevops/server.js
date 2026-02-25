@@ -21,6 +21,19 @@ class AzureError extends Error {
     }
 }
 
+function normalizeServiceUrl(serviceUrl, project) {
+    const raw = String(serviceUrl || '').trim().replace(/\/+$/, '');
+    if (!raw) return raw;
+    let normalized = raw
+        .replace(/\/_apis(?:\/.*)?$/i, '')
+        .replace(/\/_git(?:\/.*)?$/i, '');
+    if (project) {
+        const escapedProject = String(project).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        normalized = normalized.replace(new RegExp(`/${escapedProject}$`, 'i'), '');
+    }
+    return normalized.replace(/\/+$/, '');
+}
+
 function requireConfigured() {
     if (!sessionConfig.serviceUrl || !sessionConfig.project || !sessionConfig.token) {
         throw new AzureError('Azure DevOps is not configured. Call azuredevops_configure first.', { status: 400 });
@@ -68,7 +81,10 @@ async function adoFetch(url, options = {}, attempt = 1) {
         } catch (_) {
             details = '';
         }
-        throw new AzureError(`Azure DevOps request failed (${resp.status})`, { status: resp.status, details });
+        throw new AzureError(`Azure DevOps request failed (${resp.status})`, {
+            status: resp.status,
+            details: { response: details, requested_url: url, method: options.method || 'GET' }
+        });
     }
     const contentType = resp.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -95,7 +111,8 @@ async function validateConfig({ service_url, project, token }) {
     if (!service_url || !project || !token) {
         throw new AzureError('Missing required configuration values', { status: 400 });
     }
-    const testUrl = `${service_url}/${project}/_apis/projects?api-version=${API_VERSION}`;
+    const normalizedUrl = normalizeServiceUrl(service_url, project);
+    const testUrl = `${normalizedUrl}/${project}/_apis/projects?api-version=${API_VERSION}`;
     const resp = await fetch(testUrl, { headers: authHeaders() });
     if (!resp.ok) {
         throw new AzureError('Azure DevOps token validation failed', { status: resp.status, details: await resp.text() });
@@ -141,7 +158,7 @@ async function main() {
         async (args) => {
             try {
                 await validateConfig(args);
-                sessionConfig.serviceUrl = args.service_url.replace(/\/+$/, '');
+                sessionConfig.serviceUrl = normalizeServiceUrl(args.service_url, args.project);
                 sessionConfig.project = args.project;
                 sessionConfig.token = args.token;
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
@@ -508,7 +525,16 @@ async function main() {
     console.log('Azure DevOps MCP server running on stdio.');
 }
 
-main().catch((err) => {
-    console.error('Azure DevOps MCP server failed to start:', err);
-    process.exit(1);
-});
+if (require.main === module) {
+    main().catch((err) => {
+        console.error('Azure DevOps MCP server failed to start:', err);
+        process.exit(1);
+    });
+}
+
+module.exports = {
+    main,
+    __test: {
+        normalizeServiceUrl
+    }
+};

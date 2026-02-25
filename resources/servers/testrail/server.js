@@ -26,6 +26,16 @@ class TRLError extends Error {
     }
 }
 
+function normalizeBaseUrl(baseUrl) {
+    const raw = String(baseUrl || '').trim().replace(/\/+$/, '');
+    if (!raw) return raw;
+    return raw
+        .replace(/\/index\.php\?\/api\/v2$/i, '')
+        .replace(/\/api\/v2$/i, '')
+        .replace(/\/index\.php$/i, '')
+        .replace(/\/+$/, '');
+}
+
 function requireConfigured() {
     if (!sessionConfig.baseUrl || !sessionConfig.auth || !sessionConfig.projectId) {
         throw new TRLError('TestRail is not configured. Call testrail_configure first.', { code: 400 });
@@ -69,14 +79,18 @@ async function trlFetch(pathPart, { method = 'GET', body, query } = {}) {
     });
 
     let data;
+    let rawText = '';
     try {
-        data = await resp.json();
+        rawText = await resp.text();
+        data = rawText ? JSON.parse(rawText) : {};
     } catch (e) {
         data = {};
     }
 
     if (!resp.ok) {
-        throw new TRLError(data.error || `HTTP ${resp.status}`, { code: resp.status, details: data });
+        const details = (data && Object.keys(data).length > 0) ? data : { response: rawText?.slice(0, 500) };
+        details.requested_path = `${url.pathname}${url.search || ''}`;
+        throw new TRLError(data.error || `HTTP ${resp.status}`, { code: resp.status, details });
     }
     if (data.error) {
         throw new TRLError(data.error, { code: resp.status, details: data });
@@ -89,9 +103,10 @@ async function validateConfig(args) {
     if (!base_url || !auth || !auth.username || !auth.api_key || !project_id) {
         throw new TRLError('Missing required configuration fields', { code: 400 });
     }
+    const normalizedBaseUrl = normalizeBaseUrl(base_url);
     // Simple validation: fetch projects
     const encoded = Buffer.from(`${auth.username}:${auth.api_key}`).toString('base64');
-    const resp = await fetch(`${base_url}/index.php?/api/v2/get_projects`, {
+    const resp = await fetch(`${normalizedBaseUrl}/index.php?/api/v2/get_projects`, {
         headers: { Authorization: `Basic ${encoded}` }
     });
     if (!resp.ok) {
@@ -153,7 +168,7 @@ async function main() {
         async (args) => {
             try {
                 await validateConfig(args);
-                sessionConfig.baseUrl = args.base_url.replace(/\/+$/, '');
+                sessionConfig.baseUrl = normalizeBaseUrl(args.base_url);
                 sessionConfig.auth = args.auth;
                 sessionConfig.projectId = args.project_id;
                 sessionConfig.suiteId = args.suite_id;
@@ -499,7 +514,16 @@ async function main() {
     console.log('TestRail MCP server running on stdio.');
 }
 
-main().catch((err) => {
-    console.error('TestRail MCP server failed to start:', err);
-    process.exit(1);
-});
+if (require.main === module) {
+    main().catch((err) => {
+        console.error('TestRail MCP server failed to start:', err);
+        process.exit(1);
+    });
+}
+
+module.exports = {
+    main,
+    __test: {
+        normalizeBaseUrl
+    }
+};

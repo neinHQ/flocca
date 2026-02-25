@@ -24,6 +24,19 @@ const GUARDRAILS = {
     max_attachment_size_bytes: 5 * 1024 * 1024 // 5MB
 };
 
+function normalizeBaseUrl(baseUrl) {
+    const raw = String(baseUrl || '').trim().replace(/\/+$/, '');
+    if (!raw) return raw;
+
+    // Users sometimes paste API URLs instead of host root. Normalize to host root/context root.
+    return raw
+        .replace(/\/public\/rest\/api\/1\.0$/i, '')
+        .replace(/\/public\/rest\/api$/i, '')
+        .replace(/\/rest\/api\/1\.0$/i, '')
+        .replace(/\/rest\/api$/i, '')
+        .replace(/\/+$/, '');
+}
+
 function normalizeError(message, code = 'ZEPHYR_ENTERPRISE_ERROR', details, http_status) {
     return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details, http_status } }) }] };
 }
@@ -58,6 +71,7 @@ function authHeaders() {
 async function zFetch(pathPart, { method = 'GET', query, body, headers } = {}) {
     const url = new URL(`${sessionConfig.base_url.replace(/\/+$/, '')}/${pathPart.replace(/^\/+/, '')}`);
     if (query) Object.entries(query).forEach(([k, v]) => { if (v !== undefined && v !== null) url.searchParams.set(k, v); });
+    let responseText = '';
     const resp = await fetch(url.toString(), {
         method,
         headers: {
@@ -68,10 +82,21 @@ async function zFetch(pathPart, { method = 'GET', query, body, headers } = {}) {
         body: body ? JSON.stringify(body) : undefined
     });
     let data = {};
-    try { data = await resp.json(); } catch (_) { data = {}; }
+    try {
+        responseText = await resp.text();
+        data = responseText ? JSON.parse(responseText) : {};
+    } catch (_) {
+        data = {};
+    }
     if (!resp.ok || data.error) {
-        const detail = data.error || data;
-        const message = detail.message || resp.statusText || 'Zephyr Enterprise request failed';
+        const detail = data.error || data || {};
+        if (!detail.requested_path) {
+            detail.requested_path = `${url.pathname}${url.search || ''}`;
+        }
+        if ((!detail || Object.keys(detail).length <= 1) && responseText) {
+            detail.response_excerpt = responseText.slice(0, 500);
+        }
+        const message = detail.message || resp.statusText || `Zephyr Enterprise request failed (${method} ${url.pathname})`;
         let code = 'ZEPHYR_ENTERPRISE_ERROR';
         if (resp.status === 401 || resp.status === 403) code = 'PERMISSION_DENIED';
         if (resp.status === 404) code = 'NOT_FOUND';
@@ -82,7 +107,7 @@ async function zFetch(pathPart, { method = 'GET', query, body, headers } = {}) {
 }
 
 async function validateConfig(args) {
-    const base = (args.base_url || '').replace(/\/+$/, '');
+    const base = normalizeBaseUrl(args.base_url || '');
     if (!base) throw { message: 'Missing base_url', code: 'INVALID_REQUEST' };
     if (!args.auth) throw { message: 'Missing auth', code: 'INVALID_REQUEST' };
 
