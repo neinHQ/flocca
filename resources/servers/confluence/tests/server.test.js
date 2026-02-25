@@ -31,6 +31,9 @@ describe('Confluence MCP Server Smoke Test', () => {
                         expect(names).toContain('confluence_configure');
                         expect(names).toContain('confluence_create_page');
                         expect(names).toContain('confluence_list_spaces');
+                        for (const name of names) {
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
+                        }
                         done();
                     }
                 } catch (e) {

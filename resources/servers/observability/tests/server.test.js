@@ -32,7 +32,7 @@ describe('Observability MCP Server', () => {
                         expect(names).toContain('observability_configure');
                         expect(names).toContain('observability_query_prometheus');
                         for (const name of names) {
-                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
                         }
                         done();
                     }

@@ -11,7 +11,7 @@ describe('Slack MCP Server', () => {
         expect(names).toContain('slack_health_check');
         expect(names).toContain('slack_send_message');
         for (const name of names) {
-            expect(name).toMatch(/^[a-z0-9_-]+$/);
+            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
         }
     });
 });

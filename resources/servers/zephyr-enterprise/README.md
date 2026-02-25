@@ -29,3 +29,5 @@ Validation: `/public/rest/api/1.0/projects` for auth/version/project access. No 
 - Read-only mode blocks create/update/ingest tools.
 - Supports API token/basic auth; TLS assumed.
 - Version stored from `/projects` response when available.
+- Compatibility alias supported: `zephyr_enterprise.searchTestCases` -> `zephyr_enterprise_search_test_cases`.
+- `zephyr_enterprise_search_test_cases` now returns `INVALID_REQUEST` when `query` is missing/empty.

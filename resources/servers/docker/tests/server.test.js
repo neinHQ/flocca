@@ -33,7 +33,7 @@ describe('Docker MCP Server', () => {
                         expect(names).toContain('docker_list_containers');
                         expect(names).toContain('docker_run_container');
                         for (const name of names) {
-                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
                         }
                         done();
                     }

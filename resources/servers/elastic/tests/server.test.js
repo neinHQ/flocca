@@ -32,7 +32,7 @@ describe('Elastic MCP Server', () => {
                         expect(names).toContain('elastic_configure');
                         expect(names).toContain('elastic_search_logs');
                         for (const name of names) {
-                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
                         }
                         done();
                     }

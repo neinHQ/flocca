@@ -31,6 +31,9 @@ describe('Jira MCP Server Smoke Test', () => {
                         expect(names).toContain('jira_configure');
                         expect(names).toContain('jira_search_issues');
                         expect(names).toContain('jira_get_issue');
+                        for (const name of names) {
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
+                        }
                         done();
                     }
                 } catch (e) {

@@ -31,6 +31,9 @@ describe('GitHub MCP Server Smoke Test', () => {
                         expect(names).toContain('search_repositories');
                         expect(names).toContain('read_file');
                         expect(names).toContain('create_issue');
+                        for (const name of names) {
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
+                        }
                         done();
                     }
                 } catch (e) {

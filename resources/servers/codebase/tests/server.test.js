@@ -47,7 +47,7 @@ describe('Codebase MCP Server', () => {
         assert.ok(tools.includes('code_write_file'));
         assert.ok(tools.includes('git_push'));
         tools.forEach((toolName) => {
-            assert.ok(/^[a-z0-9_-]+$/.test(toolName), `invalid tool name: ${toolName}`);
+            assert.ok(/^[A-Za-z0-9._-]+$/.test(toolName), `invalid tool name: ${toolName}`);
         });
     });
 

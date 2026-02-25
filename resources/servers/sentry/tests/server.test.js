@@ -31,6 +31,9 @@ describe('Sentry MCP Server Smoke Test', () => {
                         expect(names).toContain('sentry_configure');
                         expect(names).toContain('sentry_list_issues');
                         expect(names).toContain('sentry_get_issue');
+                        for (const name of names) {
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
+                        }
                         done();
                     }
                 } catch (e) {

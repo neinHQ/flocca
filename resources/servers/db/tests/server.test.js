@@ -33,7 +33,7 @@ describe('DB MCP Server', () => {
                         expect(names).toContain('db_get_schema');
                         expect(names).toContain('db_query');
                         for (const name of names) {
-                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
                         }
                         done();
                     }

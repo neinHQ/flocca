@@ -75,7 +75,7 @@ describe('Zephyr MCP schema compatibility', () => {
             const names = (list.result?.tools || []).map((t) => t.name);
             expect(names.length).toBeGreaterThan(0);
             for (const name of names) {
-                expect(name).toMatch(/^[a-z0-9_-]+$/);
+                expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
             }
 
             const search = await harness.request('tools/call', {

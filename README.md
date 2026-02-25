@@ -11,7 +11,7 @@ Use Flocca to:
 * Work across cloud and infrastructure tools.
 * Keep credentials managed securely.
 
-![Flocca Dashboard](resources/dashboard.png)
+![Flocca Dashboard](https://raw.githubusercontent.com/neinHQ/flocca/main/resources/dashboard.png)
 
 ## Key Features
 

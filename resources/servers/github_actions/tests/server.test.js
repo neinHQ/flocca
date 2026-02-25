@@ -31,6 +31,9 @@ describe('GHA MCP Server Smoke Test', () => {
                         expect(names).toContain('github_actions_configure');
                         expect(names).toContain('github_actions_list_workflows');
                         expect(names).toContain('github_actions_list_runs');
+                        for (const name of names) {
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
+                        }
                         done();
                     }
                 } catch (e) {

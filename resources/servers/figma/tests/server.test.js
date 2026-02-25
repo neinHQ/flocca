@@ -32,7 +32,7 @@ describe('Figma MCP Server Smoke Test', () => {
                         expect(names).toContain('figma_health');
                         expect(names).toContain('figma_get_file_metadata');
                         names.forEach((name) => {
-                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
                         });
                         done();
                     }

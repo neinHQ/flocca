@@ -31,7 +31,7 @@ describe('Playwright MCP Server', () => {
         const names = response.result.tools.map((t) => t.name);
         assert.ok(names[0] === 'playwright_run_all');
         names.forEach((name) => {
-            assert.ok(/^[a-z0-9_-]+$/.test(name), `invalid tool name: ${name}`);
+            assert.ok(/^[A-Za-z0-9._-]+$/.test(name), `invalid tool name: ${name}`);
         });
     });
 

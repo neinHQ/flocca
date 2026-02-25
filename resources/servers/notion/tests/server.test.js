@@ -31,6 +31,9 @@ describe('Notion MCP Server Smoke Test', () => {
                         expect(names).toContain('notion_configure');
                         expect(names).toContain('notion_search');
                         expect(names).toContain('notion_get_page');
+                        for (const name of names) {
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
+                        }
                         done();
                     }
                 } catch (e) {

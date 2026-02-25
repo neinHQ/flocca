@@ -31,6 +31,9 @@ describe('Teams MCP Server Smoke Test', () => {
                         expect(names).toContain('teams_configure');
                         expect(names).toContain('teams_list_teams');
                         expect(names).toContain('teams_send_channel_message');
+                        for (const name of names) {
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
+                        }
                         done();
                     }
                 } catch (e) {

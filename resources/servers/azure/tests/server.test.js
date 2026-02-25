@@ -31,6 +31,9 @@ describe('Azure MCP Server Smoke Test', () => {
                         expect(names).toContain('azure_configure');
                         expect(names).toContain('azure_list_resources');
                         expect(names).toContain('azure_vm_list');
+                        for (const name of names) {
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
+                        }
                         done();
                     }
                 } catch (e) {

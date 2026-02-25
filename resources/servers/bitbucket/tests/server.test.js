@@ -32,7 +32,7 @@ describe('Bitbucket MCP Server', () => {
                         expect(names).toContain('bitbucket_configure');
                         expect(names).toContain('bitbucket_list_repositories');
                         for (const name of names) {
-                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
                         }
                         done();
                     }

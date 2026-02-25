@@ -32,7 +32,7 @@ describe('AWS MCP Server', () => {
                         expect(names).toContain('aws_configure');
                         expect(names).toContain('aws_health');
                         for (const name of names) {
-                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
                         }
                         done();
                     }

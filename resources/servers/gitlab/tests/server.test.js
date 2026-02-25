@@ -32,7 +32,7 @@ describe('GitLab MCP Server', () => {
                         expect(names).toContain('gitlab_health');
                         expect(names).toContain('gitlab_list_projects');
                         for (const name of names) {
-                            expect(name).toMatch(/^[a-z0-9_-]+$/);
+                            expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
                         }
                         done();
                     }

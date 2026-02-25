@@ -222,33 +222,54 @@ async function main() {
         }
     );
 
+    const searchTestCasesInputSchema = {
+        type: 'object',
+        properties: { query: { type: 'string' }, folder_id: { type: 'number' }, limit: { type: 'number' } },
+        required: ['query'],
+        additionalProperties: false
+    };
+
+    const handleSearchTestCases = async (args) => {
+        try {
+            requireConfigured();
+
+            // Input schema validation is permissive in this server wrapper; enforce required fields here.
+            const query = typeof args?.query === 'string' ? args.query.trim() : '';
+            if (!query) {
+                return normalizeError('Missing required argument: query', 'INVALID_REQUEST', { required: ['query'] }, 400);
+            }
+
+            const body = {
+                projectId: sessionConfig.project.id,
+                search: query,
+                folderId: args.folder_id,
+                maxRecords: args.limit || 50
+            };
+            const data = await zFetch('public/rest/api/1.0/testcases/search', { method: 'POST', body });
+            return { content: [{ type: 'text', text: JSON.stringify({ results: data.testCases || [] }) }] };
+        } catch (err) {
+            return normalizeError(err.message, err.code, err.details, err.http_status);
+        }
+    };
+
     // Test cases
     server.registerTool(
         'zephyr_enterprise_search_test_cases',
         {
             description: 'Search test cases.',
-            inputSchema: {
-                type: 'object',
-                properties: { query: { type: 'string' }, folder_id: { type: 'number' }, limit: { type: 'number' } },
-                required: ['query'],
-                additionalProperties: false
-            }
+            inputSchema: searchTestCasesInputSchema
         },
-        async (args) => {
-            try {
-                requireConfigured();
-                const body = {
-                    projectId: sessionConfig.project.id,
-                    search: args.query,
-                    folderId: args.folder_id,
-                    maxRecords: args.limit || 50
-                };
-                const data = await zFetch('public/rest/api/1.0/testcases/search', { method: 'POST', body });
-                return { content: [{ type: 'text', text: JSON.stringify({ results: data.testCases || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
+        handleSearchTestCases
+    );
+
+    // Backward-compatible alias used by some clients/orchestrators.
+    server.registerTool(
+        'zephyr_enterprise.searchTestCases',
+        {
+            description: 'Alias for zephyr_enterprise_search_test_cases.',
+            inputSchema: searchTestCasesInputSchema
+        },
+        handleSearchTestCases
     );
 
     server.registerTool(
