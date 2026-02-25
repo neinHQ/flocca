@@ -354,7 +354,11 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "openvsx:publish": "npx ovsx publish -p $OPEN_VSX_TOKEN",
+    "openvsx:publish:patch": "npx ovsx publish patch -p $OPEN_VSX_TOKEN",
+    "openvsx:publish:minor": "npx ovsx publish minor -p $OPEN_VSX_TOKEN",
+    "openvsx:publish:major": "npx ovsx publish major -p $OPEN_VSX_TOKEN"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",

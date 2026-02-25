@@ -1,6 +1,10 @@
-# Publishing Flocca to VS Code Marketplace
+# Publishing Flocca Extensions
 
-This guide covers the steps to publish the **Flocca** extension for the first time.
+This guide covers publishing Flocca to both registries:
+- Microsoft VS Code Marketplace
+- Open VSX (VSCodium/Theia ecosystem)
+
+These are separate registries. Publishing to Open VSX does not affect the Microsoft Marketplace listing, and vice versa.
 
 ## Prerequisites
 
@@ -68,3 +72,42 @@ For future releases, simply update the version number and run:
 npm version patch  # or minor/major
 vsce publish
 ```
+
+---
+
+## Open VSX Publishing
+
+### Prerequisites
+
+1.  Create an Open VSX account/publisher:
+    - https://open-vsx.org/
+2.  Create a personal access token in Open VSX.
+3.  Export token locally:
+    ```bash
+    export OPEN_VSX_TOKEN=your_token_here
+    ```
+
+### Publish Commands
+
+From the repo root:
+
+```bash
+# Publish current package version as-is
+npm run openvsx:publish
+
+# Or publish and bump version
+npm run openvsx:publish:patch
+npm run openvsx:publish:minor
+npm run openvsx:publish:major
+```
+
+Equivalent raw CLI:
+
+```bash
+npx ovsx publish -p $OPEN_VSX_TOKEN
+```
+
+### Notes
+
+- Open VSX identity is based on `publisher.name` from `package.json` (currently `flocca.flocca`).
+- If Open VSX publisher permissions differ from Microsoft publisher permissions, token/publisher setup must be completed in Open VSX independently.
