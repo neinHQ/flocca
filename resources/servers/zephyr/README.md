@@ -30,3 +30,4 @@ Validation: Jira `/rest/api/3/myself` + Zephyr Scale capability check. No secret
 - Read-only mode can be enabled via `read_only` in `zephyr_configure` (create/update operations will be blocked).
 - Attachment uploads are capped (~5MB) and batches are capped (500 results).
 - MVP targets Zephyr Scale Cloud endpoints (`/rest/atm/1.0`). Zephyr Squad/Enterprise is out of scope for now.
+- `zephyr_search_test_cases` falls back to wildcard search (`"*"`) when `query` is missing/empty.

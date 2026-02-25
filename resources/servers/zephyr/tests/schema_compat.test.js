@@ -85,6 +85,13 @@ describe('Zephyr MCP schema compatibility', () => {
             expect(search.error).toBeUndefined();
             expect(search.result).toBeDefined();
 
+            const searchWithFallback = await harness.request('tools/call', {
+                name: 'zephyr_search_test_cases',
+                arguments: {}
+            });
+            expect(searchWithFallback.error).toBeUndefined();
+            expect(searchWithFallback.result).toBeDefined();
+
             const getOne = await harness.request('tools/call', {
                 name: 'zephyr_get_test_case',
                 arguments: { key: 'TC-1' }

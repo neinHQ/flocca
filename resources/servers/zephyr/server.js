@@ -222,11 +222,12 @@ async function main() {
             try {
                 requireConfigured();
                 const proj = args.project_key || sessionConfig.zephyr_project_key;
+                const query = (typeof args?.query === 'string' && args.query.trim()) ? args.query.trim() : '*';
                 const data = await zephyrFetch('/rest/atm/1.0/testcase/search', {
                     method: 'POST',
                     body: {
                         projectKey: proj,
-                        query: args.query,
+                        query,
                         folderId: args.folder_id,
                         maxResults: args.limit || 50
                     }

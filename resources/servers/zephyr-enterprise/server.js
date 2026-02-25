@@ -233,11 +233,9 @@ async function main() {
         try {
             requireConfigured();
 
-            // Input schema validation is permissive in this server wrapper; enforce required fields here.
-            const query = typeof args?.query === 'string' ? args.query.trim() : '';
-            if (!query) {
-                return normalizeError('Missing required argument: query', 'INVALID_REQUEST', { required: ['query'] }, 400);
-            }
+            // Input schema validation is permissive in this server wrapper.
+            // Fallback to wildcard search when query is missing/empty so clients that send {} can still proceed.
+            const query = (typeof args?.query === 'string' && args.query.trim()) ? args.query.trim() : '*';
 
             const body = {
                 projectId: sessionConfig.project.id,
