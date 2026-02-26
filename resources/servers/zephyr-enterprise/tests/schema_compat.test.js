@@ -93,6 +93,16 @@ describe('Zephyr Enterprise MCP schema compatibility', () => {
             expect(searchWithFallback.error).toBeUndefined();
             expect(searchWithFallback.result).toBeDefined();
 
+            const invalidCreate = await harness.request('tools/call', {
+                name: 'zephyr_enterprise_create_test_case',
+                arguments: {}
+            });
+            expect(invalidCreate.error).toBeUndefined();
+            expect(invalidCreate.result?.isError).toBe(true);
+            const invalidCreateText = JSON.stringify(invalidCreate.result?.content || []);
+            expect(invalidCreateText).toContain('INVALID_REQUEST');
+            expect(invalidCreateText).toContain('name');
+
             const getOne = await harness.request('tools/call', {
                 name: 'zephyr_enterprise_get_test_case',
                 arguments: { id: 1 }

@@ -3,6 +3,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SubscriptionService } from './subscriptionService';
+import { validateToolArguments } from './toolArgumentPolicy';
 
 import { TelemetryService } from './telemetryService';
 
@@ -145,6 +146,12 @@ export class McpClientManager {
         if (!this.subscriptionService.checkAccess(`mcp_tool:${serverName}`)) {
             this.telemetryService.logUsage('mcp_tool_blocked', { server: serverName, tool: toolName });
             throw new Error("SUBSCRIPTION_REQUIRED");
+        }
+
+        const argPolicy = validateToolArguments(serverName, toolName, args);
+        if (!argPolicy.ok) {
+            this.telemetryService.logUsage('mcp_tool_invalid_args', { server: serverName, tool: toolName, reason: argPolicy.reason });
+            throw new Error(`INVALID_REQUEST: ${argPolicy.reason}`);
         }
 
         const client = this._clients.get(serverName);

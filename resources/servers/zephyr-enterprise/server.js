@@ -53,6 +53,36 @@ function ensureWritable() {
     }
 }
 
+function requireNonEmptyString(value, fieldName) {
+    if (typeof value !== 'string' || !value.trim()) {
+        throw { message: `Missing required argument: ${fieldName}`, code: 'INVALID_REQUEST', details: { required: [fieldName] }, http_status: 400 };
+    }
+}
+
+function requireNumber(value, fieldName) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        throw { message: `Missing required argument: ${fieldName}`, code: 'INVALID_REQUEST', details: { required: [fieldName] }, http_status: 400 };
+    }
+}
+
+function requireNonEmptyArray(value, fieldName) {
+    if (!Array.isArray(value) || value.length === 0) {
+        throw { message: `Missing required argument: ${fieldName}`, code: 'INVALID_REQUEST', details: { required: [fieldName] }, http_status: 400 };
+    }
+}
+
+function requireAtLeastOneField(args, fields) {
+    const hasAny = fields.some((field) => args?.[field] !== undefined && args?.[field] !== null);
+    if (!hasAny) {
+        throw {
+            message: `At least one updatable field is required: ${fields.join(', ')}`,
+            code: 'INVALID_REQUEST',
+            details: { any_of: fields },
+            http_status: 400
+        };
+    }
+}
+
 function authHeaders() {
     if (!sessionConfig.auth) return {};
     if (sessionConfig.auth.type === 'api_token') {
@@ -329,6 +359,7 @@ async function main() {
         },
         async (args) => {
             try {
+                requireNonEmptyString(args?.name, 'name');
                 ensureWritable();
                 requireConfigured();
                 const payload = {
@@ -369,6 +400,8 @@ async function main() {
         },
         async (args) => {
             try {
+                requireNumber(args?.id, 'id');
+                requireAtLeastOneField(args, ['name', 'description', 'steps', 'folder_id', 'priority', 'custom_fields']);
                 ensureWritable();
                 requireConfigured();
                 const payload = {};
@@ -400,6 +433,7 @@ async function main() {
         },
         async (args) => {
             try {
+                requireNonEmptyString(args?.name, 'name');
                 ensureWritable();
                 requireConfigured();
                 const payload = { name: args.name, projectId: args.project_id || sessionConfig.project.id, description: args.description };
@@ -424,6 +458,8 @@ async function main() {
         },
         async (args) => {
             try {
+                requireNumber(args?.cycle_id, 'cycle_id');
+                requireNonEmptyArray(args?.test_case_ids, 'test_case_ids');
                 ensureWritable();
                 requireConfigured();
                 const payload = { cycleId: args.cycle_id, projectId: sessionConfig.project.id, testCaseIds: args.test_case_ids, environment: args.environment, version: args.version };
