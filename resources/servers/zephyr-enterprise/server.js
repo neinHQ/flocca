@@ -5,6 +5,10 @@ const { McpServer } = require(path.join(__dirname, '../../../node_modules/@model
 const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
 
 const SERVER_INFO = { name: 'zephyr-enterprise-mcp', version: '0.1.0' };
+const API_FAMILY = {
+    PUBLIC: 'public',
+    FLEX: 'flex'
+};
 
 const sessionConfig = {
     base_url: process.env.ZEPHYR_ENT_BASE_URL || undefined,
@@ -15,6 +19,8 @@ const sessionConfig = {
         ? { id: parseInt(process.env.ZEPHYR_ENT_PROJECT_ID) }
         : (process.env.ZEPHYR_ENT_PROJECT_KEY ? { key: process.env.ZEPHYR_ENT_PROJECT_KEY } : undefined),
     read_only: false,
+    api_family: undefined,
+    release_id: process.env.ZEPHYR_ENT_RELEASE_ID ? parseInt(process.env.ZEPHYR_ENT_RELEASE_ID) : undefined,
     identity: undefined,
     version: undefined
 };
@@ -35,6 +41,139 @@ function normalizeBaseUrl(baseUrl) {
         .replace(/\/rest\/api\/1\.0$/i, '')
         .replace(/\/rest\/api$/i, '')
         .replace(/\/+$/, '');
+}
+
+function activeApiFamily() {
+    return sessionConfig.api_family === API_FAMILY.FLEX ? API_FAMILY.FLEX : API_FAMILY.PUBLIC;
+}
+
+function projectPathsFor(apiFamily = activeApiFamily()) {
+    if (apiFamily === API_FAMILY.FLEX) {
+        return ['flex/services/rest/latest/project/details', 'flex/services/rest/latest/project'];
+    }
+    return ['public/rest/api/1.0/projects'];
+}
+
+function testCaseSearchSpec(args) {
+    const query = (typeof args?.query === 'string' && args.query.trim()) ? args.query.trim() : '*';
+    const limit = args?.limit || 50;
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        const queryParams = {
+            word: query,
+            entitytype: 'testcase',
+            firstresult: '0',
+            maxresults: String(limit)
+        };
+        if (sessionConfig.release_id) {
+            queryParams.releaseid = String(sessionConfig.release_id);
+        }
+        return {
+            paths: ['flex/services/rest/latest/advancesearch'],
+            options: { method: 'GET', query: queryParams, operation: 'search_test_cases' }
+        };
+    }
+    return {
+        paths: ['public/rest/api/1.0/testcases/search', 'public/rest/api/1.0/testcase/search'],
+        options: {
+            method: 'POST',
+            body: {
+                projectId: sessionConfig.project.id,
+                search: query,
+                folderId: args?.folder_id,
+                maxRecords: limit
+            },
+            operation: 'search_test_cases'
+        }
+    };
+}
+
+function testCaseGetPaths(id) {
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        return [`flex/services/rest/latest/testcase/${id}`];
+    }
+    return [`public/rest/api/1.0/testcases/${id}`, `public/rest/api/1.0/testcase/${id}`];
+}
+
+function buildCreateTestCasePayload(args) {
+    const mappedSteps = args.steps?.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        return {
+            tcrCatalogTreeId: args.folder_id || 0,
+            testcase: {
+                name: args.name,
+                description: args.description,
+                priority: args.priority,
+                customFields: args.custom_fields,
+                steps: mappedSteps
+            }
+        };
+    }
+    return {
+        projectId: sessionConfig.project.id,
+        name: args.name,
+        description: args.description,
+        folderId: args.folder_id,
+        priority: args.priority,
+        customFields: args.custom_fields,
+        steps: mappedSteps
+    };
+}
+
+function buildUpdateTestCasePayload(args) {
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        const testcase = { testcaseId: args.id };
+        if (args.name) testcase.name = args.name;
+        if (args.description) testcase.description = args.description;
+        if (args.priority) testcase.priority = args.priority;
+        if (args.custom_fields) testcase.customFields = args.custom_fields;
+        if (args.steps) testcase.steps = args.steps.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
+        const payload = { testcase };
+        if (args.folder_id) payload.tcrCatalogTreeId = args.folder_id;
+        if (sessionConfig.release_id) payload.releaseId = sessionConfig.release_id;
+        return payload;
+    }
+
+    const payload = {};
+    if (args.name) payload.name = args.name;
+    if (args.description) payload.description = args.description;
+    if (args.folder_id) payload.folderId = args.folder_id;
+    if (args.priority) payload.priority = args.priority;
+    if (args.custom_fields) payload.customFields = args.custom_fields;
+    if (args.steps) payload.steps = args.steps.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
+    return payload;
+}
+
+function testCaseCreatePaths() {
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        return ['flex/services/rest/latest/testcase'];
+    }
+    return ['public/rest/api/1.0/testcases', 'public/rest/api/1.0/testcase'];
+}
+
+function testCaseUpdateSpec(id) {
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        return {
+            paths: ['flex/services/rest/latest/testcase'],
+            options: { method: 'PUT', query: { forceCreateNewVersion: 'false' }, operation: 'update_test_case' }
+        };
+    }
+    return {
+        paths: [`public/rest/api/1.0/testcases/${id}`, `public/rest/api/1.0/testcase/${id}`],
+        options: { method: 'PUT', operation: 'update_test_case' }
+    };
+}
+
+function extractProjects(projectsResp) {
+    const rawList = Array.isArray(projectsResp)
+        ? projectsResp
+        : (projectsResp?.values || projectsResp?.projects || projectsResp?.projectDto || projectsResp?.projectDtos || projectsResp?.data || []);
+
+    return (Array.isArray(rawList) ? rawList : [])
+        .map((p) => ({
+            id: p?.id ?? p?.projectId ?? p?.projectID ?? p?.projectDto?.id,
+            key: p?.key ?? p?.projectKey ?? p?.name ?? p?.projectName ?? p?.projectDto?.key ?? p?.projectDto?.name
+        }))
+        .filter((p) => p.id !== undefined || p.key);
 }
 
 function normalizeError(message, code = 'ZEPHYR_ENTERPRISE_ERROR', details, http_status) {
@@ -98,7 +237,7 @@ function authHeaders() {
     return {};
 }
 
-async function zFetch(pathPart, { method = 'GET', query, body, headers } = {}) {
+async function zFetch(pathPart, { method = 'GET', query, body, headers, operation, api_family } = {}) {
     const url = new URL(`${sessionConfig.base_url.replace(/\/+$/, '')}/${pathPart.replace(/^\/+/, '')}`);
     if (query) Object.entries(query).forEach(([k, v]) => { if (v !== undefined && v !== null) url.searchParams.set(k, v); });
     let responseText = '';
@@ -120,6 +259,10 @@ async function zFetch(pathPart, { method = 'GET', query, body, headers } = {}) {
     }
     if (!resp.ok || data.error) {
         const detail = data.error || data || {};
+        detail.api_family = api_family || activeApiFamily();
+        if (operation) {
+            detail.operation = operation;
+        }
         if (!detail.requested_path) {
             detail.requested_path = `${url.pathname}${url.search || ''}`;
         }
@@ -136,6 +279,26 @@ async function zFetch(pathPart, { method = 'GET', query, body, headers } = {}) {
     return data;
 }
 
+async function zFetchWithFallback(pathParts, options = {}) {
+    let lastErr;
+    const attemptedPaths = [];
+    for (const pathPart of pathParts) {
+        try {
+            attemptedPaths.push(pathPart);
+            return await zFetch(pathPart, options);
+        } catch (err) {
+            lastErr = err;
+            if (!err.details) err.details = {};
+            err.details.attempted_paths = attemptedPaths.slice();
+            if (err?.http_status === 404 || err?.code === 'NOT_FOUND') {
+                continue;
+            }
+            throw err;
+        }
+    }
+    throw lastErr;
+}
+
 async function validateConfig(args) {
     const base = normalizeBaseUrl(args.base_url || '');
     if (!base) throw { message: 'Missing base_url', code: 'INVALID_REQUEST' };
@@ -145,11 +308,23 @@ async function validateConfig(args) {
     sessionConfig.auth = args.auth;
     sessionConfig.project = args.project || undefined;
     sessionConfig.read_only = !!args.read_only;
+    sessionConfig.release_id = args.release_id || sessionConfig.release_id;
 
-    // Validate API availability and auth via /projects
-    const projectsResp = await zFetch('public/rest/api/1.0/projects');
-    const projects = Array.isArray(projectsResp) ? projectsResp : (projectsResp?.values || []);
-    sessionConfig.version = projectsResp?.releaseVersion || projectsResp?.version;
+    let projectsResp;
+    let detectedFamily = API_FAMILY.PUBLIC;
+    try {
+        projectsResp = await zFetchWithFallback(projectPathsFor(API_FAMILY.PUBLIC), { operation: 'probe_projects', api_family: API_FAMILY.PUBLIC });
+    } catch (publicErr) {
+        if (publicErr?.http_status !== 404 && publicErr?.code !== 'NOT_FOUND') {
+            throw publicErr;
+        }
+        projectsResp = await zFetchWithFallback(projectPathsFor(API_FAMILY.FLEX), { operation: 'probe_projects', api_family: API_FAMILY.FLEX });
+        detectedFamily = API_FAMILY.FLEX;
+    }
+
+    sessionConfig.api_family = detectedFamily;
+    const projects = extractProjects(projectsResp);
+    sessionConfig.version = projectsResp?.releaseVersion || projectsResp?.version || projectsResp?.serverVersion;
 
     if (sessionConfig.project) {
         const match = projects.find((p) =>
@@ -185,7 +360,7 @@ async function main() {
         async () => {
             try {
                 requireConfigured();
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, product: 'zephyr_enterprise', version: sessionConfig.version, project: sessionConfig.project }) }] };
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, product: 'zephyr_enterprise', version: sessionConfig.version, project: sessionConfig.project, api_family: activeApiFamily() }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
             }
@@ -212,6 +387,7 @@ async function main() {
                         required: ['type', 'username']
                     },
                     project: { type: 'object', properties: { key: { type: 'string' }, id: { type: 'number' } }, required: [] },
+                    release_id: { type: 'number' },
                     read_only: { type: 'boolean' }
                 },
                 required: ['deployment', 'base_url', 'auth', 'project'],
@@ -221,11 +397,12 @@ async function main() {
         async (args) => {
             try {
                 await validateConfig(args);
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, product: 'zephyr_enterprise', project: sessionConfig.project, version: sessionConfig.version }) }] };
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, product: 'zephyr_enterprise', project: sessionConfig.project, version: sessionConfig.version, api_family: activeApiFamily(), release_id: sessionConfig.release_id }) }] };
             } catch (err) {
                 sessionConfig.base_url = undefined;
                 sessionConfig.auth = undefined;
                 sessionConfig.project = undefined;
+                sessionConfig.api_family = undefined;
                 sessionConfig.identity = undefined;
                 sessionConfig.version = undefined;
                 return normalizeError(err.message, err.code || 'AUTH_FAILED', err.details, err.http_status);
@@ -240,7 +417,7 @@ async function main() {
         async () => {
             try {
                 requireConfigured();
-                const projects = await zFetch('public/rest/api/1.0/projects');
+                const projects = await zFetchWithFallback(projectPathsFor(), { operation: 'get_context_projects' });
                 return { content: [{ type: 'text', text: JSON.stringify({ product: 'zephyr_enterprise', version: sessionConfig.version, projects }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -254,7 +431,7 @@ async function main() {
         async () => {
             try {
                 requireConfigured();
-                const projects = await zFetch('public/rest/api/1.0/projects');
+                const projects = await zFetchWithFallback(projectPathsFor(), { operation: 'list_projects' });
                 return { content: [{ type: 'text', text: JSON.stringify({ projects }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -287,19 +464,10 @@ async function main() {
     const handleSearchTestCases = async (args) => {
         try {
             requireConfigured();
-
-            // Input schema validation is permissive in this server wrapper.
-            // Fallback to wildcard search when query is missing/empty so clients that send {} can still proceed.
-            const query = (typeof args?.query === 'string' && args.query.trim()) ? args.query.trim() : '*';
-
-            const body = {
-                projectId: sessionConfig.project.id,
-                search: query,
-                folderId: args.folder_id,
-                maxRecords: args.limit || 50
-            };
-            const data = await zFetch('public/rest/api/1.0/testcases/search', { method: 'POST', body });
-            return { content: [{ type: 'text', text: JSON.stringify({ results: data.testCases || [] }) }] };
+            const searchSpec = testCaseSearchSpec(args);
+            const data = await zFetchWithFallback(searchSpec.paths, searchSpec.options);
+            const results = data?.testCases || data?.results || data?.searchObjectList || data?.searchResults || [];
+            return { content: [{ type: 'text', text: JSON.stringify({ results }) }] };
         } catch (err) {
             return normalizeError(err.message, err.code, err.details, err.http_status);
         }
@@ -331,7 +499,7 @@ async function main() {
         async (args) => {
             try {
                 requireConfigured();
-                const data = await zFetch(`public/rest/api/1.0/testcases/${args.id}`);
+                const data = await zFetchWithFallback(testCaseGetPaths(args.id), { operation: 'get_test_case' });
                 return { content: [{ type: 'text', text: JSON.stringify(data) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -362,16 +530,8 @@ async function main() {
                 requireNonEmptyString(args?.name, 'name');
                 ensureWritable();
                 requireConfigured();
-                const payload = {
-                    projectId: sessionConfig.project.id,
-                    name: args.name,
-                    description: args.description,
-                    folderId: args.folder_id,
-                    priority: args.priority,
-                    customFields: args.custom_fields,
-                    steps: args.steps?.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }))
-                };
-                const data = await zFetch('public/rest/api/1.0/testcases', { method: 'POST', body: payload });
+                const payload = buildCreateTestCasePayload(args);
+                const data = await zFetchWithFallback(testCaseCreatePaths(), { method: 'POST', body: payload, operation: 'create_test_case' });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, key: data.key }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -404,14 +564,9 @@ async function main() {
                 requireAtLeastOneField(args, ['name', 'description', 'steps', 'folder_id', 'priority', 'custom_fields']);
                 ensureWritable();
                 requireConfigured();
-                const payload = {};
-                if (args.name) payload.name = args.name;
-                if (args.description) payload.description = args.description;
-                if (args.folder_id) payload.folderId = args.folder_id;
-                if (args.priority) payload.priority = args.priority;
-                if (args.custom_fields) payload.customFields = args.custom_fields;
-                if (args.steps) payload.steps = args.steps.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
-                const data = await zFetch(`public/rest/api/1.0/testcases/${args.id}`, { method: 'PUT', body: payload });
+                const payload = buildUpdateTestCasePayload(args);
+                const updateSpec = testCaseUpdateSpec(args.id);
+                const data = await zFetchWithFallback(updateSpec.paths, { ...updateSpec.options, body: payload });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, key: data.key }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -628,4 +783,18 @@ if (require.main === module) {
     });
 }
 
-module.exports = { main };
+module.exports = {
+    main,
+    __test: {
+        API_FAMILY,
+        sessionConfig,
+        projectPathsFor,
+        testCaseSearchSpec,
+        testCaseGetPaths,
+        testCaseCreatePaths,
+        testCaseUpdateSpec,
+        buildCreateTestCasePayload,
+        buildUpdateTestCasePayload,
+        extractProjects
+    }
+};

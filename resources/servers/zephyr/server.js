@@ -21,6 +21,17 @@ const GUARDRAILS = {
     max_attachment_size_bytes: 5 * 1024 * 1024 // 5MB
 };
 
+function normalizeSiteUrl(siteUrl) {
+    const raw = String(siteUrl || '').trim().replace(/\/+$/, '');
+    if (!raw) return raw;
+    return raw
+        .replace(/\/rest\/atm\/1\.0$/i, '')
+        .replace(/\/rest\/atm$/i, '')
+        .replace(/\/rest\/api\/3$/i, '')
+        .replace(/\/rest\/api$/i, '')
+        .replace(/\/+$/, '');
+}
+
 function normalizeError(message, code = 'ZEPHYR_ERROR', details, http_status) {
     return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details, http_status } }) }] };
 }
@@ -35,22 +46,100 @@ function baseUrl(pathPart) {
     return `${sessionConfig.site_url.replace(/\/+$/, '')}${pathPart.startsWith('/') ? '' : '/'}${pathPart}`;
 }
 
-async function zephyrFetch(pathPart, { method = 'GET', query, body, headers } = {}) {
+function requireNonEmptyString(value, fieldName) {
+    if (typeof value !== 'string' || !value.trim()) {
+        throw { message: `Missing required argument: ${fieldName}`, code: 'INVALID_REQUEST', details: { required: [fieldName] }, http_status: 400 };
+    }
+}
+
+function requireNonEmptyArray(value, fieldName) {
+    if (!Array.isArray(value) || value.length === 0) {
+        throw { message: `Missing required argument: ${fieldName}`, code: 'INVALID_REQUEST', details: { required: [fieldName] }, http_status: 400 };
+    }
+}
+
+function requireAtLeastOneField(args, fields) {
+    const hasAny = fields.some((field) => args?.[field] !== undefined && args?.[field] !== null);
+    if (!hasAny) {
+        throw {
+            message: `At least one updatable field is required: ${fields.join(', ')}`,
+            code: 'INVALID_REQUEST',
+            details: { any_of: fields },
+            http_status: 400
+        };
+    }
+}
+
+function testCaseSearchPaths() {
+    return ['/rest/atm/1.0/testcase/search', '/rest/atm/1.0/testcases/search'];
+}
+
+function testCasePaths(key) {
+    return [`/rest/atm/1.0/testcase/${key}`, `/rest/atm/1.0/testcases/${key}`];
+}
+
+function testCaseCreatePaths() {
+    return ['/rest/atm/1.0/testcase', '/rest/atm/1.0/testcases'];
+}
+
+function testRunCreatePaths() {
+    return ['/rest/atm/1.0/testrun', '/rest/atm/1.0/testruns'];
+}
+
+function testRunCaseAddPaths(cycleKey) {
+    return [`/rest/atm/1.0/testrun/${cycleKey}/testcase`, `/rest/atm/1.0/testruns/${cycleKey}/testcases`];
+}
+
+function testExecutionListPaths() {
+    return ['/rest/atm/1.0/testrun/testexecution', '/rest/atm/1.0/testruns/testexecutions'];
+}
+
+function testExecutionUpdatePaths(executionId) {
+    return [`/rest/atm/1.0/testexecution/${executionId}`, `/rest/atm/1.0/testexecutions/${executionId}`];
+}
+
+function testExecutionAttachmentPaths(executionId) {
+    return [`/rest/atm/1.0/testexecution/${executionId}/attachment`, `/rest/atm/1.0/testexecutions/${executionId}/attachments`];
+}
+
+function automationExecutionPaths() {
+    return ['/rest/atm/1.0/automation/execution', '/rest/atm/1.0/automation/executions'];
+}
+
+async function zephyrFetch(pathPart, { method = 'GET', query, body, rawBody, headers, operation } = {}) {
     const url = new URL(baseUrl(pathPart));
     if (query) Object.entries(query).forEach(([k, v]) => { if (v !== undefined && v !== null) url.searchParams.set(k, v); });
+    let responseText = '';
+    const hasJsonBody = body !== undefined;
+    const hasRawBody = rawBody !== undefined;
+    const defaultHeaders = hasJsonBody ? { 'Content-Type': 'application/json' } : {};
     const resp = await fetch(url.toString(), {
         method,
         headers: {
-            'Content-Type': 'application/json',
+            ...defaultHeaders,
             'Authorization': `Bearer ${sessionConfig.token}`,
             ...(headers || {})
         },
-        body: body ? JSON.stringify(body) : undefined
+        body: hasRawBody ? rawBody : (hasJsonBody ? JSON.stringify(body) : undefined)
     });
     let data = {};
-    try { data = await resp.json(); } catch (_) { data = {}; }
+    try {
+        responseText = await resp.text();
+        data = responseText ? JSON.parse(responseText) : {};
+    } catch (_) {
+        data = {};
+    }
     if (!resp.ok || data.error || data.errors) {
-        const detail = data.error || data.errors || data;
+        const detail = data.error || data.errors || data || {};
+        if (!detail.requested_path) {
+            detail.requested_path = `${url.pathname}${url.search || ''}`;
+        }
+        if (operation) {
+            detail.operation = operation;
+        }
+        if ((!detail || Object.keys(detail).length <= 2) && responseText) {
+            detail.response_excerpt = responseText.slice(0, 500);
+        }
         const message = detail.message || resp.statusText || 'Zephyr request failed';
         let code = 'ZEPHYR_ERROR';
         if (resp.status === 401 || resp.status === 403) code = 'PERMISSION_DENIED';
@@ -59,6 +148,26 @@ async function zephyrFetch(pathPart, { method = 'GET', query, body, headers } = 
         throw { message, code, details: detail, http_status: resp.status };
     }
     return data;
+}
+
+async function zephyrFetchWithFallback(pathParts, options = {}) {
+    let lastErr;
+    const attemptedPaths = [];
+    for (const pathPart of pathParts) {
+        try {
+            attemptedPaths.push(pathPart);
+            return await zephyrFetch(pathPart, options);
+        } catch (err) {
+            lastErr = err;
+            if (!err.details) err.details = {};
+            err.details.attempted_paths = attemptedPaths.slice();
+            if (err?.http_status === 404 || err?.code === 'NOT_FOUND') {
+                continue;
+            }
+            throw err;
+        }
+    }
+    throw lastErr;
 }
 
 async function jiraFetch(pathPart) {
@@ -74,7 +183,7 @@ async function jiraFetch(pathPart) {
 }
 
 async function validateConfig(args) {
-    const site = args.site_url.replace(/\/+$/, '');
+    const site = normalizeSiteUrl(args.site_url);
     const token = args.auth?.access_token;
     const projectKey = args.jira?.project_key;
     if (!site || !token || !projectKey) throw { message: 'Missing required config fields', code: 'INVALID_REQUEST' };
@@ -177,7 +286,7 @@ async function main() {
         async () => {
             try {
                 requireConfigured();
-                const projects = await zephyrFetch('/rest/atm/1.0/testproject');
+                const projects = await zephyrFetch('/rest/atm/1.0/testproject', { operation: 'get_context' });
                 const test_projects = (projects.values || projects) || [];
                 return { content: [{ type: 'text', text: JSON.stringify({ jira_project_key: sessionConfig.jira_project_key, zephyr_product: 'zephyr_scale', test_projects }) }] };
             } catch (err) {
@@ -193,7 +302,7 @@ async function main() {
             try {
                 requireConfigured();
                 const proj = args.project_key || sessionConfig.zephyr_project_key;
-                const data = await zephyrFetch('/rest/atm/1.0/folder/testcase', { query: { projectKey: proj, maxResults: 500 } });
+                const data = await zephyrFetch('/rest/atm/1.0/folder/testcase', { query: { projectKey: proj, maxResults: 500 }, operation: 'list_folders' });
                 return { content: [{ type: 'text', text: JSON.stringify({ folders: data.values || data }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -223,14 +332,15 @@ async function main() {
                 requireConfigured();
                 const proj = args.project_key || sessionConfig.zephyr_project_key;
                 const query = (typeof args?.query === 'string' && args.query.trim()) ? args.query.trim() : '*';
-                const data = await zephyrFetch('/rest/atm/1.0/testcase/search', {
+                const data = await zephyrFetchWithFallback(testCaseSearchPaths(), {
                     method: 'POST',
                     body: {
                         projectKey: proj,
                         query,
                         folderId: args.folder_id,
                         maxResults: args.limit || 50
-                    }
+                    },
+                    operation: 'search_test_cases'
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ results: data.values || [] }) }] };
             } catch (err) {
@@ -245,7 +355,8 @@ async function main() {
         async (args) => {
             try {
                 requireConfigured();
-                const data = await zephyrFetch(`/rest/atm/1.0/testcase/${args.key}`);
+                requireNonEmptyString(args?.key, 'key');
+                const data = await zephyrFetchWithFallback(testCasePaths(args.key), { operation: 'get_test_case' });
                 return { content: [{ type: 'text', text: JSON.stringify(data) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -278,6 +389,7 @@ async function main() {
         },
         async (args) => {
             try {
+                requireNonEmptyString(args?.title, 'title');
                 ensureWritable();
                 requireConfigured();
                 const proj = args.project_key || sessionConfig.zephyr_project_key;
@@ -291,7 +403,7 @@ async function main() {
                     testScript: args.steps ? { type: 'STEP_BY_STEP', steps: args.steps.map((s, i) => ({ index: i + 1, action: s.action, data: s.data, expectedResult: s.expected })) } : undefined,
                     links: args.links?.jira_issue_keys ? { issues: args.links.jira_issue_keys } : undefined
                 };
-                const data = await zephyrFetch('/rest/atm/1.0/testcase', { method: 'POST', body: payload });
+                const data = await zephyrFetchWithFallback(testCaseCreatePaths(), { method: 'POST', body: payload, operation: 'create_test_case' });
                 return { content: [{ type: 'text', text: JSON.stringify({ key: data.key, self: data.self }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -321,6 +433,8 @@ async function main() {
         },
         async (args) => {
             try {
+                requireNonEmptyString(args?.key, 'key');
+                requireAtLeastOneField(args, ['title', 'objective', 'precondition', 'steps', 'labels', 'folder_id', 'links']);
                 ensureWritable();
                 requireConfigured();
                 const payload = {};
@@ -331,7 +445,10 @@ async function main() {
                 if (args.folder_id) payload.folderId = args.folder_id;
                 if (args.steps) payload.testScript = { type: 'STEP_BY_STEP', steps: args.steps.map((s, i) => ({ index: i + 1, action: s.action, data: s.data, expectedResult: s.expected })) };
                 if (args.links?.jira_issue_keys) payload.links = { issues: args.links.jira_issue_keys };
-                const data = await zephyrFetch(`/rest/atm/1.0/testcase/${args.key}`, { method: 'PUT', body: payload });
+                const data = await zephyrFetchWithFallback(
+                    testCasePaths(args.key),
+                    { method: 'PUT', body: payload, operation: 'update_test_case' }
+                );
                 return { content: [{ type: 'text', text: JSON.stringify({ key: data.key, self: data.self }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -357,11 +474,12 @@ async function main() {
         },
         async (args) => {
             try {
+                requireNonEmptyString(args?.name, 'name');
                 ensureWritable();
                 requireConfigured();
                 const proj = args.project_key || sessionConfig.zephyr_project_key;
                 const payload = { name: args.name, projectKey: proj, folderId: args.folder_id };
-                const data = await zephyrFetch('/rest/atm/1.0/testrun', { method: 'POST', body: payload });
+                const data = await zephyrFetchWithFallback(testRunCreatePaths(), { method: 'POST', body: payload, operation: 'create_test_cycle' });
                 return { content: [{ type: 'text', text: JSON.stringify({ key: data.key, self: data.self }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -382,10 +500,15 @@ async function main() {
         },
         async (args) => {
             try {
+                requireNonEmptyString(args?.cycle_key, 'cycle_key');
+                requireNonEmptyArray(args?.test_case_keys, 'test_case_keys');
                 ensureWritable();
                 requireConfigured();
                 const body = { additions: args.test_case_keys.map((k) => ({ testCaseKey: k })) };
-                const data = await zephyrFetch(`/rest/atm/1.0/testrun/${args.cycle_key}/testcase`, { method: 'POST', body });
+                const data = await zephyrFetchWithFallback(
+                    testRunCaseAddPaths(args.cycle_key),
+                    { method: 'POST', body, operation: 'add_tests_to_cycle' }
+                );
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, added: args.test_case_keys.length, result: data }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -399,7 +522,11 @@ async function main() {
         async (args) => {
             try {
                 requireConfigured();
-                const data = await zephyrFetch('/rest/atm/1.0/testrun/testexecution', { query: { testRunKey: args.cycle_key, maxResults: 200 } });
+                requireNonEmptyString(args?.cycle_key, 'cycle_key');
+                const data = await zephyrFetchWithFallback(
+                    testExecutionListPaths(),
+                    { query: { testRunKey: args.cycle_key, maxResults: 200 }, operation: 'list_test_executions' }
+                );
                 return { content: [{ type: 'text', text: JSON.stringify({ executions: data.values || [] }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -433,10 +560,15 @@ async function main() {
         },
         async (args) => {
             try {
+                requireNonEmptyString(args?.execution_id, 'execution_id');
+                requireNonEmptyString(args?.status, 'status');
                 ensureWritable();
                 requireConfigured();
                 const payload = { status: args.status, comment: args.comment };
-                const data = await zephyrFetch(`/rest/atm/1.0/testexecution/${args.execution_id}`, { method: 'PUT', body: payload });
+                const data = await zephyrFetchWithFallback(
+                    testExecutionUpdatePaths(args.execution_id),
+                    { method: 'PUT', body: payload, operation: 'update_execution_status' }
+                );
 
                 // attachments (limited)
                 if (args.evidence?.attachments) {
@@ -445,14 +577,15 @@ async function main() {
                         if (size > GUARDRAILS.max_attachment_size_bytes) {
                             return normalizeError('Attachment too large', 'ATTACHMENT_TOO_LARGE', { name: att.name, max: GUARDRAILS.max_attachment_size_bytes });
                         }
-                        await fetch(baseUrl(`/rest/atm/1.0/testexecution/${args.execution_id}/attachment`), {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${sessionConfig.token}`,
-                                'Content-Type': att.content_type
-                            },
-                            body: Buffer.from(att.data_base64, 'base64')
-                        });
+                        await zephyrFetchWithFallback(
+                            testExecutionAttachmentPaths(args.execution_id),
+                            {
+                                method: 'POST',
+                                headers: { 'Content-Type': att.content_type },
+                                rawBody: Buffer.from(att.data_base64, 'base64'),
+                                operation: 'attach_execution_evidence'
+                            }
+                        );
                     }
                 }
                 return { content: [{ type: 'text', text: JSON.stringify({ execution: data }) }] };
@@ -494,6 +627,7 @@ async function main() {
             try {
                 ensureWritable();
                 requireConfigured();
+                requireNonEmptyArray(args?.results, 'results');
                 if ((args.results || []).length > GUARDRAILS.max_batch_results) {
                     return normalizeError('Batch too large', 'INVALID_REQUEST', { max: GUARDRAILS.max_batch_results });
                 }
@@ -502,7 +636,10 @@ async function main() {
                 let cycleKey;
                 if (args.cycle?.name) {
                     if (args.cycle.create_if_missing) {
-                        const created = await zephyrFetch('/rest/atm/1.0/testrun', { method: 'POST', body: { name: args.cycle.name, projectKey: sessionConfig.zephyr_project_key } });
+                        const created = await zephyrFetchWithFallback(
+                            testRunCreatePaths(),
+                            { method: 'POST', body: { name: args.cycle.name, projectKey: sessionConfig.zephyr_project_key }, operation: 'create_cycle_for_automation' }
+                        );
                         cycleKey = created.key;
                     }
                 }
@@ -517,7 +654,10 @@ async function main() {
                 }));
 
                 const payload = { testCycleKey: cycleKey, executions };
-                const data = await zephyrFetch('/rest/atm/1.0/automation/execution', { method: 'POST', body: payload });
+                const data = await zephyrFetchWithFallback(
+                    automationExecutionPaths(),
+                    { method: 'POST', body: payload, operation: 'publish_automation_results' }
+                );
 
                 return { content: [{ type: 'text', text: JSON.stringify({ summary: data }) }] };
             } catch (err) {
@@ -542,4 +682,18 @@ if (require.main === module) {
     });
 }
 
-module.exports = { main };
+module.exports = {
+    main,
+    __test: {
+        normalizeSiteUrl,
+        testCaseSearchPaths,
+        testCasePaths,
+        testCaseCreatePaths,
+        testRunCreatePaths,
+        testRunCaseAddPaths,
+        testExecutionListPaths,
+        testExecutionUpdatePaths,
+        testExecutionAttachmentPaths,
+        automationExecutionPaths
+    }
+};
