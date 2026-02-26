@@ -186,6 +186,28 @@ function requireConfigured() {
     }
 }
 
+async function ensureApiFamilyDetected() {
+    if (sessionConfig.api_family) {
+        return;
+    }
+    try {
+        await zFetchWithFallback(projectPathsFor(API_FAMILY.PUBLIC), { operation: 'detect_api_family', api_family: API_FAMILY.PUBLIC });
+        sessionConfig.api_family = API_FAMILY.PUBLIC;
+        return;
+    } catch (publicErr) {
+        if (publicErr?.http_status !== 404 && publicErr?.code !== 'NOT_FOUND') {
+            throw publicErr;
+        }
+    }
+    await zFetchWithFallback(projectPathsFor(API_FAMILY.FLEX), { operation: 'detect_api_family', api_family: API_FAMILY.FLEX });
+    sessionConfig.api_family = API_FAMILY.FLEX;
+}
+
+async function ensureConfigured() {
+    requireConfigured();
+    await ensureApiFamilyDetected();
+}
+
 function ensureWritable() {
     if (sessionConfig.read_only) {
         throw { message: 'Read-only mode enabled', code: 'READ_ONLY_MODE' };
@@ -359,7 +381,7 @@ async function main() {
         { description: 'Health check for Zephyr Enterprise MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
-                requireConfigured();
+                await ensureConfigured();
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, product: 'zephyr_enterprise', version: sessionConfig.version, project: sessionConfig.project, api_family: activeApiFamily() }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -416,7 +438,7 @@ async function main() {
         { description: 'Return Zephyr Enterprise context.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
-                requireConfigured();
+                await ensureConfigured();
                 const projects = await zFetchWithFallback(projectPathsFor(), { operation: 'get_context_projects' });
                 return { content: [{ type: 'text', text: JSON.stringify({ product: 'zephyr_enterprise', version: sessionConfig.version, projects }) }] };
             } catch (err) {
@@ -430,7 +452,7 @@ async function main() {
         { description: 'List Zephyr Enterprise projects.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
         async () => {
             try {
-                requireConfigured();
+                await ensureConfigured();
                 const projects = await zFetchWithFallback(projectPathsFor(), { operation: 'list_projects' });
                 return { content: [{ type: 'text', text: JSON.stringify({ projects }) }] };
             } catch (err) {
@@ -444,7 +466,7 @@ async function main() {
         { description: 'List folders for a project.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' } }, additionalProperties: false } },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConfigured();
                 const projectId = args.project_id || sessionConfig.project.id;
                 const folders = await zFetch(`public/rest/api/1.0/folders?projectId=${projectId}`);
                 return { content: [{ type: 'text', text: JSON.stringify({ folders }) }] };
@@ -463,7 +485,7 @@ async function main() {
 
     const handleSearchTestCases = async (args) => {
         try {
-            requireConfigured();
+            await ensureConfigured();
             const searchSpec = testCaseSearchSpec(args);
             const data = await zFetchWithFallback(searchSpec.paths, searchSpec.options);
             const results = data?.testCases || data?.results || data?.searchObjectList || data?.searchResults || [];
@@ -498,7 +520,7 @@ async function main() {
         { description: 'Get test case details.', inputSchema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'], additionalProperties: false } },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConfigured();
                 const data = await zFetchWithFallback(testCaseGetPaths(args.id), { operation: 'get_test_case' });
                 return { content: [{ type: 'text', text: JSON.stringify(data) }] };
             } catch (err) {
@@ -529,7 +551,7 @@ async function main() {
             try {
                 requireNonEmptyString(args?.name, 'name');
                 ensureWritable();
-                requireConfigured();
+                await ensureConfigured();
                 const payload = buildCreateTestCasePayload(args);
                 const data = await zFetchWithFallback(testCaseCreatePaths(), { method: 'POST', body: payload, operation: 'create_test_case' });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, key: data.key }) }] };
@@ -563,7 +585,7 @@ async function main() {
                 requireNumber(args?.id, 'id');
                 requireAtLeastOneField(args, ['name', 'description', 'steps', 'folder_id', 'priority', 'custom_fields']);
                 ensureWritable();
-                requireConfigured();
+                await ensureConfigured();
                 const payload = buildUpdateTestCasePayload(args);
                 const updateSpec = testCaseUpdateSpec(args.id);
                 const data = await zFetchWithFallback(updateSpec.paths, { ...updateSpec.options, body: payload });
@@ -590,7 +612,7 @@ async function main() {
             try {
                 requireNonEmptyString(args?.name, 'name');
                 ensureWritable();
-                requireConfigured();
+                await ensureConfigured();
                 const payload = { name: args.name, projectId: args.project_id || sessionConfig.project.id, description: args.description };
                 const data = await zFetch('public/rest/api/1.0/cycles', { method: 'POST', body: payload });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, name: data.name }) }] };
@@ -616,7 +638,7 @@ async function main() {
                 requireNumber(args?.cycle_id, 'cycle_id');
                 requireNonEmptyArray(args?.test_case_ids, 'test_case_ids');
                 ensureWritable();
-                requireConfigured();
+                await ensureConfigured();
                 const payload = { cycleId: args.cycle_id, projectId: sessionConfig.project.id, testCaseIds: args.test_case_ids, environment: args.environment, version: args.version };
                 const data = await zFetch('public/rest/api/1.0/executions', { method: 'POST', body: payload });
                 return { content: [{ type: 'text', text: JSON.stringify({ created: data.executions?.length || 0, executions: data.executions }) }] };
@@ -631,7 +653,7 @@ async function main() {
         { description: 'List executions for a cycle.', inputSchema: { type: 'object', properties: { cycle_id: { type: 'number' } }, required: ['cycle_id'], additionalProperties: false } },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConfigured();
                 const data = await zFetch(`public/rest/api/1.0/executions/search?projectId=${sessionConfig.project.id}&cycleId=${args.cycle_id}`);
                 return { content: [{ type: 'text', text: JSON.stringify({ executions: data.executions || [] }) }] };
             } catch (err) {
@@ -659,7 +681,7 @@ async function main() {
         async (args) => {
             try {
                 ensureWritable();
-                requireConfigured();
+                await ensureConfigured();
                 const payload = { status: args.status, comment: args.comment, executionTime: args.execution_time_ms };
                 const data = await zFetch(`public/rest/api/1.0/executions/${args.execution_id}`, { method: 'PUT', body: payload });
                 return { content: [{ type: 'text', text: JSON.stringify({ execution: data }) }] };
@@ -684,7 +706,7 @@ async function main() {
         async (args) => {
             try {
                 ensureWritable();
-                requireConfigured();
+                await ensureConfigured();
                 const size = Buffer.byteLength(args.data_base64 || '', 'base64');
                 if (size > GUARDRAILS.max_attachment_size_bytes) {
                     return normalizeError('Attachment too large', 'ATTACHMENT_TOO_LARGE', { max: GUARDRAILS.max_attachment_size_bytes });
@@ -737,7 +759,7 @@ async function main() {
         async (args) => {
             try {
                 ensureWritable();
-                requireConfigured();
+                await ensureConfigured();
                 if (args.results.length > GUARDRAILS.max_batch_results) {
                     return normalizeError('Batch too large', 'INVALID_REQUEST', { max: GUARDRAILS.max_batch_results });
                 }
@@ -788,6 +810,7 @@ module.exports = {
     __test: {
         API_FAMILY,
         sessionConfig,
+        ensureApiFamilyDetected,
         projectPathsFor,
         testCaseSearchSpec,
         testCaseGetPaths,

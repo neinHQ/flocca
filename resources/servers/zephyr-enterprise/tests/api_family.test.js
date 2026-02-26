@@ -73,4 +73,45 @@ describe('Zephyr Enterprise API family routing helpers', () => {
         expect(__test.extractProjects({ projects: [{ projectId: 2, projectKey: 'B' }] })).toEqual([{ id: 2, key: 'B' }]);
         expect(__test.extractProjects([{ id: 3, name: 'C' }])).toEqual([{ id: 3, key: 'C' }]);
     });
+
+    test('lazy api-family detection falls back to flex when public projects endpoint is missing', async () => {
+        __test.sessionConfig.base_url = 'https://example.test';
+        __test.sessionConfig.auth = { type: 'basic', username: 'u', password: 'p' };
+        __test.sessionConfig.api_family = undefined;
+
+        const fetchMock = jest.fn(async (url) => {
+            if (String(url).includes('/public/rest/api/1.0/projects')) {
+                return {
+                    ok: false,
+                    status: 404,
+                    statusText: 'Not Found',
+                    text: async () => '<html>404</html>'
+                };
+            }
+            if (String(url).includes('/flex/services/rest/latest/project/details')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    statusText: 'OK',
+                    text: async () => '[]'
+                };
+            }
+            return {
+                ok: false,
+                status: 404,
+                statusText: 'Not Found',
+                text: async () => ''
+            };
+        });
+
+        const originalFetch = global.fetch;
+        global.fetch = fetchMock;
+        try {
+            await __test.ensureApiFamilyDetected();
+            expect(__test.sessionConfig.api_family).toBe(__test.API_FAMILY.FLEX);
+            expect(fetchMock).toHaveBeenCalled();
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
 });
