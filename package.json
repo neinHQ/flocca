@@ -231,6 +231,11 @@
         "icon": "$(plug)"
       },
       {
+        "command": "flocca.reportIssue",
+        "title": "Report an Issue",
+        "icon": "$(issues)"
+      },
+      {
         "command": "flocca.disconnectServer",
         "title": "Disconnect MCP Server",
         "icon": "$(debug-disconnect)"

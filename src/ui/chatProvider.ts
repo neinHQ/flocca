@@ -510,6 +510,29 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                     font-weight: bold;
                     width: 100%;
                 }
+                .pro-active-row {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10px;
+                }
+                .pro-active-label {
+                    color: #4CAF50;
+                    font-weight: bold;
+                    font-size: 12px;
+                }
+                .report-issue-btn {
+                    font-size: 11px;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    border: 1px solid var(--vscode-button-secondaryBorder, var(--vscode-widget-border));
+                    background: var(--vscode-button-secondaryBackground, transparent);
+                    color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+                    cursor: pointer;
+                }
+                .report-issue-btn:hover {
+                    background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
+                }
 
                 /* Dropdown Menu */
                 .dropdown-menu {
@@ -1068,7 +1091,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                         // Upgrade Button
                         const upgDiv = document.getElementById('upgrade-section');
                         if (isPaid) {
-                            upgDiv.innerHTML = '<div style="color:#4CAF50; font-weight:bold; font-size:12px; text-align:center;">⚡ Flocca Pro Active</div>';
+                            upgDiv.innerHTML = '<div class="pro-active-row"><div class="pro-active-label">⚡ Flocca Pro Active</div><button class="report-issue-btn" onclick="post(\\'connectCommand\\', \\'flocca.reportIssue\\')">Report Issue</button></div>';
                         } else {
                             upgDiv.innerHTML = '<button class="upgrade-btn" onclick="post(\\'connectCommand\\', \\'flocca.upgrade\\')">Upgrade to Pro ⚡</button>';
                         }

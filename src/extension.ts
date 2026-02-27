@@ -600,6 +600,10 @@ export async function activate(context: vscode.ExtensionContext) {
         dashboardProvider.showServerCatalog();
     }));
 
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.reportIssue', async () => {
+        await vscode.env.openExternal(vscode.Uri.parse('https://github.com/neinHQ/flocca-vscode/issues'));
+    }));
+
     context.subscriptions.push(vscode.commands.registerCommand('flocca.fixMcpSetup', async () => {
         const report = await runMcpDiagnostics();
         if (report.issues.length === 0) {
