@@ -61,6 +61,11 @@ async function handleRequest(request) {
                         inputSchema: { type: "object", properties: {} }
                     },
                     {
+                        name: "postgres_health",
+                        description: "Health check",
+                        inputSchema: { type: "object", properties: {} }
+                    },
+                    {
                         name: "db_query",
                         description: "Execute SQL query",
                         inputSchema: { type: "object", properties: { text: { type: "string" }, confirm: { type: "boolean" } }, required: ["text"] }
@@ -74,6 +79,8 @@ async function handleRequest(request) {
             let resultText = "";
             if (name === "db_connect") {
                 resultText = "Connected (Mock)";
+            } else if (name === "postgres_health") {
+                resultText = JSON.stringify({ ok: true });
             } else if (name === "db_get_schema") {
                 resultText = "Table: users\n  - id: serial\n  - name: text";
             } else if (name === "db_query") {

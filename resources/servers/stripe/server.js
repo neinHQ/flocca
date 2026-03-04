@@ -52,6 +52,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
         tools: [
             {
+                name: "stripe_health",
+                description: "Health check for Stripe authentication.",
+                inputSchema: { type: "object", properties: {} },
+            },
+            {
                 name: "get_balance",
                 description: "Retrieve current Stripe balance.",
                 inputSchema: {
@@ -77,6 +82,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
     try {
+        if (name === "stripe_health") {
+            try {
+                await api.get('/v1/balance');
+                return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
+            } catch (error) {
+                return { content: [{ type: "text", text: JSON.stringify({ error: error.message }) }] };
+            }
+        }
+
         if (name === "get_balance") {
             const response = await api.get('/v1/balance');
             return {

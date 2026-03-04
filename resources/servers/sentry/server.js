@@ -57,6 +57,17 @@ function registerToolWithAliases(server, name, config, handler) {
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
+    registerToolWithAliases(server, 'sentry.health',
+        { description: 'Health check for Sentry', inputSchema: { type: 'object', properties: {} } },
+        async () => {
+            try {
+                if (!config.orgSlug) throw new Error("Missing SENTRY_ORG_SLUG config for health check");
+                await axios.get(`${config.baseUrl}/organizations/${config.orgSlug}/`, { headers: getHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
     registerToolWithAliases(server, 'sentry.configure',
         { description: 'Configure Sentry', inputSchema: { type: 'object', properties: { token: { type: 'string' }, org_slug: { type: 'string' }, base_url: { type: 'string' } }, required: ['token', 'org_slug'] } },
         async (args) => {

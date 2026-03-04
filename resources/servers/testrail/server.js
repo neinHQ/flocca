@@ -137,7 +137,15 @@ async function main() {
             description: 'Health check for TestRail MCP server.',
             inputSchema: { type: 'object', properties: {}, additionalProperties: false }
         },
-        async () => ({ content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] })
+        async () => {
+            try {
+                requireConfigured();
+                await trlFetch(`index.php?/api/v2/get_projects`);
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            } catch (e) {
+                return errorResult(e, 'testrail_health');
+            }
+        }
     );
 
     server.registerTool(

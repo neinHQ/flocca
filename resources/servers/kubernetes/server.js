@@ -73,7 +73,13 @@ async function handleToolCall(name, args) {
 
         switch (name) {
             case 'kubernetes_health':
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+                try {
+                    const tempClient = getClients().core;
+                    await tempClient.getAPIResources();
+                    return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+                } catch (e) {
+                    return { isError: true, content: [{ type: 'text', text: `Health check failed: ${e.message}` }] };
+                }
 
             case 'kubernetes_configure':
                 if (args.api_server) config.apiServer = args.api_server;

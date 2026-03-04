@@ -56,6 +56,16 @@ function registerToolWithAliases(server, name, config, handler) {
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
+    registerToolWithAliases(server, 'notion.health',
+        { description: 'Health check for Notion', inputSchema: { type: 'object', properties: {} } },
+        async () => {
+            try {
+                await getClient().users.me();
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
     registerToolWithAliases(server, 'notion.configure',
         { description: 'Configure Notion', inputSchema: { type: 'object', properties: { token: { type: 'string' } }, required: ['token'] } },
         async (args) => {

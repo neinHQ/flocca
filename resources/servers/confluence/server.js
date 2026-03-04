@@ -91,6 +91,16 @@ function registerToolWithAliases(server, name, config, handler) {
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
+    registerToolWithAliases(server, 'confluence.health',
+        { description: 'Health check for Confluence', inputSchema: { type: 'object', properties: {} } },
+        async () => {
+            try {
+                await confluenceRequest('get', 'user/current', undefined, { headers: getHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
     registerToolWithAliases(server, 'confluence.configure',
         { description: 'Configure Confluence', inputSchema: { type: 'object', properties: { username: { type: 'string' }, token: { type: 'string' }, base_url: { type: 'string' }, deployment_mode: { type: 'string' } }, required: ['token', 'base_url'] } },
         async (args) => {

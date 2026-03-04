@@ -81,6 +81,14 @@ async function handleToolCall(name, args) {
         const workspace = args.workspace || config.workspace;
 
         switch (name) {
+            case 'bitbucket_health':
+                try {
+                    await getApi().get(isCloud() ? '/user' : '/users/' + config.username);
+                    return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+                } catch (e) {
+                    return { isError: true, content: [{ type: 'text', text: `Bitbucket Auth Failed: ${e.message}` }] };
+                }
+
             case 'bitbucket_configure':
                 if (args.service_url) config.serviceUrl = normalizeServiceUrl(args.service_url);
                 if (args.auth) {
@@ -282,6 +290,11 @@ async function handleRequest(request) {
             id: request.id,
             result: {
                 tools: [
+                    {
+                        name: "bitbucket_health",
+                        description: "Health check for Bitbucket auth",
+                        inputSchema: { type: "object", properties: {} }
+                    },
                     {
                         name: "bitbucket_configure",
                         description: "Configure Bitbucket credentials",

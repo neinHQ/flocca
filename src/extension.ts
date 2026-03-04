@@ -631,12 +631,33 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // --- Connect Commands ---
 
+    // Helper to generate a standard validation hook
+    const createValidationHook = (toolName: string) => async (serverName: string) => {
+        const res = await clientManager.callTool(serverName, toolName, {});
+        // Some returning 'isError' at root, some in text JSON
+        if ((res as any).isError) {
+            const errText = Array.isArray(res.content) ? res.content[0]?.text : 'Unknown authentication error';
+            throw new Error(errText);
+        }
+        const content = Array.isArray(res.content) ? res.content[0] : null;
+        if (content && content.text) {
+            try {
+                const parsed = JSON.parse(content.text);
+                if (parsed.error || parsed.isError) {
+                    throw new Error(parsed.error?.message || parsed.message || parsed.error || 'Unknown authentication error');
+                }
+            } catch (e) {
+                // Not JSON, assume OK if no outer isError
+            }
+        }
+    };
+
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectZephyr', () =>
         connectWithWebview('zephyr', 'zephyr', 'resources/servers/zephyr/server.js', 'node', (data) => ({
             'ZEPHYR_SITE_URL': data.url,
             'ZEPHYR_TOKEN': data.token,
             'ZEPHYR_JIRA_PROJECT_KEY': data.projectKey
-        }))
+        }), createValidationHook('zephyr_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectZephyrEnterprise', () =>
@@ -645,7 +666,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'ZEPHYR_ENT_USERNAME': data.username,
             'ZEPHYR_ENT_TOKEN': data.token,
             'ZEPHYR_ENT_PROJECT_ID': data.project_id || '',
-        }))
+        }), createValidationHook('zephyr_enterprise_health'))
     ));
 
     // --- Generic Webview Connection Helper ---
@@ -654,7 +675,8 @@ export async function activate(context: vscode.ExtensionContext) {
         serverName: string,
         serverPath: string,
         runtime: 'node' | 'python3',
-        envMapper: (data: any) => Record<string, string>
+        envMapper: (data: any) => Record<string, string>,
+        validationHook?: (serverName: string) => Promise<void>
     ) => {
         if (!subsService.checkAccess(provider)) {
             const selection = await vscode.window.showErrorMessage(`${provider} is a Pro feature and your trial has expired.`, { modal: true }, "Upgrade");
@@ -723,6 +745,24 @@ export async function activate(context: vscode.ExtensionContext) {
                         [context.asAbsolutePath(serverPath)],
                         config.servers[serverName].env
                     );
+
+                    if (validationHook) {
+                        try {
+                            await validationHook(serverName);
+                        } catch (err: any) {
+                            await clientManager.disconnect(serverName);
+                            // Revert config to prevent invalid environment saving loop
+                            const revertedConfig = await configService.loadConfig();
+                            if (revertedConfig) {
+                                // Delete the bad credentials (if missing from before, they are removed, otherwise left alone)
+                                // In a perfect world we'd do a deep merge diff here, but removing the server temporarily isolates the failure
+                                delete revertedConfig.servers[serverName];
+                                await configService.saveConfig(revertedConfig);
+                            }
+                            throw new Error(`Authentication validation failed: ${err.message || String(err)}`);
+                        }
+                    }
+
                     log(`Connected local MCP server=${serverName}`, { provider });
                     void reportBackendLog({
                         level: 'info',
@@ -789,19 +829,19 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectStripe', () =>
         connectWithWebview('stripe', 'stripe', 'resources/servers/stripe/server.js', 'node', (data) => ({
             'STRIPE_SECRET_KEY': data.key
-        }))
+        }), createValidationHook('stripe_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectFigma', () =>
         connectWithWebview('figma', 'figma', 'resources/servers/figma/server.js', 'node', (data) => ({
             'FIGMA_TOKEN': data.token
-        }))
+        }), createValidationHook('figma_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectSlack', () =>
         connectWithWebview('slack', 'slack', 'resources/servers/slack/server.js', 'node', (data) => ({
             'SLACK_BOT_TOKEN': data.token
-        }))
+        }), createValidationHook('slack_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectGitLab', () =>
@@ -809,7 +849,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'GITLAB_TOKEN': data.token,
             'GITLAB_BASE_URL': data.url,
             'GITLAB_DEPLOYMENT_MODE': data.deployment_mode || ''
-        }))
+        }), createValidationHook('gitlab_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectBitbucket', () =>
@@ -819,7 +859,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'BITBUCKET_USERNAME': data.username,
             'BITBUCKET_PASSWORD': data.password,
             'BITBUCKET_WORKSPACE': data.workspace || ''
-        }))
+        }), createValidationHook('bitbucket_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectJira', () =>
@@ -828,7 +868,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'JIRA_DEPLOYMENT_MODE': data.deployment_mode || '',
             'JIRA_EMAIL': data.email,
             'JIRA_API_TOKEN': data.token
-        }))
+        }), createValidationHook('jira_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectConfluence', () =>
@@ -837,20 +877,20 @@ export async function activate(context: vscode.ExtensionContext) {
             'CONFLUENCE_DEPLOYMENT_MODE': data.deployment_mode || '',
             'CONFLUENCE_USERNAME': data.email,
             'CONFLUENCE_TOKEN': data.token
-        }))
+        }), createValidationHook('confluence_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectTeams', () =>
         connectWithWebview('teams', 'teams', 'resources/servers/teams/server.js', 'node', (data) => ({
             'TEAMS_TOKEN': data.token,
             'TEAMS_TENANT_ID': data.tenant_id
-        }))
+        }), createValidationHook('teams_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectNotion', () =>
         connectWithWebview('notion', 'notion', 'resources/servers/notion/server.js', 'node', (data) => ({
             'NOTION_TOKEN': data.token
-        }))
+        }), createValidationHook('notion_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectSentry', () =>
@@ -858,7 +898,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'SENTRY_TOKEN': data.token,
             'SENTRY_ORG_SLUG': data.org_slug,
             'SENTRY_BASE_URL': data.base_url
-        }))
+        }), createValidationHook('sentry_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectGHA', () =>
@@ -867,7 +907,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'GITHUB_OWNER': data.owner,
             'GITHUB_REPO': data.repo,
             'GITHUB_API_URL': data.api_url || ''
-        }))
+        }), createValidationHook('github_actions_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectGCP', () =>
@@ -876,7 +916,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'GCP_ACCESS_TOKEN': data.token,
             'GCP_REGION': data.region,
             'GCP_ZONE': data.zone
-        }))
+        }), createValidationHook('gcp_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectAWS', () =>
@@ -885,7 +925,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'AWS_SECRET_ACCESS_KEY': data.secret_key,
             'AWS_SESSION_TOKEN': data.session_token,
             'AWS_REGION': data.region
-        }))
+        }), createValidationHook('aws_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectAzure', () =>
@@ -893,7 +933,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'AZURE_SUBSCRIPTION_ID': data.subscription_id,
             'AZURE_ACCESS_TOKEN': data.token,
             'AZURE_TENANT_ID': data.tenant_id
-        }))
+        }), createValidationHook('azure_health'))
     ));
 
     // Azure DevOps (separate from Cloud)
@@ -902,7 +942,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'AZURE_DEVOPS_ORG_URL': data.org_url,
             'AZURE_DEVOPS_PROJECT': data.project,
             'AZURE_DEVOPS_TOKEN': data.token
-        }))
+        }), createValidationHook('azuredevops_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectKubernetes', () =>
@@ -910,13 +950,13 @@ export async function activate(context: vscode.ExtensionContext) {
             'KUBECONFIG': data.kubeconfig,
             'K8S_API_SERVER': data.api_server,
             'K8S_TOKEN': data.token
-        }))
+        }), createValidationHook('kubernetes_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectDocker', () =>
         connectWithWebview('docker', 'docker', 'resources/servers/docker/server.js', 'node', (data) => ({
             'DOCKER_HOST': data.host
-        }))
+        }), createValidationHook('docker_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectElastic', () =>
@@ -926,7 +966,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'ELASTIC_USERNAME': data.username,
             'ELASTIC_PASSWORD': data.password,
             'ELASTIC_INDICES': data.indices
-        }))
+        }), createValidationHook('elastic_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectObservability', () =>
@@ -934,13 +974,13 @@ export async function activate(context: vscode.ExtensionContext) {
             'PROMETHEUS_URL': data.prometheus_url,
             'GRAFANA_URL': data.grafana_url,
             'GRAFANA_TOKEN': data.grafana_token
-        }))
+        }), createValidationHook('observability_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectPostgres', () =>
         connectWithWebview('postgres', 'postgres', 'resources/servers/db/server.js', 'node', (data) => ({
             'POSTGRES_CONNECTION_STRING': data.connection_string
-        }))
+        }), createValidationHook('postgres_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectTestRail', () =>
@@ -950,7 +990,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'TESTRAIL_API_KEY': data.api_key,
             'TESTRAIL_PROJECT_ID': data.project_id || '',
             'TESTRAIL_SUITE_ID': data.suite_id || ''
-        }))
+        }), createValidationHook('testrail_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectCypress', () =>

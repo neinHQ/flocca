@@ -212,9 +212,9 @@ async function main() {
     };
 
     server.registerTool(
-        'slack_health_check',
+        'slack_health',
         {
-            description: 'Returns "ok" when the Slack MCP server is reachable.',
+            description: 'Health check for Slack connectivity and auth.',
             inputSchema: {
                 type: 'object',
                 properties: {},
@@ -222,10 +222,12 @@ async function main() {
             }
         },
         async () => {
-            console.log('[slack_health_check] <- request');
-            const result = { content: [{ type: 'text', text: 'ok' }] };
-            console.log('[slack_health_check] ->', JSON.stringify(result));
-            return result;
+            try {
+                await validateSlackToken(token);
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            } catch (e) {
+                return errorResult(e, 'slack_health');
+            }
         }
     );
 

@@ -41,6 +41,19 @@ function normalizeError(err) {
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
+    server.registerTool('github_health',
+        {
+            description: 'Health check for GitHub authentication',
+            inputSchema: { type: 'object', properties: {} }
+        },
+        async () => {
+            try {
+                await getKit().rest.rateLimit.get();
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
     server.registerTool('search_repositories',
         {
             description: 'Search GitHub Repositories',

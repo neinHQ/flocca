@@ -70,6 +70,18 @@ async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     // --- Core ---
+    registerToolWithAliases(server, 'azure.health',
+        { description: 'Health check for Azure Session', inputSchema: { type: 'object', properties: {} } },
+        async () => {
+            try {
+                const client = getResourceClient();
+                const rgs = [];
+                for await (const rg of client.resourceGroups.list()) { rgs.push(rg.name); break; }
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, verified: true }) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
     registerToolWithAliases(server, 'azure.configure',
         {
             description: 'Configure Azure Session',

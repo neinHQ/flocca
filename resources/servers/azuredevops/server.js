@@ -137,7 +137,15 @@ async function main() {
             description: 'Health check for Azure DevOps MCP server.',
             inputSchema: { type: 'object', properties: {}, additionalProperties: false }
         },
-        async () => ({ content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] })
+        async () => {
+            try {
+                requireConfigured();
+                await validateConfig({ service_url: sessionConfig.serviceUrl, project: sessionConfig.project, token: sessionConfig.token });
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
     );
 
     server.registerTool(

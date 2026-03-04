@@ -92,7 +92,14 @@ async function main() {
     server.registerTool(
         'docker_health',
         { description: 'Health check for Docker MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => ({ content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] })
+        async () => {
+            try {
+                const version = await validateDocker();
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, serverVersion: version }) }] };
+            } catch (err) {
+                return normalizeError('Failed to connect to Docker daemon', 'DAEMON_UNREACHABLE', err.message);
+            }
+        }
     );
 
     server.registerTool(

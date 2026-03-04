@@ -53,6 +53,16 @@ function registerToolWithAliases(server, name, config, handler) {
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
+    registerToolWithAliases(server, 'github_actions.health',
+        { description: 'Health check for GitHub Actions', inputSchema: { type: 'object', properties: {} } },
+        async () => {
+            try {
+                await getKit().repos.get({ owner: config.owner, repo: config.repo });
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
     registerToolWithAliases(server, 'github_actions.configure',
         { description: 'Configure GHA', inputSchema: { type: 'object', properties: { token: { type: 'string' }, owner: { type: 'string' }, repo: { type: 'string' }, api_url: { type: 'string' } }, required: ['token', 'owner', 'repo'] } },
         async (args) => {

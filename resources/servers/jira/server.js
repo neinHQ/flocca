@@ -179,7 +179,19 @@ async function main() {
         } catch (e) { return normalizeError(e); }
     };
 
+    const healthToolConfig = {
+        description: 'Health Check for Jira',
+        inputSchema: z.object({}).optional()
+    };
+    const healthToolHandler = async () => {
+        try {
+            await jiraGet('myself', { headers: getHeaders() });
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+        } catch (e) { return normalizeError(e); }
+    };
+
     // VS Code/Copilot-compatible tool names.
+    server.registerTool('jira_health', healthToolConfig, healthToolHandler);
     server.registerTool('jira_configure', configureToolConfig, configureToolHandler);
     server.registerTool('jira_search_issues', searchIssuesToolConfig, searchIssuesToolHandler);
     server.registerTool('jira_get_issue', getIssueToolConfig, getIssueToolHandler);
