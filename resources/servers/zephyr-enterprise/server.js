@@ -247,9 +247,8 @@ function requireAtLeastOneField(args, fields) {
 function authHeaders() {
     if (!sessionConfig.auth) return {};
     if (sessionConfig.auth.type === 'api_token') {
-        const { username, token } = sessionConfig.auth;
-        const encoded = Buffer.from(`${username}:${token}`).toString('base64');
-        return { Authorization: `Basic ${encoded}` };
+        const { token } = sessionConfig.auth;
+        return { Authorization: `Bearer ${token}` };
     }
     if (sessionConfig.auth.type === 'basic') {
         const { username, password } = sessionConfig.auth;
