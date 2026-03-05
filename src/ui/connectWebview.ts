@@ -344,8 +344,12 @@ export class ConnectWebview {
         this._panel.webview.onDidReceiveMessage(
             async message => {
                 if (message.command === 'connect') {
-                    await this._onConnect(message.data);
-                    this.dispose();
+                    try {
+                        await this._onConnect(message.data);
+                        this.dispose();
+                    } catch (err: any) {
+                        this._panel.webview.postMessage({ command: 'connect_error', error: err.message || String(err) });
+                    }
                 }
             },
             null,
@@ -540,6 +544,17 @@ export class ConnectWebview {
                         data[input.name] = input.value;
                     });
                     vscode.postMessage({ command: 'connect', data });
+                });
+
+                window.addEventListener('message', event => {
+                    const message = event.data;
+                    if (message.command === 'connect_error') {
+                        if (submitBtn) {
+                            submitBtn.textContent = 'Connect';
+                            submitBtn.classList.remove('connecting');
+                            submitBtn.disabled = false;
+                        }
+                    }
                 });
             </script>
         </body>
