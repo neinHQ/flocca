@@ -49,9 +49,17 @@ function activeApiFamily() {
 
 function projectPathsFor(apiFamily = activeApiFamily()) {
     if (apiFamily === API_FAMILY.FLEX) {
-        return ['flex/services/rest/latest/project/details', 'flex/services/rest/latest/project'];
+        const paths = ['flex/services/rest/latest/project/details', 'flex/services/rest/latest/project'];
+        if (sessionConfig.project && sessionConfig.project.id) {
+            paths.push(`flex/services/rest/latest/project/${sessionConfig.project.id}`);
+        }
+        return paths;
     }
-    return ['public/rest/api/1.0/projects'];
+    const publicPaths = ['public/rest/api/1.0/projects'];
+    if (sessionConfig.project && sessionConfig.project.id) {
+        publicPaths.push(`public/rest/api/1.0/projects/${sessionConfig.project.id}`);
+    }
+    return publicPaths;
 }
 
 function testCaseSearchSpec(args) {
@@ -164,6 +172,13 @@ function testCaseUpdateSpec(id) {
 }
 
 function extractProjects(projectsResp) {
+    if (projectsResp && !Array.isArray(projectsResp) && (projectsResp.id !== undefined || projectsResp.projectId !== undefined) && !projectsResp.values && !projectsResp.projects && !projectsResp.data) {
+        return [{
+            id: projectsResp.id ?? projectsResp.projectId ?? projectsResp.projectID,
+            key: projectsResp.key ?? projectsResp.projectKey ?? projectsResp.name ?? projectsResp.projectName
+        }].filter(p => p.id !== undefined || p.key);
+    }
+
     const rawList = Array.isArray(projectsResp)
         ? projectsResp
         : (projectsResp?.values || projectsResp?.projects || projectsResp?.projectDto || projectsResp?.projectDtos || projectsResp?.data || []);
