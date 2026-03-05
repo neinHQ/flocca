@@ -311,7 +311,7 @@ async function zFetchWithFallback(pathParts, options = {}) {
             lastErr = err;
             if (!err.details) err.details = {};
             err.details.attempted_paths = attemptedPaths.slice();
-            if (err?.http_status === 404 || err?.code === 'NOT_FOUND') {
+            if (err?.http_status === 404 || err?.code === 'NOT_FOUND' || err?.http_status === 403 || err?.code === 'PERMISSION_DENIED') {
                 continue;
             }
             throw err;
@@ -336,7 +336,7 @@ async function validateConfig(args) {
     try {
         projectsResp = await zFetchWithFallback(projectPathsFor(API_FAMILY.PUBLIC), { operation: 'probe_projects', api_family: API_FAMILY.PUBLIC });
     } catch (publicErr) {
-        if (publicErr?.http_status !== 404 && publicErr?.code !== 'NOT_FOUND') {
+        if (publicErr?.http_status !== 404 && publicErr?.code !== 'NOT_FOUND' && publicErr?.http_status !== 403 && publicErr?.code !== 'PERMISSION_DENIED') {
             throw publicErr;
         }
         projectsResp = await zFetchWithFallback(projectPathsFor(API_FAMILY.FLEX), { operation: 'probe_projects', api_family: API_FAMILY.FLEX });
