@@ -15,6 +15,22 @@ suite('ToolArgumentPolicy Test Suite', () => {
         assert.strictEqual(result.ok, true);
     });
 
+    test('zephyr_enterprise_update_test_case accepts camelCase aliases', () => {
+        const result = validateToolArguments('zephyr-enterprise', 'zephyr_enterprise_update_test_case', {
+            testCaseId: 23117,
+            folderId: 1107
+        });
+        assert.strictEqual(result.ok, true);
+    });
+
+    test('zephyr_enterprise_add_test_cases_to_cycle accepts camelCase aliases', () => {
+        const result = validateToolArguments('zephyr-enterprise', 'zephyr_enterprise_add_test_cases_to_cycle', {
+            cycleId: 7,
+            testCaseIds: [23117]
+        });
+        assert.strictEqual(result.ok, true);
+    });
+
     test('zephyr_update_test_case requires key and at least one field', () => {
         const missingKey = validateToolArguments('zephyr', 'zephyr_update_test_case', { title: 'new' });
         assert.strictEqual(missingKey.ok, false);

@@ -666,6 +666,7 @@ export async function activate(context: vscode.ExtensionContext) {
             'ZEPHYR_ENT_USERNAME': data.username,
             'ZEPHYR_ENT_TOKEN': data.token,
             'ZEPHYR_ENT_PROJECT_ID': data.project_id || '',
+            'ZEPHYR_ENT_RELEASE_ID': data.release_id || '',
         }), createValidationHook('zephyr_enterprise_health'))
     ));
 

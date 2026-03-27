@@ -186,7 +186,8 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
             { id: 'url', label: 'Base URL', placeholder: 'https://zephyr.your-company.com', type: 'text' },
             { id: 'username', label: 'Username', placeholder: 'user.name', type: 'text' },
             { id: 'token', label: 'API Token', placeholder: 'Token', type: 'password' },
-            { id: 'project_id', label: 'Project ID (Optional)', placeholder: '123', type: 'text' }
+            { id: 'project_id', label: 'Project ID (Optional)', placeholder: '123', type: 'text' },
+            { id: 'release_id', label: 'Release ID (Optional)', placeholder: '8', type: 'text' }
         ],
         links: [{ text: 'Zephyr Enterprise API Docs', url: 'https://support.smartbear.com/zephyr-enterprise-server/docs/api/index.html' }]
     },

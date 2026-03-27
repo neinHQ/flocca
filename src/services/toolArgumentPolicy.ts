@@ -8,12 +8,19 @@ function isNumber(value: unknown): boolean {
     return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isNumberish(value: unknown): boolean {
+    return isNumber(value) || (typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Number(value)));
+}
+
 function isNonEmptyArray(value: unknown): boolean {
     return Array.isArray(value) && value.length > 0;
 }
 
-function hasAnyField(args: Record<string, unknown>, fields: string[]): boolean {
-    return fields.some((field) => args[field] !== undefined && args[field] !== null);
+function hasAnyField(args: Record<string, unknown>, fields: Array<string | string[]>): boolean {
+    return fields.some((field) => {
+        const keys = Array.isArray(field) ? field : [field];
+        return keys.some((key) => args[key] !== undefined && args[key] !== null);
+    });
 }
 
 export function validateToolArguments(serverName: string, toolName: string, args: unknown): ArgPolicyResult {
@@ -25,17 +32,19 @@ export function validateToolArguments(serverName: string, toolName: string, args
             if (!isNonEmptyString(payload.name)) return { ok: false, reason: 'Missing required argument: name' };
             return { ok: true };
         case 'zephyr_enterprise_update_test_case':
-            if (!isNumber(payload.id)) return { ok: false, reason: 'Missing required argument: id' };
-            if (!hasAnyField(payload, ['name', 'description', 'steps', 'folder_id', 'priority', 'custom_fields'])) {
-                return { ok: false, reason: 'At least one updatable field is required: name, description, steps, folder_id, priority, custom_fields' };
+            if (!isNumberish(payload.id) && !isNumberish(payload.testCaseId) && !isNumberish(payload.test_case_id)) {
+                return { ok: false, reason: 'Missing required argument: id' };
+            }
+            if (!hasAnyField(payload, ['name', 'description', 'steps', ['folder_id', 'folderId'], 'priority', ['custom_fields', 'customFields']])) {
+                return { ok: false, reason: 'At least one updatable field is required: name, description, steps, folder_id/folderId, priority, custom_fields/customFields' };
             }
             return { ok: true };
         case 'zephyr_enterprise_create_cycle':
             if (!isNonEmptyString(payload.name)) return { ok: false, reason: 'Missing required argument: name' };
             return { ok: true };
         case 'zephyr_enterprise_add_test_cases_to_cycle':
-            if (!isNumber(payload.cycle_id)) return { ok: false, reason: 'Missing required argument: cycle_id' };
-            if (!isNonEmptyArray(payload.test_case_ids)) return { ok: false, reason: 'Missing required argument: test_case_ids' };
+            if (!isNumberish(payload.cycle_id) && !isNumberish(payload.cycleId)) return { ok: false, reason: 'Missing required argument: cycle_id/cycleId' };
+            if (!isNonEmptyArray(payload.test_case_ids) && !isNonEmptyArray(payload.testCaseIds)) return { ok: false, reason: 'Missing required argument: test_case_ids/testCaseIds' };
             return { ok: true };
 
         // Zephyr Scale write tools

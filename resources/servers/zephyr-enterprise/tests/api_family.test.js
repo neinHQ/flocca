@@ -43,6 +43,28 @@ describe('Zephyr Enterprise API family routing helpers', () => {
         expect(payload.projectId).toBeUndefined();
     });
 
+    test('create payload accepts camelCase aliases for flex calls', () => {
+        __test.sessionConfig.api_family = __test.API_FAMILY.FLEX;
+        __test.sessionConfig.release_id = 8;
+        const payload = __test.buildCreateTestCasePayload({
+            name: 'TC Flex Alias',
+            description: 'desc',
+            folderId: 1107,
+            priority: 2,
+            customFields: { owner: 'qa' }
+        });
+
+        expect(payload).toMatchObject({
+            tcrCatalogTreeId: 1107,
+            testcase: {
+                name: 'TC Flex Alias',
+                description: 'desc',
+                priority: '2',
+                customFields: { owner: 'qa' }
+            }
+        });
+    });
+
     test('search spec uses flex advancesearch endpoint and wildcard fallback', () => {
         __test.sessionConfig.api_family = __test.API_FAMILY.FLEX;
         __test.sessionConfig.release_id = 123;
@@ -68,10 +90,67 @@ describe('Zephyr Enterprise API family routing helpers', () => {
         });
     });
 
+    test('update payload accepts camelCase aliases and carries release id', () => {
+        __test.sessionConfig.api_family = __test.API_FAMILY.FLEX;
+        __test.sessionConfig.release_id = 8;
+        const payload = __test.buildUpdateTestCasePayload({
+            testCaseId: 23117,
+            folderId: 1107,
+            priority: 2,
+            customFields: { owner: 'qa' }
+        });
+
+        expect(payload).toMatchObject({
+            tcrCatalogTreeId: 1107,
+            releaseId: 8,
+            testcase: {
+                testcaseId: 23117,
+                priority: '2',
+                customFields: { owner: 'qa' }
+            }
+        });
+    });
+
     test('extractProjects handles multiple response shapes', () => {
         expect(__test.extractProjects({ values: [{ id: 1, key: 'A' }] })).toEqual([{ id: 1, key: 'A' }]);
         expect(__test.extractProjects({ projects: [{ projectId: 2, projectKey: 'B' }] })).toEqual([{ id: 2, key: 'B' }]);
         expect(__test.extractProjects([{ id: 3, name: 'C' }])).toEqual([{ id: 3, key: 'C' }]);
+    });
+
+    test('folder request specs prefer flex tree endpoints and fall back to public', () => {
+        __test.sessionConfig.api_family = __test.API_FAMILY.FLEX;
+        __test.sessionConfig.project = { id: 4, key: 'QA' };
+        __test.sessionConfig.release_id = 8;
+
+        expect(__test.folderRequestSpecsFor({})).toEqual([
+            { path: 'flex/services/rest/v3/testcasetree', query: { releaseid: '8' } },
+            { path: 'flex/services/rest/v3/testcasetree', query: { releaseId: '8' } },
+            { path: 'flex/services/rest/latest/testcasetree', query: { releaseid: '8' } },
+            { path: 'flex/services/rest/latest/testcasetree', query: { releaseId: '8' } },
+            { path: 'public/rest/api/1.0/folders', query: { projectId: '4' } }
+        ]);
+    });
+
+    test('extractFolders handles public and flex response shapes', () => {
+        expect(__test.extractFolders([{ id: 1, name: 'Root' }])).toEqual([{ id: 1, name: 'Root' }]);
+        expect(__test.extractFolders({ folders: [{ id: 2, name: 'Child' }] })).toEqual([{ id: 2, name: 'Child' }]);
+        expect(__test.extractFolders({ testcaseTreeGridResponseList: [{ treeid: 3, name: 'Phase' }] })).toEqual([{ treeid: 3, name: 'Phase' }]);
+    });
+
+    test('normalizeTestCaseArgs accepts camelCase aliases', () => {
+        expect(__test.normalizeTestCaseArgs({
+            testCaseId: '23117',
+            folderId: '1107',
+            releaseId: '8',
+            priority: 2,
+            customFields: { owner: 'qa' }
+        })).toMatchObject({
+            id: 23117,
+            folder_id: 1107,
+            release_id: 8,
+            priority: '2',
+            custom_fields: { owner: 'qa' }
+        });
     });
 
     test('lazy api-family detection falls back to flex when public projects endpoint is missing', async () => {

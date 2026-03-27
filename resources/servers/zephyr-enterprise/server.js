@@ -65,6 +65,7 @@ function projectPathsFor(apiFamily = activeApiFamily()) {
 function testCaseSearchSpec(args) {
     const query = (typeof args?.query === 'string' && args.query.trim()) ? args.query.trim() : '*';
     const limit = args?.limit || 50;
+    const releaseId = getNumberArg(args, ['release_id', 'releaseId']) ?? sessionConfig.release_id;
     if (activeApiFamily() === API_FAMILY.FLEX) {
         const queryParams = {
             word: query,
@@ -72,8 +73,8 @@ function testCaseSearchSpec(args) {
             firstresult: '0',
             maxresults: String(limit)
         };
-        if (sessionConfig.release_id) {
-            queryParams.releaseid = String(sessionConfig.release_id);
+        if (releaseId) {
+            queryParams.releaseid = String(releaseId);
         }
         return {
             paths: ['flex/services/rest/latest/advancesearch'],
@@ -103,51 +104,53 @@ function testCaseGetPaths(id) {
 }
 
 function buildCreateTestCasePayload(args) {
-    const mappedSteps = args.steps?.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
+    const normalizedArgs = normalizeTestCaseArgs(args);
+    const mappedSteps = normalizedArgs.steps?.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
     if (activeApiFamily() === API_FAMILY.FLEX) {
         return {
-            tcrCatalogTreeId: args.folder_id || 0,
+            tcrCatalogTreeId: normalizedArgs.folder_id || 0,
             testcase: {
-                name: args.name,
-                description: args.description,
-                priority: args.priority,
-                customFields: args.custom_fields,
+                name: normalizedArgs.name,
+                description: normalizedArgs.description,
+                priority: normalizedArgs.priority,
+                customFields: normalizedArgs.custom_fields,
                 steps: mappedSteps
             }
         };
     }
     return {
         projectId: sessionConfig.project.id,
-        name: args.name,
-        description: args.description,
-        folderId: args.folder_id,
-        priority: args.priority,
-        customFields: args.custom_fields,
+        name: normalizedArgs.name,
+        description: normalizedArgs.description,
+        folderId: normalizedArgs.folder_id,
+        priority: normalizedArgs.priority,
+        customFields: normalizedArgs.custom_fields,
         steps: mappedSteps
     };
 }
 
 function buildUpdateTestCasePayload(args) {
+    const normalizedArgs = normalizeTestCaseArgs(args);
     if (activeApiFamily() === API_FAMILY.FLEX) {
-        const testcase = { testcaseId: args.id };
-        if (args.name) testcase.name = args.name;
-        if (args.description) testcase.description = args.description;
-        if (args.priority) testcase.priority = args.priority;
-        if (args.custom_fields) testcase.customFields = args.custom_fields;
-        if (args.steps) testcase.steps = args.steps.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
+        const testcase = { testcaseId: normalizedArgs.id };
+        if (normalizedArgs.name) testcase.name = normalizedArgs.name;
+        if (normalizedArgs.description) testcase.description = normalizedArgs.description;
+        if (normalizedArgs.priority) testcase.priority = normalizedArgs.priority;
+        if (normalizedArgs.custom_fields) testcase.customFields = normalizedArgs.custom_fields;
+        if (normalizedArgs.steps) testcase.steps = normalizedArgs.steps.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
         const payload = { testcase };
-        if (args.folder_id) payload.tcrCatalogTreeId = args.folder_id;
-        if (sessionConfig.release_id) payload.releaseId = sessionConfig.release_id;
+        if (normalizedArgs.folder_id) payload.tcrCatalogTreeId = normalizedArgs.folder_id;
+        if (normalizedArgs.release_id) payload.releaseId = normalizedArgs.release_id;
         return payload;
     }
 
     const payload = {};
-    if (args.name) payload.name = args.name;
-    if (args.description) payload.description = args.description;
-    if (args.folder_id) payload.folderId = args.folder_id;
-    if (args.priority) payload.priority = args.priority;
-    if (args.custom_fields) payload.customFields = args.custom_fields;
-    if (args.steps) payload.steps = args.steps.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
+    if (normalizedArgs.name) payload.name = normalizedArgs.name;
+    if (normalizedArgs.description) payload.description = normalizedArgs.description;
+    if (normalizedArgs.folder_id) payload.folderId = normalizedArgs.folder_id;
+    if (normalizedArgs.priority) payload.priority = normalizedArgs.priority;
+    if (normalizedArgs.custom_fields) payload.customFields = normalizedArgs.custom_fields;
+    if (normalizedArgs.steps) payload.steps = normalizedArgs.steps.map((s, i) => ({ index: i + 1, step: s.step, expectedResult: s.expected }));
     return payload;
 }
 
@@ -259,6 +262,86 @@ function requireAtLeastOneField(args, fields) {
     }
 }
 
+function getArg(args, keys) {
+    for (const key of keys) {
+        const value = args?.[key];
+        if (value !== undefined && value !== null && value !== '') {
+            return value;
+        }
+    }
+    return undefined;
+}
+
+function getNumberArg(args, keys) {
+    const value = getArg(args, keys);
+    if (value === undefined) return undefined;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+}
+
+function getStringArg(args, keys) {
+    const value = getArg(args, keys);
+    if (value === undefined) return undefined;
+    return typeof value === 'string' ? value : String(value);
+}
+
+function normalizePriority(value) {
+    if (value === undefined || value === null || value === '') {
+        return undefined;
+    }
+    return String(value);
+}
+
+function normalizeTestCaseArgs(args = {}) {
+    return {
+        id: getNumberArg(args, ['id', 'test_case_id', 'testCaseId']),
+        name: getStringArg(args, ['name']),
+        description: getStringArg(args, ['description']),
+        steps: Array.isArray(args?.steps) ? args.steps : undefined,
+        folder_id: getNumberArg(args, ['folder_id', 'folderId']),
+        priority: normalizePriority(getArg(args, ['priority'])),
+        custom_fields: getArg(args, ['custom_fields', 'customFields']),
+        release_id: getNumberArg(args, ['release_id', 'releaseId']) ?? sessionConfig.release_id
+    };
+}
+
+function folderRequestSpecsFor(args = {}) {
+    const projectId = getNumberArg(args, ['project_id', 'projectId']) ?? sessionConfig.project?.id;
+    const releaseId = getNumberArg(args, ['release_id', 'releaseId']) ?? sessionConfig.release_id;
+    const publicRequest = projectId
+        ? [{ path: 'public/rest/api/1.0/folders', query: { projectId: String(projectId) } }]
+        : [];
+    const flexRequests = releaseId
+        ? [
+            { path: 'flex/services/rest/v3/testcasetree', query: { releaseid: String(releaseId) } },
+            { path: 'flex/services/rest/v3/testcasetree', query: { releaseId: String(releaseId) } },
+            { path: 'flex/services/rest/latest/testcasetree', query: { releaseid: String(releaseId) } },
+            { path: 'flex/services/rest/latest/testcasetree', query: { releaseId: String(releaseId) } }
+        ]
+        : [];
+
+    return activeApiFamily() === API_FAMILY.FLEX
+        ? [...flexRequests, ...publicRequest]
+        : [...publicRequest, ...flexRequests];
+}
+
+function extractFolders(foldersResp) {
+    if (Array.isArray(foldersResp)) {
+        return foldersResp;
+    }
+    return foldersResp?.folders
+        || foldersResp?.values
+        || foldersResp?.results
+        || foldersResp?.data
+        || foldersResp?.testcaseTreeGridResponseList
+        || foldersResp?.items
+        || [];
+}
+
 function authHeaders() {
     if (!sessionConfig.auth) return {};
     if (sessionConfig.auth.type === 'api_token') {
@@ -316,12 +399,18 @@ async function zFetch(pathPart, { method = 'GET', query, body, headers, operatio
 }
 
 async function zFetchWithFallback(pathParts, options = {}) {
+    return zFetchWithRequestFallback(pathParts.map((path) => ({ path })), options);
+}
+
+async function zFetchWithRequestFallback(requests, options = {}) {
     let lastErr;
     const attemptedPaths = [];
-    for (const pathPart of pathParts) {
+    for (const request of requests) {
+        const { path, ...requestOptions } = request;
         try {
-            attemptedPaths.push(pathPart);
-            return await zFetch(pathPart, options);
+            const queryString = requestOptions.query ? `?${new URLSearchParams(requestOptions.query).toString()}` : '';
+            attemptedPaths.push(`${path}${queryString}`);
+            return await zFetch(path, { ...options, ...requestOptions });
         } catch (err) {
             lastErr = err;
             if (!err.details) err.details = {};
@@ -477,12 +566,16 @@ async function main() {
 
     server.registerTool(
         'zephyr_enterprise_list_folders',
-        { description: 'List folders for a project.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' } }, additionalProperties: false } },
+        { description: 'List folders for a project.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' }, release_id: { type: 'number' } }, additionalProperties: false } },
         async (args) => {
             try {
                 await ensureConfigured();
-                const projectId = args.project_id || sessionConfig.project.id;
-                const folders = await zFetch(`public/rest/api/1.0/folders?projectId=${projectId}`);
+                const releaseId = getNumberArg(args, ['release_id', 'releaseId']);
+                if (releaseId !== undefined) {
+                    sessionConfig.release_id = releaseId;
+                }
+                const foldersResp = await zFetchWithRequestFallback(folderRequestSpecsFor(args), { operation: 'list_folders' });
+                const folders = extractFolders(foldersResp);
                 return { content: [{ type: 'text', text: JSON.stringify({ folders }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -534,8 +627,10 @@ async function main() {
         { description: 'Get test case details.', inputSchema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'], additionalProperties: false } },
         async (args) => {
             try {
+                const id = getNumberArg(args, ['id', 'test_case_id', 'testCaseId']);
+                requireNumber(id, 'id');
                 await ensureConfigured();
-                const data = await zFetchWithFallback(testCaseGetPaths(args.id), { operation: 'get_test_case' });
+                const data = await zFetchWithFallback(testCaseGetPaths(id), { operation: 'get_test_case' });
                 return { content: [{ type: 'text', text: JSON.stringify(data) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -563,12 +658,16 @@ async function main() {
         },
         async (args) => {
             try {
-                requireNonEmptyString(args?.name, 'name');
+                const normalizedArgs = normalizeTestCaseArgs(args);
+                if (normalizedArgs.release_id !== undefined) {
+                    sessionConfig.release_id = normalizedArgs.release_id;
+                }
+                requireNonEmptyString(normalizedArgs.name, 'name');
                 ensureWritable();
                 await ensureConfigured();
-                const payload = buildCreateTestCasePayload(args);
+                const payload = buildCreateTestCasePayload(normalizedArgs);
                 const data = await zFetchWithFallback(testCaseCreatePaths(), { method: 'POST', body: payload, operation: 'create_test_case' });
-                return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, key: data.key }) }] };
+                return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, key: data.key, testCaseId: data?.testcase?.testcaseId ?? data?.testcaseId, tcrCatalogTreeId: data?.tcrCatalogTreeId }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
             }
@@ -596,14 +695,18 @@ async function main() {
         },
         async (args) => {
             try {
-                requireNumber(args?.id, 'id');
-                requireAtLeastOneField(args, ['name', 'description', 'steps', 'folder_id', 'priority', 'custom_fields']);
+                const normalizedArgs = normalizeTestCaseArgs(args);
+                if (normalizedArgs.release_id !== undefined) {
+                    sessionConfig.release_id = normalizedArgs.release_id;
+                }
+                requireNumber(normalizedArgs.id, 'id');
+                requireAtLeastOneField(normalizedArgs, ['name', 'description', 'steps', 'folder_id', 'priority', 'custom_fields']);
                 ensureWritable();
                 await ensureConfigured();
-                const payload = buildUpdateTestCasePayload(args);
-                const updateSpec = testCaseUpdateSpec(args.id);
+                const payload = buildUpdateTestCasePayload(normalizedArgs);
+                const updateSpec = testCaseUpdateSpec(normalizedArgs.id);
                 const data = await zFetchWithFallback(updateSpec.paths, { ...updateSpec.options, body: payload });
-                return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, key: data.key }) }] };
+                return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, key: data.key, testCaseId: data?.testcase?.testcaseId ?? data?.testcaseId, tcrCatalogTreeId: data?.tcrCatalogTreeId }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
             }
@@ -826,12 +929,15 @@ module.exports = {
         sessionConfig,
         ensureApiFamilyDetected,
         projectPathsFor,
+        folderRequestSpecsFor,
         testCaseSearchSpec,
         testCaseGetPaths,
         testCaseCreatePaths,
         testCaseUpdateSpec,
         buildCreateTestCasePayload,
         buildUpdateTestCasePayload,
-        extractProjects
+        extractProjects,
+        extractFolders,
+        normalizeTestCaseArgs
     }
 };
