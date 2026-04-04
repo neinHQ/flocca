@@ -231,11 +231,35 @@ function ensureWritable() {
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     const originalRegisterTool = server.registerTool.bind(server);
-    const permissiveInputSchema = z.object({}).passthrough();
+
+    function schemaToZod(schema) {
+        if (!schema) return z.object({}).passthrough();
+        if (schema.type === 'object') {
+            const shape = {};
+            if (schema.properties) {
+                for (const [key, val] of Object.entries(schema.properties)) {
+                    let field = schemaToZod(val);
+                    if (val.description) field = field.describe(val.description);
+                    if (schema.required && !schema.required.includes(key)) field = field.optional();
+                    shape[key] = field;
+                }
+            }
+            let obj = z.object(shape);
+            if (schema.additionalProperties === false) obj = obj.strict();
+            else if (schema.additionalProperties) obj = obj.catchall(schemaToZod(schema.additionalProperties));
+            return obj;
+        }
+        if (schema.type === 'string') return schema.enum ? z.enum(schema.enum) : z.string();
+        if (schema.type === 'number') return z.number();
+        if (schema.type === 'boolean') return z.boolean();
+        if (schema.type === 'array') return z.array(schema.items ? schemaToZod(schema.items) : z.any());
+        return z.any();
+    }
+
     server.registerTool = (name, config, handler) => {
         const nextConfig = { ...(config || {}) };
         if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = permissiveInputSchema;
+            nextConfig.inputSchema = schemaToZod(nextConfig.inputSchema);
         }
         return originalRegisterTool(name, nextConfig, handler);
     };

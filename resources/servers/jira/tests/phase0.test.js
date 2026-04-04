@@ -6,7 +6,7 @@ const { __test } = require('../server');
 describe('Jira Phase 0', () => {
   beforeEach(() => {
     axios.get.mockReset();
-    __test.setConfig({ url: 'https://jira.example.com', deploymentMode: 'cloud' });
+    __test.setConfig({ url: 'https://jira.example.com', deploymentMode: 'cloud', token: 'test' });
   });
 
   test('normalizes base URL by removing trailing slash', () => {

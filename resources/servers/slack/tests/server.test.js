@@ -8,7 +8,7 @@ describe('Slack MCP Server', () => {
         const source = fs.readFileSync(serverPath, 'utf-8');
         const names = [...source.matchAll(/server\.registerTool\(\s*'([^']+)'/g)].map((m) => m[1]);
         expect(names.length).toBeGreaterThan(0);
-        expect(names).toContain('slack_health_check');
+        expect(names).toContain('slack_health');
         expect(names).toContain('slack_send_message');
         for (const name of names) {
             expect(name).toMatch(/^[A-Za-z0-9._-]+$/);

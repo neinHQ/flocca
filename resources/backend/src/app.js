@@ -249,8 +249,8 @@ app.get('/subscription/status', async (req, res) => {
     // No, better to mount /billing and redirect /subscription/status to it?
     // Or just implement it here to keep clean.
 
-    const userId = req.query.userId || req.headers['x-flocca-user-id'];
-    if (!userId) return res.json({ plan: 'free' });
+    const userId = req.query.userId || req.query.user_id || req.headers['x-flocca-user-id'];
+    if (!userId) return res.json({ status: 'none', plan: 'free' });
 
     const { PrismaClient } = require('@prisma/client'); // Or get singleton
     const prisma = require('./db');
@@ -302,7 +302,7 @@ app.get('/subscription/status', async (req, res) => {
         const permissions = FEATURES[plan] || FEATURES.free;
 
         res.json({
-            status: (plan === 'individual' || plan === 'teams' || plan === 'enterprise') ? 'active' : 'inactive', // For legacy extension check
+            status: plan === 'free' ? 'none' : ((plan === 'individual' || plan === 'teams' || plan === 'enterprise') ? 'active' : 'inactive'), // For legacy extension check
             plan: plan,
             features: permissions
         });

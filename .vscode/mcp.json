@@ -4,13 +4,13 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "/Users/alashine/.vscode/extensions/flocca.flocca-0.1.20/resources/servers/codebase/server.js"
+        "/Users/alashine/.vscode/extensions/flocca.flocca-0.1.24/resources/servers/codebase/server.js"
       ]
     },
     "playwright": {
       "command": "node",
       "args": [
-        "/Users/alashine/.vscode/extensions/flocca.flocca-0.1.20/resources/servers/playwright/server.js"
+        "/Users/alashine/.vscode/extensions/flocca.flocca-0.1.24/resources/servers/playwright/server.js"
       ],
       "env": {
         "FLOCCA_USER_ID": "9d401247-c6ea-4053-b226-6e30bde7298d",
@@ -21,7 +21,7 @@
     "pytest": {
       "command": "python3",
       "args": [
-        "/Users/alashine/.vscode/extensions/flocca.flocca-0.1.20/resources/servers/pytest/server.py"
+        "/Users/alashine/.vscode/extensions/flocca.flocca-0.1.24/resources/servers/pytest/server.py"
       ],
       "env": {
         "FLOCCA_USER_ID": "9d401247-c6ea-4053-b226-6e30bde7298d",

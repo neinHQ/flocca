@@ -300,31 +300,54 @@ async function main() {
 
     // ── Action Layer ───────────────────────────────────────────────────────────
 
-    server.registerTool('jira_create_issue',
+    server.registerTool('jira_get_create_metadata',
         {
-            description: 'Create a new Jira issue (Bug, Story, Task, etc.).',
+            description: 'Get project and issue type metadata (mandatory fields, custom field IDs) required before creating an issue.',
             inputSchema: z.object({
-                project_key: z.string(),
-                summary: z.string(),
-                issue_type: z.string().default('Bug'),
-                description: z.string().optional(),
-                priority: z.string().optional(),
-                assignee_account_id: z.string().optional(),
-                labels: z.array(z.string()).optional(),
-                additional_fields: z.record(z.any()).optional()
+                projectKey: z.string().describe("The Jira project key (e.g., 'PROJ')"),
+                issueType: z.string().describe("The issue type name (e.g., 'Bug', 'Story')")
             })
         },
         async (args) => {
             try {
+                // Note: older Jira environments use issue/createmeta with expand parameter
+                const params = { projectKeys: args.projectKey, issuetypeNames: args.issueType, expand: 'projects.issuetypes.fields' };
+                const res = await jiraGet('issue/createmeta', { headers: getHeaders(), params });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    server.registerTool('jira_create_issue',
+        {
+            description: 'Creates a new Jira issue. STOP: You must call jira_get_create_metadata first to identify mandatory fields.',
+            inputSchema: z.object({
+                projectKey: z.string().describe("Uppercase Jira project key (e.g., 'PROJ'). MUST be fetched from context or metadata tool."),
+                issueType: z.enum(['Bug', 'Task', 'Story', 'Epic', 'Subtask', 'Sub-task', 'Defect']).describe("The exact issue type. Do not guess types not in this list."),
+                summary: z.string().describe("Concise title."),
+                description: z.string().optional(),
+                priority: z.enum(['Highest', 'High', 'Medium', 'Low', 'Lowest']).optional(),
+                assigneeAccountId: z.string().optional(),
+                labels: z.array(z.string()).optional(),
+                additionalFields: z.object({}).catchall(z.any()).optional()
+            })
+        },
+        async (args) => {
+            try {
+                const projectKey = args.projectKey || args.project_key;
+                const issueType = args.issueType || args.issue_type;
+                const assigneeAccountId = args.assigneeAccountId || args.assignee_account_id;
+                const additionalFields = args.additionalFields || args.additional_fields || {};
+                
                 const fields = {
-                    project: { key: args.project_key },
+                    project: { key: projectKey },
                     summary: args.summary,
-                    issuetype: { name: args.issue_type },
+                    issuetype: { name: issueType },
                     ...(args.description ? { description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: args.description }] }] } } : {}),
                     ...(args.priority ? { priority: { name: args.priority } } : {}),
-                    ...(args.assignee_account_id ? { assignee: { accountId: args.assignee_account_id } } : {}),
+                    ...(assigneeAccountId ? { assignee: { accountId: assigneeAccountId } } : {}),
                     ...(args.labels ? { labels: args.labels } : {}),
-                    ...(args.additional_fields || {})
+                    ...additionalFields
                 };
                 const res = await jiraPost('issue', { fields }, { headers: getHeaders() });
                 return { content: [{ type: 'text', text: JSON.stringify({ key: res.data.key, id: res.data.id, self: res.data.self }) }] };
@@ -342,7 +365,7 @@ async function main() {
                 priority: z.string().optional(),
                 assignee_account_id: z.string().optional(),
                 labels: z.array(z.string()).optional(),
-                additional_fields: z.record(z.any()).optional()
+                additional_fields: z.object({}).catchall(z.any()).optional()
             })
         },
         async (args) => {
@@ -373,8 +396,11 @@ async function main() {
 
     server.registerTool('jira_transition_issue',
         {
-            description: 'Move an issue to a new workflow status. Use jira_list_transitions first to get valid transition IDs.',
-            inputSchema: z.object({ issue_key: z.string(), transition_id: z.string() })
+            description: 'Move an issue to a new workflow status. STOP: NEVER GUESS transition_id. You MUST call jira_list_transitions first to get valid transition IDs.',
+            inputSchema: z.object({ 
+                issue_key: z.string().describe("The Jira issue key to transition."), 
+                transition_id: z.string().describe("The transition ID. NEVER guess this. You must fetch it from jira_list_transitions.") 
+            })
         },
         async (args) => {
             try {
@@ -404,7 +430,7 @@ async function main() {
         {
             description: 'Link two Jira issues (e.g., "blocks", "is blocked by", "relates to").',
             inputSchema: z.object({
-                link_type: z.string().describe('e.g. "blocks", "Duplicate", "relates to"'),
+                link_type: z.string().describe('The name of the link type (e.g. "Blocks", "Duplicate", "Relates"). DO NOT HALLUCINATE.'),
                 inward_issue_key: z.string(),
                 outward_issue_key: z.string(),
                 comment: z.string().optional()

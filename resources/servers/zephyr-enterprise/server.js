@@ -495,11 +495,35 @@ async function validateConfig(args) {
 async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     const originalRegisterTool = server.registerTool.bind(server);
-    const permissiveInputSchema = z.object({}).passthrough();
+    
+    function schemaToZod(schema) {
+        if (!schema) return z.object({}).passthrough();
+        if (schema.type === 'object') {
+            const shape = {};
+            if (schema.properties) {
+                for (const [key, val] of Object.entries(schema.properties)) {
+                    let field = schemaToZod(val);
+                    if (val.description) field = field.describe(val.description);
+                    if (schema.required && !schema.required.includes(key)) field = field.optional();
+                    shape[key] = field;
+                }
+            }
+            let obj = z.object(shape);
+            if (schema.additionalProperties === false) obj = obj.strict();
+            else if (schema.additionalProperties) obj = obj.catchall(schemaToZod(schema.additionalProperties));
+            return obj;
+        }
+        if (schema.type === 'string') return schema.enum ? z.enum(schema.enum) : z.string();
+        if (schema.type === 'number') return z.number();
+        if (schema.type === 'boolean') return z.boolean();
+        if (schema.type === 'array') return z.array(schema.items ? schemaToZod(schema.items) : z.any());
+        return z.any();
+    }
+
     server.registerTool = (name, config, handler) => {
         const nextConfig = { ...(config || {}) };
         if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = permissiveInputSchema;
+            nextConfig.inputSchema = schemaToZod(nextConfig.inputSchema);
         }
         return originalRegisterTool(name, nextConfig, handler);
     };
@@ -726,11 +750,11 @@ async function main() {
             inputSchema: {
                 type: 'object',
                 properties: {
-                    id: { type: 'number' },
+                    id: { type: 'number', description: 'Test case ID to update. NEVER GUESS. Fetch from zephyr_enterprise_search_test_cases.' },
                     name: { type: 'string' },
                     description: { type: 'string' },
                     steps: { type: 'array', items: { type: 'object' } },
-                    folder_id: { type: 'number' },
+                    folder_id: { type: 'number', description: 'The tcrCatalogTreeId (folder). NEVER GUESS. Call zephyr_enterprise_list_tcr_folders first.' },
                     priority: { type: 'string' },
                     custom_fields: { type: 'object' }
                 },
@@ -814,8 +838,8 @@ async function main() {
     server.registerTool(
         'zephyr_enterprise_add_phase_to_cycle',
         {
-            description: 'Add a new phase to an existing cycle.',
-            inputSchema: { type: 'object', properties: { cycle_id: { type: 'number' }, name: { type: 'string' } }, required: ['cycle_id', 'name'], additionalProperties: false }
+            description: 'Add a new phase to an existing cycle. STOP: NEVER GUESS cycle_id.',
+            inputSchema: { type: 'object', properties: { cycle_id: { type: 'number', description: 'NEVER GUESS. Fetch from zephyr_enterprise_list_cycles.' }, name: { type: 'string' } }, required: ['cycle_id', 'name'], additionalProperties: false }
         },
         async (args) => {
             try {
@@ -854,10 +878,10 @@ async function main() {
     server.registerTool(
         'zephyr_enterprise_add_test_cases_to_cycle',
         {
-            description: 'Add test cases to cycle.',
+            description: 'Add test cases to cycle. STOP: NEVER GUESS IDs.',
             inputSchema: {
                 type: 'object',
-                properties: { cycle_id: { type: 'number' }, test_case_ids: { type: 'array', items: { type: 'number' } }, environment: { type: 'string' }, version: { type: 'string' } },
+                properties: { cycle_id: { type: 'number', description: 'NEVER GUESS. Fetch from zephyr_enterprise_list_cycles.' }, test_case_ids: { type: 'array', items: { type: 'number' }, description: 'NEVER GUESS. Fetch from zephyr_enterprise_search_test_cases.' }, environment: { type: 'string' }, version: { type: 'string' } },
                 required: ['cycle_id', 'test_case_ids'],
                 additionalProperties: false
             }
@@ -879,7 +903,7 @@ async function main() {
 
     server.registerTool(
         'zephyr_enterprise_list_executions',
-        { description: 'List executions for a cycle.', inputSchema: { type: 'object', properties: { cycle_id: { type: 'number' } }, required: ['cycle_id'], additionalProperties: false } },
+        { description: 'List executions for a cycle. STOP: NEVER GUESS cycle_id.', inputSchema: { type: 'object', properties: { cycle_id: { type: 'number', description: 'NEVER GUESS. Fetch from zephyr_enterprise_list_cycles.' } }, required: ['cycle_id'], additionalProperties: false } },
         async (args) => {
             try {
                 await ensureConfigured();
@@ -894,11 +918,11 @@ async function main() {
     server.registerTool(
         'zephyr_enterprise_update_execution',
         {
-            description: 'Update execution status/comment/time.',
+            description: 'Update execution status/comment/time. STOP: NEVER GUESS execution_id.',
             inputSchema: {
                 type: 'object',
                 properties: {
-                    execution_id: { type: 'number' },
+                    execution_id: { type: 'number', description: 'NEVER GUESS. Fetch from zephyr_enterprise_list_executions.' },
                     status: { type: 'string', enum: ['PASS', 'FAIL', 'BLOCKED', 'WIP', 'NOT_EXECUTED'] },
                     comment: { type: 'string' },
                     execution_time_ms: { type: 'number' }

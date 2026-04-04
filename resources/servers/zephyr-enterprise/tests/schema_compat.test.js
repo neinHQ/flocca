@@ -79,6 +79,14 @@ describe('Zephyr Enterprise MCP schema compatibility', () => {
                 expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
             }
 
+            // Verify AST parser successfully translated descriptions and JSON shapes
+            const createTestCaseTool = list.result.tools.find(t => t.name === 'zephyr_enterprise_create_test_case');
+            expect(createTestCaseTool).toBeDefined();
+            expect(createTestCaseTool.description).toContain('STOP: You MUST call');
+            expect(createTestCaseTool.inputSchema).toBeDefined();
+            expect(createTestCaseTool.inputSchema.properties.tcr_catalog_tree_id.description).toContain('NEVER guess');
+            expect(createTestCaseTool.inputSchema.properties.folder_id.description).toContain('NEVER guess');
+
             const search = await harness.request('tools/call', {
                 name: 'zephyr_enterprise_search_test_cases',
                 arguments: { query: 'smoke' }
@@ -100,7 +108,7 @@ describe('Zephyr Enterprise MCP schema compatibility', () => {
             expect(invalidCreate.error).toBeUndefined();
             expect(invalidCreate.result?.isError).toBe(true);
             const invalidCreateText = JSON.stringify(invalidCreate.result?.content || []);
-            expect(invalidCreateText).toContain('INVALID_REQUEST');
+            expect(invalidCreateText).toContain('Input validation error');
             expect(invalidCreateText).toContain('name');
 
             const getOne = await harness.request('tools/call', {
