@@ -685,14 +685,15 @@ async function main() {
     server.registerTool(
         'zephyr_enterprise_create_test_case',
         {
-            description: 'Create a test case.',
+            description: 'Create a new test case. STOP: You MUST call zephyr_enterprise_list_tcr_folders first to discover a valid folder_id (tcr_catalog_tree_id).',
             inputSchema: {
                 type: 'object',
                 properties: {
-                    name: { type: 'string' },
+                    name: { type: 'string', description: 'Test case name/title.' },
                     description: { type: 'string' },
                     steps: { type: 'array', items: { type: 'object', properties: { step: { type: 'string' }, expected: { type: 'string' } } } },
-                    folder_id: { type: 'number' },
+                    folder_id: { type: 'number', description: 'The tcrCatalogTreeId (folder) to place the test in. NEVER guess this. You MUST fetch it from zephyr_enterprise_list_tcr_folders first.' },
+                    tcr_catalog_tree_id: { type: 'number', description: 'Exact same as folder_id. NEVER guess this. Call zephyr_enterprise_list_tcr_folders first.' },
                     priority: { type: 'string' },
                     custom_fields: { type: 'object' }
                 },
