@@ -1,6 +1,6 @@
 # Flocca - Connect MCP Servers in VS Code
 
-**Connect MCP servers in VS Code to run workflows across Jira, GitHub, cloud, QA, and DevOps tools from one dashboard.**
+**Connect MCP servers in your IDE to run workflows across Jira, GitHub, Cloud, QA, and DevOps tools from one dashboard.**
 
 Flocca helps teams connect their apps through MCP so AI agents can run real workflows securely from the IDE.
 

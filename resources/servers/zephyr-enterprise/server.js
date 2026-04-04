@@ -331,7 +331,18 @@ function folderRequestSpecsFor(args = {}) {
 
 function tcrFolderRequestSpecsFor(args = {}) {
     const releaseId = getNumberArg(args, ['release_id', 'releaseId']) ?? sessionConfig.release_id;
+    const parentId = getNumberArg(args, ['parent_id', 'parentId']);
     const flexRequests = [];
+
+    // If parent_id is given, fetch children of that specific folder
+    if (parentId !== undefined) {
+        flexRequests.push(
+            { path: `flex/services/rest/v3/testcasetree/${parentId}` },
+            { path: `flex/services/rest/latest/testcasetree/${parentId}` }
+        );
+        return flexRequests;
+    }
+
     if (releaseId !== undefined) {
         flexRequests.push(
             { path: 'flex/services/rest/v3/testcasetree', query: { releaseid: String(releaseId) } },
@@ -634,7 +645,26 @@ async function main() {
 
     server.registerTool(
         'zephyr_enterprise_list_tcr_folders',
-        { description: 'List Test Repository (TCR) folders (tcrCatalogTree) to discover valid tcr_catalog_tree_id values.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' }, release_id: { type: 'number' } }, additionalProperties: false } },
+        {
+            description: [
+                'List Test Repository (TCR) folders to discover valid tcr_catalog_tree_id values.',
+                'Supports subfolder drilling: pass parent_id to list children of a specific folder.',
+                'Use recursive=true to walk the full tree (caution: may be large).',
+                'WORKFLOW: call without parent_id first to get top-level folders, then pass a parent_id to drill into subfolders.'
+            ].join(' '),
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    project_id: { type: 'number', description: 'Filter by project ID.' },
+                    release_id: { type: 'number', description: 'Filter by release ID.' },
+                    parent_id: { type: 'number', description: 'OPTIONAL. The tcrCatalogTreeId of a parent folder whose children you want. If omitted, returns top-level folders. Use this to drill into subfolders like "SAS Health Tests".' },
+                    recursive: { type: 'boolean', description: 'OPTIONAL. If true, recursively fetches all subfolders under parent_id (or root). Default: false.' },
+                    max_depth: { type: 'number', description: 'OPTIONAL. Max recursion depth when recursive=true. Default: 5.' }
+                },
+                required: [],
+                additionalProperties: false
+            }
+        },
         async (args) => {
             try {
                 await ensureConfigured();
@@ -642,6 +672,32 @@ async function main() {
                 if (releaseId !== undefined) {
                     sessionConfig.release_id = releaseId;
                 }
+
+                const recursive = args.recursive === true;
+                const maxDepth = getNumberArg(args, ['max_depth', 'maxDepth']) ?? 5;
+
+                if (recursive) {
+                    // Walk the full subfolder tree
+                    const walkTree = async (parentArgs, depth) => {
+                        if (depth > maxDepth) return [];
+                        const resp = await zFetchWithRequestFallback(tcrFolderRequestSpecsFor(parentArgs), { operation: 'list_tcr_folders' });
+                        const folders = extractFolders(resp);
+                        const results = [];
+                        for (const folder of folders) {
+                            const folderId = folder.id ?? folder.tcrCatalogTreeId ?? folder.tcr_catalog_tree_id;
+                            results.push(folder);
+                            if (folderId !== undefined) {
+                                const children = await walkTree({ ...parentArgs, parent_id: folderId }, depth + 1);
+                                results.push(...children);
+                            }
+                        }
+                        return results;
+                    };
+                    const allFolders = await walkTree(args, 0);
+                    return { content: [{ type: 'text', text: JSON.stringify({ folders: allFolders, total: allFolders.length }) }] };
+                }
+
+                // Default: flat fetch (supports parent_id for one level of drilling)
                 const foldersResp = await zFetchWithRequestFallback(tcrFolderRequestSpecsFor(args), { operation: 'list_tcr_folders' });
                 const folders = extractFolders(foldersResp);
                 return { content: [{ type: 'text', text: JSON.stringify({ folders }) }] };
