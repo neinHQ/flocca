@@ -492,6 +492,20 @@ async function main() {
         }
     );
 
+    server.registerTool('jira_get_active_sprint',
+        {
+            description: 'Get the active sprint for a given board. Focuses AI on sprint goals. Use jira_list_boards to find board IDs.',
+            inputSchema: z.object({ board_id: z.number().int() })
+        },
+        async (args) => {
+            try {
+                const params = { state: 'active' };
+                const res = await jiraAgileGet(`board/${args.board_id}/sprint`, { headers: getHeaders(), params });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data.values || []) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
     server.registerTool('jira_get_sprint_issues',
         {
             description: 'Get all issues in a sprint. Use jira_list_sprints to find sprint IDs.',
