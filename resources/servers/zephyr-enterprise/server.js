@@ -647,19 +647,23 @@ async function main() {
         'zephyr_enterprise_list_tcr_folders',
         {
             description: [
-                'List Test Repository (TCR) folders to discover valid tcr_catalog_tree_id values.',
-                'Supports subfolder drilling: pass parent_id to list children of a specific folder.',
-                'Use recursive=true to walk the full tree (caution: may be large).',
-                'WORKFLOW: call without parent_id first to get top-level folders, then pass a parent_id to drill into subfolders.'
+                'List Test Repository (TCR) folders to discover valid tcr_catalog_tree_id values. MANDATORY WORKFLOW — follow exactly:',
+                '(1) Call with NO parent_id to get the top-level folder list.',
+                '(2) If the target folder name does NOT appear in the result, it is a subfolder.',
+                '    You MUST call this tool again with parent_id set to the id of the closest matching parent folder.',
+                '(3) Repeat step 2, drilling deeper, until you find the folder by name.',
+                '(4) Use the discovered id as tcr_catalog_tree_id in create/update calls.',
+                'NEVER stop at the top-level if the target folder is not there. NEVER guess a folder id.',
+                'TIP: Use recursive=true to fetch the entire tree in one call if the hierarchy is unknown.'
             ].join(' '),
             inputSchema: {
                 type: 'object',
                 properties: {
                     project_id: { type: 'number', description: 'Filter by project ID.' },
                     release_id: { type: 'number', description: 'Filter by release ID.' },
-                    parent_id: { type: 'number', description: 'OPTIONAL. The tcrCatalogTreeId of a parent folder whose children you want. If omitted, returns top-level folders. Use this to drill into subfolders like "SAS Health Tests".' },
-                    recursive: { type: 'boolean', description: 'OPTIONAL. If true, recursively fetches all subfolders under parent_id (or root). Default: false.' },
-                    max_depth: { type: 'number', description: 'OPTIONAL. Max recursion depth when recursive=true. Default: 5.' }
+                    parent_id: { type: 'number', description: 'The id of a folder returned by a previous call to this tool. Set this to list the children (subfolders) of that folder. Omit to get top-level folders.' },
+                    recursive: { type: 'boolean', description: 'If true, recursively returns ALL nested subfolders under parent_id (or root). Use this when the full hierarchy is unknown. Default: false.' },
+                    max_depth: { type: 'number', description: 'Max recursion depth when recursive=true. Default: 5.' }
                 },
                 required: [],
                 additionalProperties: false
@@ -765,7 +769,14 @@ async function main() {
     server.registerTool(
         'zephyr_enterprise_create_test_case',
         {
-            description: 'Create a new test case. STOP: You MUST call zephyr_enterprise_list_tcr_folders first to discover a valid folder_id (tcr_catalog_tree_id).',
+            description: [
+                'Create a new test case.',
+                'MANDATORY: You MUST discover the tcr_catalog_tree_id BEFORE calling this tool.',
+                'Step 1: Call zephyr_enterprise_list_tcr_folders (no parent_id) to get top-level folders.',
+                'Step 2: If the target folder is not in the list, call zephyr_enterprise_list_tcr_folders again with parent_id set to the closest parent folder\'s id.',
+                'Step 3: Repeat until you find the exact folder. Use its id as tcr_catalog_tree_id here.',
+                'NEVER guess or invent a tcr_catalog_tree_id. NEVER skip the discovery steps.'
+            ].join(' '),
             inputSchema: {
                 type: 'object',
                 properties: {

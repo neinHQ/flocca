@@ -84,7 +84,7 @@ describe('zephyr_enterprise_list_tcr_folders subfolder drilling', () => {
         const props = tool.inputSchema?.properties || {};
         expect(props.parent_id).toBeDefined();
         expect(props.parent_id.type).toBe('number');
-        expect(props.parent_id.description).toContain('tcrCatalogTreeId');
+        expect(props.parent_id.description).toContain('subfolders');
 
         expect(props.recursive).toBeDefined();
         expect(props.recursive.type).toBe('boolean');
@@ -98,6 +98,7 @@ describe('zephyr_enterprise_list_tcr_folders subfolder drilling', () => {
         const tool = (list.result?.tools || []).find(t => t.name === 'zephyr_enterprise_list_tcr_folders');
         expect(tool?.description).toContain('parent_id');
         expect(tool?.description).toContain('top-level');
+        expect(tool?.description).toContain('MANDATORY WORKFLOW');
     }, 15000);
 
     test('calling with no args returns a result (root-level fetch, no crash)', async () => {

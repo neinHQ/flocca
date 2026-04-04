@@ -82,7 +82,7 @@ describe('Zephyr Enterprise MCP schema compatibility', () => {
             // Verify AST parser successfully translated descriptions and JSON shapes
             const createTestCaseTool = list.result.tools.find(t => t.name === 'zephyr_enterprise_create_test_case');
             expect(createTestCaseTool).toBeDefined();
-            expect(createTestCaseTool.description).toContain('STOP: You MUST call');
+            expect(createTestCaseTool.description).toContain('MANDATORY');
             expect(createTestCaseTool.inputSchema).toBeDefined();
             expect(createTestCaseTool.inputSchema.properties.tcr_catalog_tree_id.description).toContain('NEVER guess');
             expect(createTestCaseTool.inputSchema.properties.folder_id.description).toContain('NEVER guess');
