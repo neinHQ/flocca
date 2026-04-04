@@ -15,11 +15,13 @@ Validation: `/public/rest/api/1.0/projects` for auth/version/project access. No 
 
 ### Tools
 - Core: `zephyr_enterprise_configure`, `zephyr_enterprise_health`
-- Discovery: `zephyr_enterprise_get_context`, `zephyr_enterprise_list_projects`, `zephyr_enterprise_list_folders`
-- Test cases: `zephyr_enterprise_search_test_cases`, `zephyr_enterprise_get_test_case`, `zephyr_enterprise_create_test_case`, `zephyr_enterprise_update_test_case`
-- Cycles/Executions: `zephyr_enterprise_create_cycle`, `zephyr_enterprise_add_test_cases_to_cycle`, `zephyr_enterprise_list_executions`, `zephyr_enterprise_update_execution`
+- Context & Discovery: `zephyr_enterprise_get_context`, `zephyr_enterprise_list_projects`, `zephyr_enterprise_list_folders`, `zephyr_enterprise_list_tcr_folders`, `zephyr_enterprise_list_releases`, `zephyr_enterprise_list_users`, `zephyr_enterprise_get_me`, `zephyr_enterprise_list_custom_fields`
+- Test cases: `zephyr_enterprise_search_test_cases`, `zephyr_enterprise_get_test_case`, `zephyr_enterprise_create_test_case`, `zephyr_enterprise_update_test_case`, `zephyr_enterprise_get_test_steps`, `zephyr_enterprise_update_test_step`
+- Cycles/Executions: `zephyr_enterprise_list_cycles`, `zephyr_enterprise_create_cycle`, `zephyr_enterprise_add_phase_to_cycle`, `zephyr_enterprise_add_test_cases_to_cycle`, `zephyr_enterprise_list_executions`, `zephyr_enterprise_update_execution`
+- Async Jobs: `zephyr_enterprise_get_job_status`
+- Traceability: `zephyr_enterprise_link_defect`, `zephyr_enterprise_link_requirement`
 - Evidence: `zephyr_enterprise_attach_evidence` (size cap ~5MB)
-- Automation ingest: `zephyr_enterprise_publish_automation_results` (batch cap ~2000)
+- Automation ingest: `zephyr_enterprise_publish_automation_results` (batch cap ~2000, supports `wait_for_results` with 3-attempt polling)
 
 ### Error shape
 `{ "error": { "message": "...", "code": "AUTH_FAILED|PERMISSION_DENIED|NOT_FOUND|RATE_LIMITED|INVALID_REQUEST|READ_ONLY_MODE|ZEPHYR_ENTERPRISE_ERROR", "details": "...", "http_status": 400 } }`

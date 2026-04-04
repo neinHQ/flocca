@@ -17,4 +17,9 @@ describe('Zephyr cloud routing helpers', () => {
         expect(__test.testExecutionUpdatePaths('10')).toEqual(['/rest/atm/1.0/testexecution/10', '/rest/atm/1.0/testexecutions/10']);
         expect(__test.automationExecutionPaths()).toEqual(['/rest/atm/1.0/automation/execution', '/rest/atm/1.0/automation/executions']);
     });
+
+    test('issue links paths include correct key binding and fallbacks', () => {
+        expect(__test.testExecutionIssueLinksPaths('E-55')).toEqual(['/rest/atm/1.0/testexecution/E-55/issueLinks', '/rest/atm/1.0/testexecutions/E-55/issueLinks']);
+        expect(__test.testCaseIssueLinksPaths('T-99')).toEqual(['/rest/atm/1.0/testcase/T-99/issueLinks', '/rest/atm/1.0/testcases/T-99/issueLinks']);
+    });
 });

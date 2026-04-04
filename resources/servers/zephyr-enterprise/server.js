@@ -329,6 +329,31 @@ function folderRequestSpecsFor(args = {}) {
         : [...publicRequest, ...flexRequests];
 }
 
+function tcrFolderRequestSpecsFor(args = {}) {
+    const releaseId = getNumberArg(args, ['release_id', 'releaseId']) ?? sessionConfig.release_id;
+    const flexRequests = [];
+    if (releaseId !== undefined) {
+        flexRequests.push(
+            { path: 'flex/services/rest/v3/testcasetree', query: { releaseid: String(releaseId) } },
+            { path: 'flex/services/rest/v3/testcasetree', query: { releaseId: String(releaseId) } },
+            { path: 'flex/services/rest/latest/testcasetree', query: { releaseid: String(releaseId) } },
+            { path: 'flex/services/rest/latest/testcasetree', query: { releaseId: String(releaseId) } }
+        );
+    }
+    const projectId = getNumberArg(args, ['project_id', 'projectId']) ?? sessionConfig.project?.id;
+    if (projectId !== undefined) {
+        flexRequests.push(
+            { path: 'flex/services/rest/v3/testcasetree', query: { projectid: String(projectId) } },
+            { path: 'flex/services/rest/v3/testcasetree', query: { projectId: String(projectId) } }
+        );
+    }
+    flexRequests.push(
+        { path: 'flex/services/rest/v3/testcasetree' },
+        { path: 'flex/services/rest/latest/testcasetree' }
+    );
+    return flexRequests;
+}
+
 function extractFolders(foldersResp) {
     if (Array.isArray(foldersResp)) {
         return foldersResp;
@@ -583,6 +608,25 @@ async function main() {
         }
     );
 
+    server.registerTool(
+        'zephyr_enterprise_list_tcr_folders',
+        { description: 'List Test Repository (TCR) folders (tcrCatalogTree) to discover valid tcr_catalog_tree_id values.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' }, release_id: { type: 'number' } }, additionalProperties: false } },
+        async (args) => {
+            try {
+                await ensureConfigured();
+                const releaseId = getNumberArg(args, ['release_id', 'releaseId']);
+                if (releaseId !== undefined) {
+                    sessionConfig.release_id = releaseId;
+                }
+                const foldersResp = await zFetchWithRequestFallback(tcrFolderRequestSpecsFor(args), { operation: 'list_tcr_folders' });
+                const folders = extractFolders(foldersResp);
+                return { content: [{ type: 'text', text: JSON.stringify({ folders }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
     const searchTestCasesInputSchema = {
         type: 'object',
         properties: { query: { type: 'string' }, folder_id: { type: 'number' }, limit: { type: 'number' } },
@@ -740,6 +784,73 @@ async function main() {
     );
 
     server.registerTool(
+        'zephyr_enterprise_list_cycles',
+        {
+            description: 'List existing test cycles for a release.',
+            inputSchema: { type: 'object', properties: { project_id: { type: 'number' }, release_id: { type: 'number' } }, additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                await ensureConfigured();
+                const releaseId = getNumberArg(args, ['release_id', 'releaseId']) ?? sessionConfig.release_id;
+                const projectId = getNumberArg(args, ['project_id', 'projectId']) ?? sessionConfig.project?.id;
+                
+                const pathParts = [];
+                if (releaseId !== undefined) {
+                    pathParts.push(`flex/services/rest/v3/cycle?releaseId=${releaseId}`);
+                    pathParts.push(`public/rest/api/1.0/cycles/search?versionId=${releaseId}&projectId=${projectId}`);
+                }
+                pathParts.push(`public/rest/api/1.0/cycles/search?projectId=${projectId}`);
+                
+                const data = await zFetchWithFallback(pathParts, { operation: 'list_cycles' });
+                return { content: [{ type: 'text', text: JSON.stringify({ cycles: data.values || data.searchObjectList || data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_add_phase_to_cycle',
+        {
+            description: 'Add a new phase to an existing cycle.',
+            inputSchema: { type: 'object', properties: { cycle_id: { type: 'number' }, name: { type: 'string' } }, required: ['cycle_id', 'name'], additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                requireNumber(args.cycle_id, 'cycle_id');
+                requireNonEmptyString(args.name, 'name');
+                ensureWritable();
+                await ensureConfigured();
+                const payload = { cycleId: args.cycle_id, name: args.name };
+                const pathParts = ['flex/services/rest/latest/cycle/cyclephase', `public/rest/api/1.0/cycle/${args.cycle_id}/phase`];
+                const data = await zFetchWithFallback(pathParts, { method: 'POST', body: payload, operation: 'add_phase_to_cycle' });
+                return { content: [{ type: 'text', text: JSON.stringify({ phase: data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_get_job_status',
+        {
+            description: 'Check the status of an asynchronous job progress ticket.',
+            inputSchema: { type: 'object', properties: { ticket_id: { type: 'string' } }, required: ['ticket_id'], additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                requireNonEmptyString(args.ticket_id, 'ticket_id');
+                await ensureConfigured();
+                const data = await zFetch(`public/rest/api/1.0/jobprogress/${args.ticket_id}`, { operation: 'get_job_status' });
+                return { content: [{ type: 'text', text: JSON.stringify({ job: data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
         'zephyr_enterprise_add_test_cases_to_cycle',
         {
             description: 'Add test cases to cycle.',
@@ -844,7 +955,6 @@ async function main() {
         }
     );
 
-    // Automation ingestion
     server.registerTool(
         'zephyr_enterprise_publish_automation_results',
         {
@@ -867,7 +977,8 @@ async function main() {
                             required: ['status']
                         }
                     },
-                    mapping: { type: 'object', properties: { strategy: { type: 'string', enum: ['external_id', 'name_exact', 'custom_field'] }, field: { type: 'string' } } }
+                    mapping: { type: 'object', properties: { strategy: { type: 'string', enum: ['external_id', 'name_exact', 'custom_field'] }, field: { type: 'string' } } },
+                    wait_for_results: { type: 'boolean' }
                 },
                 required: ['results'],
                 additionalProperties: false
@@ -899,7 +1010,193 @@ async function main() {
                     }))
                 };
                 const data = await zFetch('public/rest/api/1.0/automation/executions', { method: 'POST', body: payload });
+                
+                if (args.wait_for_results && data?.jobProgressToken) {
+                    const ticketId = data.jobProgressToken;
+                    let lastJobData;
+                    for (const delay of [2000, 3000, 5000]) {
+                        await new Promise(r => setTimeout(r, delay));
+                        lastJobData = await zFetch(`public/rest/api/1.0/jobprogress/${ticketId}`);
+                        if (lastJobData && lastJobData.progress >= 1 && lastJobData.entity) {
+                             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, summary: lastJobData.entity }) }] };
+                        }
+                    }
+                    return { content: [{ type: 'text', text: JSON.stringify({ ticketId, message: "Job is taking longer than expected. Use zephyr_enterprise_get_job_status to continue monitoring." }) }] };
+                }
+
+                if (data?.jobProgressToken) {
+                    return { content: [{ type: 'text', text: JSON.stringify({ ticketId: data.jobProgressToken, message: "Import started asynchronously. Please use zephyr_enterprise_get_job_status in a few moments to verify completion." }) }] };
+                }
+
                 return { content: [{ type: 'text', text: JSON.stringify({ summary: data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    // Connectivity & Context extensions
+    server.registerTool(
+        'zephyr_enterprise_list_releases',
+        { description: 'List releases for a project.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' } }, additionalProperties: false } },
+        async (args) => {
+            try {
+                await ensureConfigured();
+                const projectId = args.project_id || sessionConfig.project?.id;
+                const pathParts = [];
+                if (projectId !== undefined) {
+                    pathParts.push(`public/rest/api/1.0/releases?projectId=${projectId}`);
+                }
+                pathParts.push('flex/services/rest/v3/release'); // Fallback
+                const data = await zFetchWithFallback(pathParts, { operation: 'list_releases' });
+                const releases = Array.isArray(data) ? data : (data.values || data.releases || data);
+                return { content: [{ type: 'text', text: JSON.stringify({ releases }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_list_users',
+        { description: 'List users in Zephyr Enterprise.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' } }, additionalProperties: false } },
+        async (args) => {
+            try {
+                await ensureConfigured();
+                const projectId = args.project_id || sessionConfig.project?.id;
+                const pathParts = [];
+                if (projectId !== undefined) pathParts.push(`public/rest/api/1.0/users?projectId=${projectId}`);
+                pathParts.push('public/rest/api/1.0/users');
+                pathParts.push('flex/services/rest/v3/user');
+                const data = await zFetchWithFallback(pathParts, { operation: 'list_users' });
+                const users = Array.isArray(data) ? data : (data.users || data.values || data.data || data);
+                return { content: [{ type: 'text', text: JSON.stringify({ users }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_get_me',
+        { description: 'Return the currently authenticated user — useful for default assignee lookups.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+        async () => {
+            try {
+                await ensureConfigured();
+                const pathParts = [
+                    'public/rest/api/1.0/users/me',
+                    'flex/services/rest/v3/user/current',
+                    'flex/services/rest/latest/user/current'
+                ];
+                const data = await zFetchWithFallback(pathParts, { operation: 'get_me' });
+                return { content: [{ type: 'text', text: JSON.stringify({ user: data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_list_custom_fields',
+        { description: 'List custom fields configured in Zephyr.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+        async () => {
+            try {
+                await ensureConfigured();
+                const pathParts = ['flex/services/rest/v3/customfield', 'public/rest/api/1.0/customfields'];
+                const data = await zFetchWithFallback(pathParts, { operation: 'list_custom_fields' });
+                return { content: [{ type: 'text', text: JSON.stringify({ custom_fields: data.customFields || data.values || data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_get_test_steps',
+        { description: 'Get test steps for a specific test case.', inputSchema: { type: 'object', properties: { test_case_id: { type: 'number' } }, required: ['test_case_id'], additionalProperties: false } },
+        async (args) => {
+            try {
+                requireNumber(args.test_case_id, 'test_case_id');
+                await ensureConfigured();
+                const pathParts = [`public/rest/api/1.0/teststep/${args.test_case_id}`, `flex/services/rest/latest/teststep/${args.test_case_id}`];
+                const data = await zFetchWithFallback(pathParts, { operation: 'get_test_steps' });
+                return { content: [{ type: 'text', text: JSON.stringify({ steps: data.steps || data.teststeps || data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_update_test_step',
+        {
+            description: 'Update a specific test step.',
+            inputSchema: {
+                type: 'object',
+                properties: { test_step_id: { type: 'number' }, step: { type: 'string' }, data: { type: 'string' }, result: { type: 'string' } },
+                required: ['test_step_id'],
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireNumber(args.test_step_id, 'test_step_id');
+                requireAtLeastOneField(args, ['step', 'data', 'result']);
+                ensureWritable();
+                await ensureConfigured();
+                const payload = {};
+                if (args.step) payload.step = args.step;
+                if (args.data) payload.data = args.data;
+                if (args.result) payload.expectedResult = args.result;
+                const pathParts = [`public/rest/api/1.0/teststep/${args.test_step_id}`, `flex/services/rest/latest/teststep/${args.test_step_id}`];
+                const data = await zFetchWithFallback(pathParts, { method: 'PUT', body: payload, operation: 'update_test_step' });
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, step: data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_link_defect',
+        {
+            description: 'Link a Jira defect ID to an execution run.',
+            inputSchema: { type: 'object', properties: { execution_id: { type: 'number' }, defect_id: { type: 'string' } }, required: ['execution_id', 'defect_id'], additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                requireNumber(args.execution_id, 'execution_id');
+                requireNonEmptyString(args.defect_id, 'defect_id');
+                ensureWritable();
+                await ensureConfigured();
+                // To link defect, we execute the 'execute' endpoint with updateDefectList
+                const payload = { updateDefectList: "true", defectList: [args.defect_id] };
+                const pathParts = [`public/rest/api/1.0/executions/${args.execution_id}/execute`, `public/rest/api/1.0/executions/${args.execution_id}`];
+                const data = await zFetchWithFallback(pathParts, { method: 'PUT', body: payload, operation: 'link_defect' });
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, execution: data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_link_requirement',
+        {
+            description: 'Link a requirement / Jira Story to a testcase.',
+            inputSchema: { type: 'object', properties: { test_case_id: { type: 'number' }, requirement_id: { type: 'string' } }, required: ['test_case_id', 'requirement_id'], additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                requireNumber(args.test_case_id, 'test_case_id');
+                requireNonEmptyString(args.requirement_id, 'requirement_id');
+                ensureWritable();
+                await ensureConfigured();
+                // Using mapping endpoint for requirements
+                const payload = { testcaseIds: [args.test_case_id], requirementIds: [args.requirement_id] };
+                const pathParts = [`flex/services/rest/latest/requirement/map`, `public/rest/api/1.0/requirements/map`];
+                const data = await zFetchWithFallback(pathParts, { method: 'POST', body: payload, operation: 'link_requirement' });
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mapping: data }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
             }
@@ -930,6 +1227,7 @@ module.exports = {
         ensureApiFamilyDetected,
         projectPathsFor,
         folderRequestSpecsFor,
+        tcrFolderRequestSpecsFor,
         testCaseSearchSpec,
         testCaseGetPaths,
         testCaseCreatePaths,

@@ -18,9 +18,11 @@ Validation: Jira `/rest/api/3/myself` + Zephyr Scale capability check. No secret
 
 ### Tools
 - Core: `zephyr_configure`, `zephyr_health`
-- Discovery: `zephyr_get_context`, `zephyr_list_folders`
-- Test cases: `zephyr_search_test_cases`, `zephyr_get_test_case`, `zephyr_create_test_case`, `zephyr_update_test_case`
-- Cycles/Executions: `zephyr_create_test_cycle`, `zephyr_add_tests_to_cycle`, `zephyr_list_test_executions`, `zephyr_update_execution_status`
+- Context & Discovery: `zephyr_get_context`, `zephyr_list_folders`, `zephyr_list_execution_folders`, `zephyr_list_test_plans`, `zephyr_list_environments`, `zephyr_list_priorities`, `zephyr_list_statuses`, `zephyr_list_custom_fields`
+- Test cases: `zephyr_search_test_cases`, `zephyr_get_test_case`, `zephyr_create_test_case`, `zephyr_update_test_case`, `zephyr_get_test_steps`
+- Cycles/Executions: `zephyr_list_test_cycles`, `zephyr_create_test_cycle`, `zephyr_add_tests_to_cycle`, `zephyr_list_test_executions`, `zephyr_update_execution_status`
+- Traceability: `zephyr_link_defect`, `zephyr_link_requirement`
+- Evidence: `zephyr_attach_evidence`
 - Automation results: `zephyr_publish_automation_results`
 
 ### Error shape
