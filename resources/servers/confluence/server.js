@@ -43,6 +43,15 @@ async function confluenceRequest(method, pathPart, body, options = {}) {
             } catch (err) {
                 lastError = err;
                 const status = err?.response?.status;
+                const url = `${config.baseUrl}${apiPath}`;
+                
+                // Logging the full error to stderr for easier debugging in VS Code logs
+                console.error(`[Confluence] ${method.toUpperCase()} ${url} failed with status ${status || 'unknown'}:`, {
+                    error: err.message,
+                    responseData: err?.response?.data,
+                    headers: err?.response?.headers
+                });
+
                 // If it's a 401 and we have more header candidates, keep trying
                 if (status === 401 && headerCandidates.length > 1) continue;
                 // If it's a 404 or 405 on an API path, try the other candidate (server vs cloud paths)
@@ -90,7 +99,20 @@ function getHeaders() {
 }
 
 function normalizeError(err) {
-    const msg = err.response?.data?.message || err.message || JSON.stringify(err);
+    const data = err.response?.data;
+    let detail = '';
+    if (data) {
+        if (typeof data === 'string') {
+            detail = data;
+        } else if (data.message) {
+            detail = data.message;
+        } else if (Array.isArray(data.errors) && data.errors.length > 0) {
+            detail = data.errors.map(e => e.message || JSON.stringify(e)).join(', ');
+        } else {
+            detail = JSON.stringify(data);
+        }
+    }
+    const msg = detail || err.message || JSON.stringify(err);
     return { isError: true, content: [{ type: 'text', text: `Confluence Error: ${msg}` }] };
 }
 
@@ -155,6 +177,24 @@ async function main() {
         }
     );
 
+    registerToolWithAliases(server, 'confluence.getSpace',
+        {
+            description: 'Get Space metadata, including the homepage ID (useful for find ancestor_id for new pages).',
+            inputSchema: z.object({
+                space_key: z.string().describe('The key of the space (e.g., "TEAM")')
+            })
+        },
+        async (args) => {
+            try {
+                const res = await confluenceRequest('get', `space/${args.space_key}`, undefined, {
+                    headers: getHeaders(),
+                    params: { expand: 'homepage' }
+                });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
     registerToolWithAliases(server, 'confluence.searchPages',
         { description: 'Search Pages (CQL)', inputSchema: z.object({ cql: z.string() }) },
         async (args) => {
@@ -180,24 +220,26 @@ async function main() {
 
     registerToolWithAliases(server, 'confluence.createPage',
         {
-            description: 'Create Page',
+            description: 'Create a new page in a Confluence space.',
             inputSchema: z.object({
-                space_key: z.string(),
-                title: z.string(),
-                body: z.string().optional(),
-                parent_id: z.string().optional()
+                space_key: z.string().describe('The key of the space to create the page in (e.g., "TEAM")'),
+                title: z.string().describe('The title of the new page'),
+                body: z.string().optional().describe('The storage format (XHTML) content of the page'),
+                ancestor_id: z.string().optional().describe('The ID of the parent page (can be found via getSpace or searchPages)'),
+                parent_id: z.string().optional().describe('Alias for ancestor_id')
             })
         },
         async (args) => {
             try {
+                const parentId = args.ancestor_id || args.parent_id;
                 const payload = {
                     title: args.title,
                     type: 'page',
                     space: { key: args.space_key },
                     body: { storage: { value: args.body || '<p></p>', representation: 'storage' } }
                 };
-                if (args.parent_id) {
-                    payload.ancestors = [{ id: args.parent_id }];
+                if (parentId) {
+                    payload.ancestors = [{ id: parentId }];
                 }
                 const res = await confluenceRequest('post', 'content', payload, { headers: getHeaders() });
                 return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
@@ -220,6 +262,7 @@ module.exports = {
         normalizeBaseUrl,
         apiPathCandidates,
         confluenceRequest,
+        normalizeError,
         setConfig: (next) => { config = { ...config, ...next }; },
         getConfig: () => ({ ...config })
     }
