@@ -34,9 +34,18 @@ Flocca is an IDE-first MCP platform and VS Code extension that connects local en
 - **Model support**: Works with AI agents that can use MCP toolchains.
 - **Compatibility**: Built for VS Code and compatible IDE workflows.
 
+## Latest Blog & Guides
+- **Stop Context Switching**: How IDE-native MCP workflows (Jira, GitHub, Slack) reclaim 40% of developer time.
+    - *Example*: An SDET managing test failures and Slack alerts entirely within VS Code.
+- **Automating Confluence**: Using MCP to automate the documentation lifecycle.
+    - *Example*: Generating Technical Designs from PRDs and automatically handling Confluence version increments and file attachments.
+- **Flocca vs Runlayer**: Comparison of product focus and team access controls.
+
 For details:
 - Website: https://flocca.app
 - Pricing: https://flocca.app/pricing/
 - Enterprise: https://flocca.app/enterprise/
 - Documentation: https://flocca.app/docs/
 - Blog: https://flocca.app/blog/
+- Stop Context Switching Guide: https://flocca.app/blog/stop-context-switching/
+- Automating Confluence Guide: https://flocca.app/blog/automating-confluence/

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>From PRD to Technical Design: Automating Confluence with Flocca | Flocca Blog</title>
+    <meta name="description"
+        content="Learn how James, a Staff Engineer, uses Flocca's advanced Confluence tools to automate technical documentation, handle versioning, and attach diagnostic files." />
+    <meta name="keywords"
+        content="Confluence automation, technical design, PRD to code, engineering documentation, MCP Confluence, automated documentation" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
+    <link rel="shortcut icon" href="/favicon.jpg" />
+    <link rel="canonical" href="https://flocca.app/blog/automating-confluence/" />
+    <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM Context" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://flocca.app/blog/automating-confluence/" />
+    <meta property="og:title" content="From PRD to Technical Design: Automating Confluence with Flocca" />
+    <meta property="og:description"
+        content="Automate your documentation lifecycle using Flocca's expanded Confluence MCP tools." />
+    <meta property="og:image" content="https://flocca.app/og-image.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="From PRD to Technical Design: Automating Confluence with Flocca" />
+    <meta name="twitter:description"
+        content="Automate your documentation lifecycle using Flocca's expanded Confluence MCP tools." />
+    <meta name="twitter:image" content="https://flocca.app/og-image.png" />
+
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "From PRD to Technical Design: Automating Confluence with Flocca",
+  "datePublished": "2026-04-07",
+  "dateModified": "2026-04-07",
+  "author": {
+    "@type": "Organization",
+    "name": "Flocca"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Flocca"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://flocca.app/blog/automating-confluence/"
+  },
+  "description": "Learn how to automate Confluence workflows using Flocca's documentation-first MCP tools."
+}
+    </script>
+
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f9f506",
+                        "slate-accent": "#e2e2dc"
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gradient-to-b from-[#fbfbf8] via-[#f6f6ef] to-[#ffffff] text-[#181811] font-display antialiased">
+    <div class="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-accent">
+        <div class="px-6 md:px-10 py-4 max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <img src="/logo.png" alt="Flocca Logo" class="h-8 w-8 object-contain rounded-lg" />
+                <h2 class="text-xl font-bold tracking-tight">Flocca</h2>
+            </a>
+            <div class="flex items-center gap-3">
+                <a href="/blog"
+                    class="hidden sm:inline-flex h-10 px-5 items-center justify-center rounded-full border border-black/15 bg-white text-sm font-semibold hover:bg-black hover:text-white transition-colors">All
+                    Posts</a>
+                <a href="/pricing"
+                    class="inline-flex h-10 px-5 items-center justify-center rounded-full bg-black text-white text-sm font-semibold hover:opacity-90 transition-opacity">Pricing</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="pt-28"></div>
+
+    <section class="px-6 md:px-10 pb-8">
+        <div class="max-w-4xl mx-auto">
+            <p class="text-xs uppercase tracking-wider font-semibold text-gray-500 mb-3">Published: April 7, 2026</p>
+            <h1 class="text-4xl md:text-6xl font-black leading-tight mb-5">From PRD to Technical Design: Automating Your Documentation Lifecycle</h1>
+            <p class="text-xl text-gray-700">Documentation shouldn't be a chore that happens after the work. Use Flocca's expanded Confluence tools to make it part of your dev loop.</p>
+        </div>
+    </section>
+
+    <section class="px-6 md:px-10 pb-24">
+        <article class="max-w-4xl mx-auto prose prose-zinc prose-lg max-w-none">
+            <p>Documentation is often where engineering velocity goes to die. We love building, but we hate updating Confluence pages, managing version conflicts, and meticulously linking diagnostic data. Too often, the "Living Document" becomes a static archive of old ideas.</p>
+
+            <blockquote>
+                "The best documentation is the documentation that generates itself. Flocca brings high-fidelity automation to your Confluence workspace."
+            </blockquote>
+
+            <h2>Real-World Example: James the Staff Engineer</h2>
+            <p>James, a Staff Engineer, is tasked with refactoring a legacy microservice. He starts with a shared Product Requirement Document (PRD) on Confluence.</p>
+
+            <h3>The Automation Loop</h3>
+            <p>Using Flocca’s expanded <strong>Confluence MCP tools</strong>, James automates the "grunt work" that usually takes hours of clicking and copying:</p>
+
+            <ol>
+                <li>
+                    <strong>Discovery without IDs</strong>: Instead of searching for hidden page IDs, James uses <code>confluence_get_page_by_title</code> to find the original PRD and the team's RFC folder in seconds.
+                </li>
+                <li>
+                    <strong>AI-Driven Analysis</strong>: He asks Flocca to read the PRD and his current local codebase to generate a Technical Design draft that accurately reflects the existing architecture.
+                </li>
+                <li>
+                    <strong>Hierarchical Drafting</strong>: He uses <code>confluence_create_page</code> to push the technical design. Flocca automatically finds the space's homepage ID using <code>confluence_get_space_details</code>, ensuring the page lands exactly where it should in the team hierarchy.
+                </li>
+                <li>
+                    <strong>Conflict-Free Updates</strong>: After receiving feedback, James updates the doc using Flocca’s new <code>confluence_update_page</code>. Flocca handles the "optimistic locking" by automatically fetching the current version and incrementing it, so James never hits a "Version Conflict" error.
+                </li>
+                <li>
+                    <strong>Embedding Diagnostic Evidence</strong>: James runs a local performance profile and uses <code>confluence_attach_file</code> to upload the resulting <code>.json</code> trace directly to the RFC page for peer review.
+                </li>
+            </ol>
+
+            <h2>Documentation That Evolves with Your Code</h2>
+            <p>By automating the discovery and versioning logic, Flocca removes the friction that causes documentation rot. Your docs aren't just 'finished'—they're alive, integrated, and always in sync with your local development environment.</p>
+
+            <h2>Level Up Your Documentation</h2>
+            <p>Ready to automate the boring parts of engineering? Flocca is built for engineering teams that want to focus on shipping software, not managing pages.</p>
+        </article>
+
+        <div class="max-w-4xl mx-auto mt-12 rounded-[2rem] bg-black text-white p-8 md:p-10">
+            <h3 class="text-3xl font-black mb-3">Automate your Confluence workflows</h3>
+            <p class="text-white/80 mb-6">Install Flocca and use advanced MCP tools for documentation management.</p>
+            <div class="flex flex-wrap gap-3">
+                <a href="https://marketplace.visualstudio.com/items?itemName=flocca.flocca"
+                    class="inline-flex items-center justify-center px-5 py-3 rounded-full bg-primary text-black font-bold hover:bg-[#e6e205] transition-colors">Install
+                    Flocca</a>
+                <a href="/pricing"
+                    class="inline-flex items-center justify-center px-5 py-3 rounded-full border border-white/30 font-bold hover:bg-white hover:text-black transition-colors">View
+                    Pricing</a>
+            </div>
+        </div>
+    </section>
+
+    <footer class="bg-black text-white py-12 px-6 md:px-10">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+            <a href="/" class="flex items-center gap-3">
+                <img src="/logo.png" alt="Flocca Logo" class="h-8 w-8 object-contain rounded-lg" />
+                <span class="text-lg font-bold tracking-tight text-white">Flocca</span>
+            </a>
+            <div class="flex items-center gap-6 text-sm">
+                <a href="/pricing" class="text-gray-300 hover:text-white transition-colors">Pricing</a>
+                <a href="/enterprise" class="text-gray-300 hover:text-white transition-colors">Enterprise</a>
+                <a href="/docs" class="text-gray-300 hover:text-white transition-colors">Docs</a>
+                <a href="/blog" class="text-gray-300 hover:text-white transition-colors">Blog</a>
+            </div>
+        </div>
+        <div class="max-w-7xl mx-auto mt-8 pt-6 border-t border-white/10 text-xs text-gray-500">
+            © <span id="currentYear"></span> Flocca Inc. All rights reserved.
+        </div>
+    </footer>
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+    </script>
+</body>
+
+</html>
