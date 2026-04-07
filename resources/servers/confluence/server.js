@@ -28,41 +28,65 @@ function apiPathCandidates(pathPart) {
 
 async function confluenceRequest(method, pathPart, body, options = {}) {
     let lastError;
+    const headerCandidates = getHeaderCandidates();
+
     for (const apiPath of apiPathCandidates(pathPart)) {
-        try {
-            return await axios({
-                method,
-                url: `${config.baseUrl}${apiPath}`,
-                data: body,
-                ...options
-            });
-        } catch (err) {
-            lastError = err;
-            const status = err?.response?.status;
-            if (status === 404 || status === 405) continue;
-            throw err;
+        for (const headers of headerCandidates) {
+            try {
+                return await axios({
+                    method,
+                    url: `${config.baseUrl}${apiPath}`,
+                    data: body,
+                    ...options,
+                    headers: { ...(options.headers || {}), ...headers }
+                });
+            } catch (err) {
+                lastError = err;
+                const status = err?.response?.status;
+                // If it's a 401 and we have more header candidates, keep trying
+                if (status === 401 && headerCandidates.length > 1) continue;
+                // If it's a 404 or 405 on an API path, try the other candidate (server vs cloud paths)
+                if (status === 404 || status === 405) continue;
+                throw err;
+            }
         }
     }
     throw lastError || new Error('Confluence request failed');
 }
 
-function getHeaders() {
+function getHeaderCandidates() {
     if (process.env.FLOCCA_PROXY_URL && process.env.FLOCCA_USER_ID) {
-        return {
+        return [{
             'X-Flocca-User-ID': process.env.FLOCCA_USER_ID,
             'Content-Type': 'application/json'
-        };
+        }];
     }
 
     if (!config.token || !config.baseUrl) throw new Error("Confluence not configured.");
-    // Support Bearer or Basic. Usually SaaS is Basic with email:token base64, or just Bearer.
-    // If username provided, use Basic
-    if (config.username) {
-        const auth = Buffer.from(`${config.username}:${config.token}`).toString('base64');
-        return { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' };
+
+    const baseHeaders = { 'Content-Type': 'application/json' };
+    const candidates = [];
+
+    // Bearer token (preferred for PAT on Server/DC)
+    const bearerCandidate = { ...baseHeaders, 'Authorization': `Bearer ${config.token}` };
+    // Basic auth (preferred for Cloud with email)
+    const basicCandidate = config.username
+        ? { ...baseHeaders, 'Authorization': `Basic ${Buffer.from(`${config.username}:${config.token}`).toString('base64')}` }
+        : undefined;
+
+    if (config.deploymentMode === 'server' || config.deploymentMode === 'self_hosted') {
+        candidates.push(bearerCandidate);
+        if (basicCandidate) candidates.push(basicCandidate);
+    } else {
+        if (basicCandidate) candidates.push(basicCandidate);
+        candidates.push(bearerCandidate);
     }
-    // Else assume Bearer
-    return { 'Authorization': `Bearer ${config.token}`, 'Content-Type': 'application/json' };
+
+    return candidates;
+}
+
+function getHeaders() {
+    return getHeaderCandidates()[0];
 }
 
 function normalizeError(err) {

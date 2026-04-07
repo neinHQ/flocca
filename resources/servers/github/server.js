@@ -1,5 +1,5 @@
-
 const { Octokit } = require("@octokit/rest");
+const z = require('zod');
 const { McpServer } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
 
@@ -18,9 +18,6 @@ function getKit() {
             userAgent: 'flocca-vscode',
             request: {
                 fetch: (url, opts) => {
-                    // Inject Header manually if needed, though Octokit might not support custom headers in constructor easily for all requests without plugin.
-                    // Actually Octokit supports `userAgent`. Custom headers?
-                    // We can pass `defaults`.
                     opts.headers = opts.headers || {};
                     opts.headers['X-Flocca-User-ID'] = config.userId;
                     return fetch(url, opts);
@@ -44,7 +41,7 @@ async function main() {
     server.registerTool('github_health',
         {
             description: 'Health check for GitHub authentication',
-            inputSchema: { type: 'object', properties: {} }
+            inputSchema: z.object({})
         },
         async () => {
             try {
@@ -57,15 +54,11 @@ async function main() {
     server.registerTool('search_repositories',
         {
             description: 'Search GitHub Repositories',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    query: { type: 'string' },
-                    page: { type: 'number' },
-                    per_page: { type: 'number' }
-                },
-                required: ['query']
-            }
+            inputSchema: z.object({
+                query: z.string(),
+                page: z.number().optional(),
+                per_page: z.number().optional()
+            })
         },
         async (args) => {
             try {
@@ -74,7 +67,6 @@ async function main() {
                     page: args.page || 1,
                     per_page: args.per_page || 10
                 });
-                // Map to simpler format
                 const repos = res.data.items.map(r => ({
                     name: r.name,
                     full_name: r.full_name,
@@ -91,20 +83,15 @@ async function main() {
     server.registerTool('read_file',
         {
             description: 'Read file content',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    owner: { type: 'string' },
-                    repo: { type: 'string' },
-                    path: { type: 'string' },
-                    ref: { type: 'string' }
-                },
-                required: ['owner', 'repo', 'path']
-            }
+            inputSchema: z.object({
+                owner: z.string(),
+                repo: z.string(),
+                path: z.string(),
+                ref: z.string().optional()
+            })
         },
         async (args) => {
             try {
-                // Get content
                 const res = await getKit().rest.repos.getContent({
                     owner: args.owner,
                     repo: args.repo,
@@ -120,7 +107,6 @@ async function main() {
                     return { isError: true, content: [{ type: 'text', text: "Target is not a file." }] };
                 }
 
-                // Decode content (base64)
                 const content = Buffer.from(res.data.content, res.data.encoding).toString('utf-8');
                 return { content: [{ type: 'text', text: content }] };
             } catch (e) { return normalizeError(e); }
@@ -130,16 +116,12 @@ async function main() {
     server.registerTool('create_issue',
         {
             description: 'Create an Issue',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    owner: { type: 'string' },
-                    repo: { type: 'string' },
-                    title: { type: 'string' },
-                    body: { type: 'string' }
-                },
-                required: ['owner', 'repo', 'title']
-            }
+            inputSchema: z.object({
+                owner: z.string(),
+                repo: z.string(),
+                title: z.string(),
+                body: z.string().optional()
+            })
         },
         async (args) => {
             try {
@@ -154,7 +136,6 @@ async function main() {
         }
     );
 
-    // Git Operations (Local)
     const { exec } = require('child_process');
     const util = require('util');
     const execAsync = util.promisify(exec);
@@ -162,13 +143,9 @@ async function main() {
     server.registerTool('git_add',
         {
             description: 'Stage files for commit (git add)',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    files: { type: 'array', items: { type: 'string' }, description: 'List of files to add, or ["."] for all' }
-                },
-                required: ['files']
-            }
+            inputSchema: z.object({
+                files: z.array(z.string()).describe('List of files to add, or ["."] for all')
+            })
         },
         async (args) => {
             try {
@@ -182,17 +159,12 @@ async function main() {
     server.registerTool('git_commit',
         {
             description: 'Commit staged changes (git commit)',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    message: { type: 'string' }
-                },
-                required: ['message']
-            }
+            inputSchema: z.object({
+                message: z.string()
+            })
         },
         async (args) => {
             try {
-                // Escape quotes
                 const msg = args.message.replace(/"/g, '\\"');
                 await execAsync(`git commit -m "${msg}"`);
                 return { content: [{ type: 'text', text: `Committed with message: ${args.message}` }] };
@@ -203,13 +175,10 @@ async function main() {
     server.registerTool('git_push',
         {
             description: 'Push changes to remote (git push)',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    remote: { type: 'string', default: 'origin' },
-                    branch: { type: 'string' }
-                }
-            }
+            inputSchema: z.object({
+                remote: z.string().optional().default('origin'),
+                branch: z.string().optional()
+            })
         },
         async (args) => {
             try {
@@ -221,22 +190,17 @@ async function main() {
         }
     );
 
-    // Pull Request Operations (Remote)
     server.registerTool('create_pull_request',
         {
             description: 'Create a Pull Request',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    owner: { type: 'string' },
-                    repo: { type: 'string' },
-                    title: { type: 'string' },
-                    head: { type: 'string', description: 'The name of the branch where your changes are implemented.' },
-                    base: { type: 'string', description: 'The name of the branch you want the changes pulled into.' },
-                    body: { type: 'string' }
-                },
-                required: ['owner', 'repo', 'title', 'head', 'base']
-            }
+            inputSchema: z.object({
+                owner: z.string(),
+                repo: z.string(),
+                title: z.string(),
+                head: z.string().describe('The name of the branch where your changes are implemented.'),
+                base: z.string().describe('The name of the branch you want the changes pulled into.'),
+                body: z.string().optional()
+            })
         },
         async (args) => {
             try {
@@ -256,16 +220,12 @@ async function main() {
     server.registerTool('merge_pull_request',
         {
             description: 'Merge a Pull Request',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    owner: { type: 'string' },
-                    repo: { type: 'string' },
-                    pull_number: { type: 'number' },
-                    merge_method: { type: 'string', enum: ['merge', 'squash', 'rebase'], default: 'merge' }
-                },
-                required: ['owner', 'repo', 'pull_number']
-            }
+            inputSchema: z.object({
+                owner: z.string(),
+                repo: z.string(),
+                pull_number: z.number(),
+                merge_method: z.enum(['merge', 'squash', 'rebase']).optional().default('merge')
+            })
         },
         async (args) => {
             try {

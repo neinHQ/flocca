@@ -34,8 +34,8 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
                 ],
                 infoText: 'Cloud = Atlassian-hosted Jira on atlassian.net. Server = self-hosted Jira Server/Data Center on your company domain.'
             },
-            { id: 'email', label: 'Email Address', placeholder: 'name@example.com', type: 'email' },
-            { id: 'token', label: 'API Token', placeholder: 'Paste your API token', type: 'password' }
+            { id: 'email', label: 'Email Address / Username', placeholder: 'name@example.com (Optional for Server PAT)', type: 'email', required: false },
+            { id: 'token', label: 'API Token / PAT', placeholder: 'Paste your API token or PAT', type: 'password' }
         ],
         links: [{ text: 'Get Jira API Token', url: 'https://id.atlassian.com/manage-profile/security/api-tokens' }]
     },
@@ -55,8 +55,8 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
                 ],
                 infoText: 'Cloud = Atlassian-hosted Confluence on atlassian.net. Server = self-hosted Confluence on your company domain.'
             },
-            { id: 'email', label: 'Email Address', placeholder: 'name@example.com', type: 'email' },
-            { id: 'token', label: 'API Token', placeholder: 'Paste your API token', type: 'password' }
+            { id: 'email', label: 'Email Address / Username', placeholder: 'name@example.com (Optional for Server PAT)', type: 'email', required: false },
+            { id: 'token', label: 'API Token / PAT', placeholder: 'Paste your API token or PAT', type: 'password' }
         ],
         links: [{ text: 'Get Confluence API Token', url: 'https://id.atlassian.com/manage-profile/security/api-tokens' }]
     },

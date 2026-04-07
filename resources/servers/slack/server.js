@@ -88,13 +88,9 @@ async function slackFetch(token, url, options = {}, attempt = 1) {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // PROXY MODE
     if (process.env.FLOCCA_PROXY_URL && process.env.FLOCCA_USER_ID) {
-        // url: https://slack.com/api/chat.postMessage
-        // proxy: http://localhost:3000/proxy/slack/api/chat.postMessage
         fetchUrl = url.replace('https://slack.com', process.env.FLOCCA_PROXY_URL);
         headers['X-Flocca-User-ID'] = process.env.FLOCCA_USER_ID;
-        // Token is injected by Proxy, but we can leave it if present (or remove it to be safe)
         delete headers['Authorization'];
     }
 
@@ -115,7 +111,6 @@ async function slackFetch(token, url, options = {}, attempt = 1) {
 
     const data = await response.json();
     if (!response.ok || !data.ok) {
-        // Proxy generic validation might return mock success, handle that
         if (data.message === 'Proxy Success') return { ok: true };
 
         const err = data.error || 'unknown_error';
@@ -162,10 +157,8 @@ async function slackFetchMultipart(token, url, formData, attempt = 1) {
 }
 
 async function resolveChannel(token, channel) {
-    // If channel already looks like an ID, return as-is
     if (channel.startsWith('C') || channel.startsWith('G')) return channel;
 
-    // @user or U123 -> open an IM to get channel id
     if (channel.startsWith('@') || channel.startsWith('U')) {
         const user = channel.replace('@', '');
         const data = await slackFetch(token, 'https://slack.com/api/conversations.open', {
@@ -178,7 +171,6 @@ async function resolveChannel(token, channel) {
         return data.channel.id;
     }
 
-    // #channel name support via conversations.list? Could be expensive; Slack allows channel names in chat.postMessage in some cases.
     return channel;
 }
 
@@ -201,25 +193,12 @@ async function main() {
     const server = new McpServer(SERVER_INFO, {
         capabilities: { tools: {} }
     });
-    const originalRegisterTool = server.registerTool.bind(server);
-    const permissiveInputSchema = z.object({}).passthrough();
-    server.registerTool = (name, config, handler) => {
-        const nextConfig = { ...(config || {}) };
-        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = permissiveInputSchema;
-        }
-        return originalRegisterTool(name, nextConfig, handler);
-    };
 
     server.registerTool(
         'slack_health',
         {
             description: 'Health check for Slack connectivity and auth.',
-            inputSchema: {
-                type: 'object',
-                properties: {},
-                additionalProperties: false
-            }
+            inputSchema: z.object({})
         },
         async () => {
             try {
@@ -235,28 +214,7 @@ async function main() {
         'slack_list_channels',
         {
             description: 'List all accessible Slack channels (public + private where the bot is invited).',
-            inputSchema: {
-                type: 'object',
-                properties: {},
-                additionalProperties: false
-            },
-            outputSchema: {
-                type: 'object',
-                properties: {
-                    channels: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            properties: {
-                                id: { type: 'string' },
-                                name: { type: 'string' }
-                            },
-                            required: ['id', 'name']
-                        }
-                    }
-                },
-                required: ['channels']
-            }
+            inputSchema: z.object({})
         },
         async () => {
             console.log('[slack_list_channels] <-');
@@ -287,32 +245,10 @@ async function main() {
         'slack_list_users',
         {
             description: 'List Slack workspace users with optional filtering.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    includeBots: { type: 'boolean', description: 'Include bot users', default: false },
-                    onlyActive: { type: 'boolean', description: 'Only active (not deleted)', default: false }
-                },
-                additionalProperties: false
-            },
-            outputSchema: {
-                type: 'object',
-                properties: {
-                    users: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            properties: {
-                                id: { type: 'string' },
-                                name: { type: 'string' },
-                                real_name: { type: 'string' },
-                                email: { type: 'string' }
-                            }
-                        }
-                    }
-                },
-                required: ['users']
-            }
+            inputSchema: z.object({
+                includeBots: z.boolean().optional().default(false).describe('Include bot users'),
+                onlyActive: z.boolean().optional().default(false).describe('Only active (not deleted)')
+            })
         },
         async (args) => {
             console.log('[slack_list_users] <-', JSON.stringify(args || {}));
@@ -350,23 +286,10 @@ async function main() {
         'slack_send_message',
         {
             description: 'Send a message to a Slack channel or user.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    channel: { type: 'string', description: 'Channel ID, user ID, @user, or #channel' },
-                    text: { type: 'string', description: 'Message text' }
-                },
-                required: ['channel', 'text'],
-                additionalProperties: false
-            },
-            outputSchema: {
-                type: 'object',
-                properties: {
-                    ok: { type: 'boolean' },
-                    ts: { type: 'string' }
-                },
-                required: ['ok', 'ts']
-            }
+            inputSchema: z.object({
+                channel: z.string().describe('Channel ID, user ID, @user, or #channel'),
+                text: z.string().describe('Message text')
+            })
         },
         async (args) => {
             console.log('[slack_send_message] <-', JSON.stringify(args));
@@ -390,24 +313,11 @@ async function main() {
         'slack_send_thread_reply',
         {
             description: 'Post a threaded reply to an existing Slack message.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    channel: { type: 'string', description: 'Channel ID, user ID, @user, or #channel' },
-                    thread_ts: { type: 'string', description: 'Thread timestamp of the parent message' },
-                    text: { type: 'string', description: 'Reply text (supports markdown formatting)' }
-                },
-                required: ['channel', 'thread_ts', 'text'],
-                additionalProperties: false
-            },
-            outputSchema: {
-                type: 'object',
-                properties: {
-                    ok: { type: 'boolean' },
-                    ts: { type: 'string' }
-                },
-                required: ['ok', 'ts']
-            }
+            inputSchema: z.object({
+                channel: z.string().describe('Channel ID, user ID, @user, or #channel'),
+                thread_ts: z.string().describe('Thread timestamp of the parent message'),
+                text: z.string().describe('Reply text (supports markdown formatting)')
+            })
         },
         async (args) => {
             console.log('[slack_send_thread_reply] <-', JSON.stringify(args));
@@ -435,32 +345,10 @@ async function main() {
         'slack_get_thread_messages',
         {
             description: 'Get all messages in a Slack thread.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    channel: { type: 'string', description: 'Channel ID, user ID, @user, or #channel' },
-                    thread_ts: { type: 'string', description: 'Thread timestamp of the parent message' }
-                },
-                required: ['channel', 'thread_ts'],
-                additionalProperties: false
-            },
-            outputSchema: {
-                type: 'object',
-                properties: {
-                    messages: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            properties: {
-                                user: { type: 'string' },
-                                text: { type: 'string' },
-                                ts: { type: 'string' }
-                            }
-                        }
-                    }
-                },
-                required: ['messages']
-            }
+            inputSchema: z.object({
+                channel: z.string().describe('Channel ID, user ID, @user, or #channel'),
+                thread_ts: z.string().describe('Thread timestamp of the parent message')
+            })
         },
         async (args) => {
             console.log('[slack_get_thread_messages] <-', JSON.stringify(args));
@@ -497,34 +385,10 @@ async function main() {
         'slack_search_messages',
         {
             description: 'Search Slack messages using Slack search syntax.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    query: { type: 'string', description: 'Search query' },
-                    count: { type: 'number', description: 'Max results (default 20)', minimum: 1, maximum: 100 }
-                },
-                required: ['query'],
-                additionalProperties: false
-            },
-            outputSchema: {
-                type: 'object',
-                properties: {
-                    matches: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            properties: {
-                                channel: { type: 'string' },
-                                username: { type: 'string' },
-                                text: { type: 'string' },
-                                permalink: { type: 'string' },
-                                ts: { type: 'string' }
-                            }
-                        }
-                    }
-                },
-                required: ['matches']
-            }
+            inputSchema: z.object({
+                query: z.string().describe('Search query'),
+                count: z.number().optional().default(20).describe('Max results (default 20)')
+            })
         },
         async (args) => {
             console.log('[slack_search_messages] <-', JSON.stringify(args));
@@ -559,34 +423,11 @@ async function main() {
         'slack_upload_file',
         {
             description: 'Upload a file to Slack with optional message.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    channels: {
-                        type: 'array',
-                        items: { type: 'string' },
-                        description: 'Channel IDs to share the file with'
-                    },
-                    file_path: { type: 'string', description: 'Absolute path to the file' },
-                    initial_comment: { type: 'string', description: 'Optional message to include with the file' }
-                },
-                required: ['channels', 'file_path'],
-                additionalProperties: false
-            },
-            outputSchema: {
-                type: 'object',
-                properties: {
-                    ok: { type: 'boolean' },
-                    file: {
-                        type: 'object',
-                        properties: {
-                            id: { type: 'string' },
-                            permalink: { type: 'string' }
-                        }
-                    }
-                },
-                required: ['ok']
-            }
+            inputSchema: z.object({
+                channels: z.array(z.string()).describe('Channel IDs to share the file with'),
+                file_path: z.string().describe('Absolute path to the file'),
+                initial_comment: z.string().optional().describe('Optional message to include with the file')
+            })
         },
         async (args) => {
             console.log('[slack_upload_file] <-', JSON.stringify({ ...args, file_path: '[redacted]' }));
