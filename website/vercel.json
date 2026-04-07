@@ -22,11 +22,5 @@
             "memory": 256,
             "maxDuration": 10
         }
-    },
-    "env": {
-        "POSTHOG_HOST": "@posthog_host",
-        "POSTHOG_PROJECT_ID": "@posthog_project_id",
-        "POSTHOG_PROJECT_API_KEY": "@posthog_project_api_key",
-        "POSTHOG_PERSONAL_API_KEY": "@posthog_personal_api_key"
     }
 }
