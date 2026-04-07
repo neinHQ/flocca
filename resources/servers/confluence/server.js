@@ -1,5 +1,7 @@
 const axios = require('axios');
 const z = require('zod');
+const fs = require('fs');
+const FormData = require('form-data');
 const { McpServer } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
 
@@ -121,7 +123,29 @@ function createToolAliases(name) {
         .replace(/\./g, '_')
         .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
         .toLowerCase();
-    return alias !== name ? [alias] : [];
+    
+    const results = [];
+    if (alias !== name) results.push(alias);
+    
+    // Explicit requested names
+    const requestedMappings = {
+        'confluence.getSpace': ['confluence_get_space_details'],
+        'confluence.getPage': ['confluence_get_page_content'],
+        'confluence.searchPages': ['confluence_search'],
+        'confluence.getPageByTitle': ['confluence_get_page_by_title'],
+        'confluence.createPage': ['confluence_create_page'],
+        'confluence.updatePage': ['confluence_update_page'],
+        'confluence.listAttachments': ['confluence_list_attachments'],
+        'confluence.attachFile': ['confluence_attach_file']
+    };
+
+    if (requestedMappings[name]) {
+        requestedMappings[name].forEach(m => {
+            if (!results.includes(m)) results.push(m);
+        });
+    }
+
+    return results;
 }
 
 function registerToolWithAliases(server, name, config, handler) {
@@ -195,6 +219,26 @@ async function main() {
         }
     );
 
+    registerToolWithAliases(server, 'confluence.getPageByTitle',
+        {
+            description: 'Find a page by its title within a specific space.',
+            inputSchema: z.object({
+                space_key: z.string().describe('The key of the space (e.g., "TEAM")'),
+                title: z.string().describe('The EXACT title of the page')
+            })
+        },
+        async (args) => {
+            try {
+                const cql = `space = "${args.space_key}" AND title = "${args.title}"`;
+                const res = await confluenceRequest('get', 'content/search', undefined, {
+                    headers: getHeaders(),
+                    params: { cql, limit: 1 }
+                });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data.results[0] || { error: 'Page not found' }) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
     registerToolWithAliases(server, 'confluence.searchPages',
         { description: 'Search Pages (CQL)', inputSchema: z.object({ cql: z.string() }) },
         async (args) => {
@@ -242,6 +286,84 @@ async function main() {
                     payload.ancestors = [{ id: parentId }];
                 }
                 const res = await confluenceRequest('post', 'content', payload, { headers: getHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    registerToolWithAliases(server, 'confluence.updatePage',
+        {
+            description: 'Update an existing page. Automatically handles version incrementing.',
+            inputSchema: z.object({
+                page_id: z.string().describe('The ID of the page to update'),
+                title: z.string().describe('New title for the page'),
+                body: z.string().describe('New storage format (XHTML) content'),
+                version: z.number().optional().describe('Version number (optional, will auto-increment if omitted)')
+            })
+        },
+        async (args) => {
+            try {
+                let nextVersion = args.version;
+                if (!nextVersion) {
+                    // Fetch current version
+                    const current = await confluenceRequest('get', `content/${args.page_id}`, undefined, { headers: getHeaders(), params: { expand: 'version' } });
+                    nextVersion = current.data.version.number + 1;
+                }
+
+                const payload = {
+                    id: args.page_id,
+                    type: 'page',
+                    title: args.title,
+                    version: { number: nextVersion },
+                    body: { storage: { value: args.body, representation: 'storage' } }
+                };
+
+                const res = await confluenceRequest('put', `content/${args.page_id}`, payload, { headers: getHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    registerToolWithAliases(server, 'confluence.listAttachments',
+        {
+            description: 'List files attached to a specific page.',
+            inputSchema: z.object({
+                page_id: z.string().describe('The ID of the page')
+            })
+        },
+        async (args) => {
+            try {
+                const res = await confluenceRequest('get', `content/${args.page_id}/child/attachment`, undefined, { headers: getHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data.results) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    registerToolWithAliases(server, 'confluence.attachFile',
+        {
+            description: 'Attach a file to a Confluence page.',
+            inputSchema: z.object({
+                page_id: z.string().describe('The ID of the page'),
+                file_path: z.string().describe('Absolute path to the file to upload'),
+                comment: z.string().optional().describe('Optional comment for the attachment')
+            })
+        },
+        async (args) => {
+            try {
+                if (!fs.existsSync(args.file_path)) {
+                    throw new Error(`File not found: ${args.file_path}`);
+                }
+
+                const form = new FormData();
+                form.append('file', fs.createReadStream(args.file_path));
+                if (args.comment) form.append('comment', args.comment);
+
+                const res = await confluenceRequest('post', `content/${args.page_id}/child/attachment`, form, {
+                    headers: {
+                        ...form.getHeaders(),
+                        'X-Atlassian-Token': 'nocheck'
+                    }
+                });
                 return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
             } catch (e) { return normalizeError(e); }
         }
