@@ -52,7 +52,7 @@ export class AuthUriHandler implements vscode.UriHandler {
                     ZEPHYR_SITE_URL: data.site,
                     ZEPHYR_TOKEN: data.token,
                     ZEPHYR_PROJECT_KEY: data.projectKey
-                });
+                }, 'user');
                 vscode.commands.executeCommand('setContext', 'flocca.connected.zephyr', true);
                 break;
 
@@ -60,7 +60,7 @@ export class AuthUriHandler implements vscode.UriHandler {
                 await authService.storeFigmaToken(data.token);
                 await this.clientManager.connectLocal('figma', 'node', [this.context.asAbsolutePath('resources/servers/figma/server.js')], {
                     FIGMA_TOKEN: data.token
-                });
+                }, 'user');
                 vscode.commands.executeCommand('setContext', 'flocca.connected.figma', true);
                 break;
 
@@ -70,7 +70,7 @@ export class AuthUriHandler implements vscode.UriHandler {
                     JIRA_EMAIL: data.email,
                     JIRA_TOKEN: data.token,
                     JIRA_URL: data.site
-                });
+                }, 'user');
                 vscode.commands.executeCommand('setContext', 'flocca.connected.jira', true);
                 break;
 

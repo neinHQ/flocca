@@ -499,7 +499,8 @@ export async function activate(context: vscode.ExtensionContext) {
                         'github',
                         'node',
                         [context.asAbsolutePath('resources/servers/github/server.js')],
-                        config.servers['github'].env
+                        config.servers['github'].env,
+                        'user'
                     );
 
                     await updateState(); // Refresh UI
@@ -744,7 +745,8 @@ export async function activate(context: vscode.ExtensionContext) {
                         serverName,
                         runtime,
                         [context.asAbsolutePath(serverPath)],
-                        config.servers[serverName].env
+                        config.servers[serverName].env,
+                        'user'
                     );
 
                     if (validationHook) {

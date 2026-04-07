@@ -198,7 +198,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
                 }
 
                 try {
-                    await this._clientManager.connectLocal(def.serverName, def.runtime, [absServerPath], config.servers[def.serverName].env || proxyEnv);
+                    await this._clientManager.connectLocal(def.serverName, def.runtime, [absServerPath], config.servers[def.serverName].env || proxyEnv, 'restore');
                     await vscode.commands.executeCommand('setContext', `flocca.connected.${def.serverName}`, true);
                     restoredCount += 1;
                 } catch (e) {

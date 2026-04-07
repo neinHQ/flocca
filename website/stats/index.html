@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>MCP Usage Stats — Flocca</title>
+    <meta name="description" content="See which MCP integrations developers are connecting most with Flocca. Live usage stats for GitHub, Jira, Slack, AWS, Figma, and more — updated monthly and yearly.">
+    <meta name="keywords" content="MCP stats, MCP usage, Flocca stats, most connected MCPs, developer integrations, Jira MCP, GitHub MCP">
+    <meta name="robots" content="index, follow">
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg">
+    <link rel="canonical" href="https://flocca.app/stats/">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://flocca.app/stats/">
+    <meta property="og:title" content="MCP Usage Stats — Flocca">
+    <meta property="og:description" content="Live leaderboard of the most-connected MCP integrations across the Flocca developer community.">
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f9f506",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#23220f",
+                        "dark-text": "#181811",
+                        "slate-accent": "#e2e2dc"
+                    },
+                    fontFamily: { "display": ["Spline Sans", "sans-serif"] },
+                    borderRadius: { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+    <style>
+        @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .animate-pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }
+
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 0.75rem;
+        }
+
+        @keyframes bar-fill { from { width: 0 !important; } }
+        .bar-animate { animation: bar-fill 1s cubic-bezier(.4,0,.2,1) forwards; }
+
+        @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fade-in 0.4s ease forwards; }
+        .fade-in-delay-1 { animation-delay: 0.05s; opacity: 0; }
+        .fade-in-delay-2 { animation-delay: 0.1s; opacity: 0; }
+    </style>
+</head>
+
+<body class="bg-[#0B0C15] text-white font-display antialiased overflow-x-hidden">
+
+    <!-- Nav -->
+    <div class="fixed top-0 left-0 right-0 z-50 bg-[#0B0C15]/90 backdrop-blur-md border-b border-white/10">
+        <div class="px-6 md:px-10 py-4 max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <img src="/logo.png" alt="Flocca Logo" class="h-8 w-8 object-contain rounded-lg">
+                <span class="text-xl font-bold text-white">Flocca</span>
+            </a>
+            <div class="hidden md:flex items-center gap-8">
+                <a class="text-sm font-semibold text-gray-400 hover:text-white transition-colors" href="/#how-it-works">How It Works</a>
+                <a class="text-sm font-semibold text-gray-400 hover:text-white transition-colors" href="/#features">Features</a>
+                <a class="text-sm font-semibold text-gray-400 hover:text-white transition-colors" href="/#pricing">Pricing</a>
+                <a class="text-sm font-semibold text-gray-400 hover:text-white transition-colors" href="/blog">Blog</a>
+                <a class="text-sm font-semibold text-white flex items-center gap-1.5 border-b border-primary pb-0.5" href="/stats">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse-slow"></span>Stats
+                </a>
+            </div>
+            <a href="https://marketplace.visualstudio.com/items?itemName=flocca.flocca"
+                class="hidden sm:flex h-10 px-6 items-center justify-center rounded-full bg-primary hover:bg-[#e6e205] transition-colors text-black text-sm font-bold tracking-wide shadow-sm">
+                Get Extension
+            </a>
+            <button id="menuBtn" class="md:hidden p-2 text-white">
+                <span class="material-symbols-outlined">menu</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Mobile Menu -->
+    <div id="mobileMenu" class="fixed inset-0 z-[60] bg-[#0B0C15] hidden flex-col p-6">
+        <div class="flex items-center justify-between mb-8">
+            <a href="/" class="flex items-center gap-3">
+                <img src="/logo.png" alt="Flocca Logo" class="h-6 w-6 object-contain rounded-lg">
+                <span class="text-lg font-bold">Flocca</span>
+            </a>
+            <button id="closeMenuBtn" class="p-2"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="flex flex-col gap-6 text-lg font-medium text-gray-300">
+            <a href="/#how-it-works" onclick="document.getElementById('mobileMenu').classList.add('hidden')">How It Works</a>
+            <a href="/#features" onclick="document.getElementById('mobileMenu').classList.add('hidden')">Features</a>
+            <a href="/#pricing" onclick="document.getElementById('mobileMenu').classList.add('hidden')">Pricing</a>
+            <a href="/blog" onclick="document.getElementById('mobileMenu').classList.add('hidden')">Blog</a>
+            <a href="/stats" class="text-primary flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>Stats
+            </a>
+        </div>
+        <a href="https://marketplace.visualstudio.com/items?itemName=flocca.flocca"
+            class="mt-auto h-12 w-full rounded-full bg-primary text-black font-bold flex items-center justify-center">
+            Get Extension
+        </a>
+    </div>
+
+    <!-- Page Content -->
+    <section class="pt-36 pb-16 px-6 md:px-10 relative overflow-hidden min-h-screen">
+        <div class="absolute inset-0 pointer-events-none">
+            <div class="absolute top-0 left-1/4 w-[700px] h-[500px] bg-primary/5 rounded-full blur-[140px]"></div>
+            <div class="absolute bottom-0 right-0 w-[500px] h-[400px] bg-purple-900/10 rounded-full blur-[120px]"></div>
+        </div>
+
+        <div class="max-w-7xl mx-auto relative z-10">
+            <!-- Hero -->
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
+                <div>
+                    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-widest mb-5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                        Live Usage Data
+                    </div>
+                    <h1 class="text-5xl md:text-7xl font-black tracking-tight mb-4">MCP Stats</h1>
+                    <p class="text-gray-400 text-xl max-w-2xl">Which integrations are developers connecting most? Real data from across the Flocca community, updated continuously.</p>
+                </div>
+                <div id="updated-at" class="flex items-center gap-3 text-sm text-gray-500 shrink-0 opacity-0 transition-opacity duration-500">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    Last updated: <span id="updated-at-label" class="text-gray-300 font-semibold">—</span>
+                </div>
+            </div>
+
+            <!-- Summary Stats Row -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-16" id="summary-row">
+                <!-- Skeleton -->
+                <div class="skeleton h-28 rounded-2xl"></div>
+                <div class="skeleton h-28 rounded-2xl"></div>
+                <div class="skeleton h-28 rounded-2xl"></div>
+                <div class="skeleton h-28 rounded-2xl"></div>
+            </div>
+
+            <!-- Tab Switcher + heading -->
+            <div class="flex items-center justify-between mb-8 flex-wrap gap-4">
+                <div>
+                    <h2 class="text-2xl font-black text-white mb-1">Top Connected MCPs</h2>
+                    <p class="text-gray-500 text-sm">Ranked by unique users who connected via Flocca</p>
+                </div>
+                <div class="flex items-center gap-2 bg-white/5 rounded-full p-1 border border-white/10">
+                    <button id="tab-month" onclick="switchTab('month')"
+                        class="px-6 py-2.5 rounded-full text-sm font-bold transition-all bg-primary text-black">
+                        This Month
+                    </button>
+                    <button id="tab-year" onclick="switchTab('year')"
+                        class="px-6 py-2.5 rounded-full text-sm font-bold transition-all text-gray-400 hover:text-white">
+                        This Year
+                    </button>
+                </div>
+            </div>
+
+            <!-- Leaderboard -->
+            <div id="leaderboard" class="grid md:grid-cols-2 gap-3">
+                <!-- Skeleton placeholders -->
+                <div class="skeleton h-24 rounded-2xl"></div>
+                <div class="skeleton h-24 rounded-2xl"></div>
+                <div class="skeleton h-24 rounded-2xl"></div>
+                <div class="skeleton h-24 rounded-2xl"></div>
+                <div class="skeleton h-24 rounded-2xl"></div>
+                <div class="skeleton h-24 rounded-2xl"></div>
+                <div class="skeleton h-24 rounded-2xl"></div>
+                <div class="skeleton h-24 rounded-2xl"></div>
+            </div>
+
+            <!-- Error state (hidden by default) -->
+            <div id="error-state" class="hidden text-center py-16">
+                <span class="material-symbols-outlined text-5xl text-gray-600 mb-4 block">cloud_off</span>
+                <p class="text-gray-400 font-medium mb-2">Couldn't load live data right now.</p>
+                <p class="text-gray-600 text-sm">Showing cached data. <button onclick="loadStats(activePeriod)" class="text-primary hover:underline">Try again</button></p>
+            </div>
+
+            <!-- Footnote -->
+            <div class="mt-12 flex flex-col md:flex-row items-center justify-between gap-6 pt-8 border-t border-white/10">
+                <p class="text-sm text-gray-500 max-w-lg">
+                    Data reflects user-initiated connections tracked from the Flocca VS Code extension. Numbers represent unique users, not total connection events. Auto-updates hourly via PostHog.
+                </p>
+                <a href="https://marketplace.visualstudio.com/items?itemName=flocca.flocca"
+                    class="shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-black font-bold text-sm hover:bg-[#e6e205] transition-colors shadow-lg shadow-primary/20">
+                    <span class="material-symbols-outlined text-lg">download</span>
+                    Add your MCP →
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-[#060709] border-t border-white/5 py-12 px-6 md:px-10">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start gap-8">
+            <div>
+                <a href="/" class="flex items-center gap-2 mb-4">
+                    <img src="/logo.png" alt="Flocca Logo" class="h-7 w-7 object-contain rounded-md">
+                    <span class="text-xl font-bold">Flocca</span>
+                </a>
+                <p class="text-gray-500 max-w-xs text-sm">Connecting teams' MCPs securely, right from the IDE.</p>
+            </div>
+            <div class="flex flex-wrap gap-12">
+                <div class="flex flex-col gap-3">
+                    <h4 class="font-bold text-gray-200 text-sm">Product</h4>
+                    <a class="text-gray-500 hover:text-primary transition-colors text-sm" href="/">Home</a>
+                    <a class="text-gray-500 hover:text-primary transition-colors text-sm" href="/stats">Stats</a>
+                    <a class="text-gray-500 hover:text-primary transition-colors text-sm" href="/#pricing">Pricing</a>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <h4 class="font-bold text-gray-200 text-sm">Resources</h4>
+                    <a class="text-gray-500 hover:text-primary transition-colors text-sm" href="/docs">Docs</a>
+                    <a class="text-gray-500 hover:text-primary transition-colors text-sm" href="/blog">Blog</a>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <h4 class="font-bold text-gray-200 text-sm">Company</h4>
+                    <a class="text-gray-500 hover:text-primary transition-colors text-sm" href="mailto:hello@flocca.app">Contact</a>
+                    <a class="text-gray-500 hover:text-primary transition-colors text-sm" href="https://github.com/neinHQ/flocca-vscode/issues" target="_blank">Report Issue</a>
+                </div>
+            </div>
+        </div>
+        <div class="max-w-7xl mx-auto pt-8 mt-8 border-t border-white/5 text-center md:text-left text-xs text-gray-600">
+            © <span id="currentYear"></span> Flocca Inc. All rights reserved.
+        </div>
+    </footer>
+
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // Mobile menu
+        const menuBtn = document.getElementById('menuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const closeMenuBtn = document.getElementById('closeMenuBtn');
+        if (menuBtn && mobileMenu && closeMenuBtn) {
+            menuBtn.addEventListener('click', () => mobileMenu.classList.remove('hidden'));
+            closeMenuBtn.addEventListener('click', () => mobileMenu.classList.add('hidden'));
+        }
+
+        // ─── Icons & colours per server ───────────────────────────────────────
+        const SERVER_META = {
+            jira:       { icon: 'dataset',                  color: 'text-blue-400',    bg: 'bg-blue-500/20' },
+            github:     { icon: 'code_blocks',              color: 'text-gray-300',    bg: 'bg-white/10' },
+            gitlab:     { icon: 'deployed_code',            color: 'text-orange-500',  bg: 'bg-orange-700/20' },
+            slack:      { icon: 'forum',                    color: 'text-purple-400',  bg: 'bg-purple-500/20' },
+            confluence: { icon: 'blur_on',                  color: 'text-blue-300',    bg: 'bg-blue-600/20' },
+            figma:      { icon: 'brush',                    color: 'text-pink-400',    bg: 'bg-pink-500/20' },
+            aws:        { icon: 'cloud',                    color: 'text-orange-400',  bg: 'bg-orange-500/20' },
+            gcp:        { icon: 'cloud_circle',             color: 'text-blue-400',    bg: 'bg-blue-500/20' },
+            azure:      { icon: 'cloud_done',               color: 'text-sky-400',     bg: 'bg-sky-500/20' },
+            stripe:     { icon: 'payments',                 color: 'text-indigo-400',  bg: 'bg-indigo-500/20' },
+            mongo:      { icon: 'database',                 color: 'text-green-500',   bg: 'bg-green-500/20' },
+            docker:     { icon: 'layers',                   color: 'text-blue-500',    bg: 'bg-blue-500/20' },
+            playwright: { icon: 'layers',                   color: 'text-blue-400',    bg: 'bg-blue-500/20' },
+            notion:     { icon: 'integration_instructions', color: 'text-teal-400',    bg: 'bg-teal-500/20' },
+            linear:     { icon: 'linear_scale',             color: 'text-violet-400',  bg: 'bg-violet-500/20' },
+            zephyr:     { icon: 'science',                  color: 'text-cyan-400',    bg: 'bg-cyan-500/20' },
+            teams:      { icon: 'groups',                   color: 'text-purple-300',  bg: 'bg-purple-500/20' },
+        };
+
+        function getMeta(server) {
+            return SERVER_META[server?.toLowerCase()] || {
+                icon: 'extension', color: 'text-gray-400', bg: 'bg-white/10'
+            };
+        }
+
+        // ─── Bar colour per rank ───────────────────────────────────────────────
+        function barColor(rank) {
+            if (rank === 1) return 'bg-gradient-to-r from-primary to-yellow-300';
+            const colors = [
+                'bg-white/50',
+                'bg-purple-400/70',
+                'bg-blue-400/60',
+                'bg-orange-400/60',
+                'bg-pink-400/60',
+                'bg-orange-600/60',
+                'bg-indigo-400/60',
+                'bg-blue-500/60',
+                'bg-teal-400/60',
+            ];
+            return colors[rank - 2] || 'bg-white/30';
+        }
+
+        // ─── Count‑up animation ────────────────────────────────────────────────
+        function countUp(el, target, duration = 1400) {
+            const step = target / (duration / 16);
+            let current = 0;
+            const timer = setInterval(() => {
+                current = Math.min(current + step, target);
+                el.textContent = Math.floor(current).toLocaleString();
+                if (current >= target) clearInterval(timer);
+            }, 16);
+        }
+
+        // ─── State ────────────────────────────────────────────────────────────
+        let activePeriod = 'month';
+        const cache = {};
+
+        // ─── Render summary cards ─────────────────────────────────────────────
+        function renderSummary(data) {
+            const summaryRow = document.getElementById('summary-row');
+            summaryRow.innerHTML = `
+                <div class="bg-white/5 rounded-2xl p-6 border border-white/10 text-center fade-in">
+                    <div class="text-4xl font-black text-white mb-2" id="stat-total">0</div>
+                    <div class="text-xs text-gray-400 font-bold uppercase tracking-widest">Unique Users</div>
+                </div>
+                <div class="bg-primary/5 rounded-2xl p-6 border border-primary/20 text-center fade-in fade-in-delay-1">
+                    <div class="text-4xl font-black text-primary mb-2" id="stat-events">0</div>
+                    <div class="text-xs text-gray-400 font-bold uppercase tracking-widest">Total Connections</div>
+                </div>
+                <div class="bg-white/5 rounded-2xl p-6 border border-white/10 text-center fade-in fade-in-delay-1">
+                    <div class="text-4xl font-black text-white mb-2" id="stat-mcps">0</div>
+                    <div class="text-xs text-gray-400 font-bold uppercase tracking-widest">MCPs in Leaderboard</div>
+                </div>
+                <div class="bg-green-900/10 rounded-2xl p-6 border border-green-500/20 text-center fade-in fade-in-delay-2">
+                    <div class="text-4xl font-black text-green-400 mb-2" id="stat-top">—</div>
+                    <div class="text-xs text-gray-400 font-bold uppercase tracking-widest">Top MCP</div>
+                </div>
+            `;
+            countUp(document.getElementById('stat-total'), data.totalUsers);
+            countUp(document.getElementById('stat-events'), data.totalEvents);
+            countUp(document.getElementById('stat-mcps'), data.leaderboard.length);
+            if (data.leaderboard[0]) {
+                document.getElementById('stat-top').textContent = data.leaderboard[0].label;
+            }
+        }
+
+        // ─── Render leaderboard cards ─────────────────────────────────────────
+        function renderLeaderboard(leaderboard, maxUsers) {
+            const container = document.getElementById('leaderboard');
+            if (!leaderboard.length) {
+                container.innerHTML = `
+                    <div class="col-span-2 text-center py-16 text-gray-500">
+                        <span class="material-symbols-outlined text-5xl block mb-3 text-gray-700">bar_chart</span>
+                        No data yet for this period. Connect an MCP to be the first!
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = leaderboard.map((item, i) => {
+                const meta = getMeta(item.server);
+                const pct = Math.round((item.users / maxUsers) * 100);
+                const isFirst = item.rank === 1;
+                const delayClass = i < 4 ? `style="animation-delay:${i * 0.06}s; opacity:0"` : '';
+
+                return `
+                <div class="group relative ${isFirst
+                    ? 'bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/30 hover:border-primary/60 hover:from-primary/15'
+                    : 'bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/8'
+                } rounded-2xl p-5 flex items-center gap-5 transition-all cursor-default fade-in" ${delayClass}>
+                    <div class="text-4xl font-black ${isFirst ? 'text-primary/30 group-hover:text-primary/60' : 'text-white/15 group-hover:text-white/30'} w-10 shrink-0 transition-colors select-none">
+                        #${item.rank}
+                    </div>
+                    <div class="w-11 h-11 rounded-xl ${meta.bg} flex items-center justify-center shrink-0 transition-colors">
+                        <span class="material-symbols-outlined ${meta.color} text-xl">${meta.icon}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-bold text-white text-lg">${item.label}</span>
+                            <span class="${isFirst ? 'text-primary' : 'text-gray-300'} font-black">
+                                ${item.users.toLocaleString()} <span class="text-xs font-normal text-gray-500">users</span>
+                            </span>
+                        </div>
+                        <div class="w-full bg-white/10 rounded-full h-2">
+                            <div class="h-2 rounded-full ${barColor(item.rank)} bar-animate" style="width:${pct}%"></div>
+                        </div>
+                    </div>
+                    ${isFirst ? `<div class="absolute top-3 right-3">
+                        <span class="text-[10px] font-bold bg-primary/20 text-primary px-2 py-0.5 rounded-full uppercase tracking-wider">#1 this ${activePeriod}</span>
+                    </div>` : ''}
+                </div>`;
+            }).join('');
+        }
+
+        // ─── Main load function ───────────────────────────────────────────────
+        async function loadStats(period) {
+            activePeriod = period;
+
+            // If cached, render immediately
+            if (cache[period]) {
+                renderSummary(cache[period]);
+                renderLeaderboard(cache[period].leaderboard, cache[period].maxUsers);
+                return;
+            }
+
+            // Show skeletons
+            document.getElementById('leaderboard').innerHTML = Array(8).fill(
+                '<div class="skeleton h-24 rounded-2xl"></div>'
+            ).join('');
+            document.getElementById('summary-row').innerHTML = Array(4).fill(
+                '<div class="skeleton h-28 rounded-2xl"></div>'
+            ).join('');
+            document.getElementById('error-state').classList.add('hidden');
+
+            try {
+                const res = await fetch(`/api/stats?period=${period}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                cache[period] = data;
+
+                renderSummary(data);
+                renderLeaderboard(data.leaderboard, data.maxUsers);
+
+                // Update timestamp
+                const updatedAt = document.getElementById('updated-at');
+                const label = document.getElementById('updated-at-label');
+                if (data.updatedAt) {
+                    label.textContent = new Date(data.updatedAt).toLocaleDateString('en-US', {
+                        month: 'long', year: 'numeric'
+                    });
+                }
+                updatedAt.style.opacity = '1';
+
+            } catch (err) {
+                console.error('Stats load error:', err);
+                document.getElementById('leaderboard').innerHTML = '';
+                document.getElementById('summary-row').innerHTML = Array(4).fill(
+                    '<div class="bg-white/5 rounded-2xl h-28 border border-white/10"></div>'
+                ).join('');
+                document.getElementById('error-state').classList.remove('hidden');
+            }
+        }
+
+        // ─── Tab switcher ─────────────────────────────────────────────────────
+        function switchTab(tab) {
+            const monthBtn = document.getElementById('tab-month');
+            const yearBtn = document.getElementById('tab-year');
+
+            if (tab === 'month') {
+                monthBtn.classList.add('bg-primary', 'text-black');
+                monthBtn.classList.remove('text-gray-400');
+                yearBtn.classList.remove('bg-primary', 'text-black');
+                yearBtn.classList.add('text-gray-400');
+            } else {
+                yearBtn.classList.add('bg-primary', 'text-black');
+                yearBtn.classList.remove('text-gray-400');
+                monthBtn.classList.remove('bg-primary', 'text-black');
+                monthBtn.classList.add('text-gray-400');
+            }
+            loadStats(tab);
+        }
+
+        // ─── Boot ─────────────────────────────────────────────────────────────
+        loadStats('month');
+    </script>
+</body>
+</html>

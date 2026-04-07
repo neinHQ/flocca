@@ -19,7 +19,7 @@ export class McpClientManager {
 
     constructor(private context: vscode.ExtensionContext, private subscriptionService: SubscriptionService, private telemetryService: TelemetryService) { }
 
-    async connectLocal(name: string, command: string, args: string[], env: Record<string, string> = {}) {
+    async connectLocal(name: string, command: string, args: string[], env: Record<string, string> = {}, source: 'user' | 'restore' | 'startup' = 'startup') {
         const envVars = { ...process.env, ...env } as Record<string, string>;
         const transport = new StdioClientTransport({
             command,
@@ -48,11 +48,12 @@ export class McpClientManager {
             )
         );
         this._mcpDefinitionsChanged.fire();
+        this.telemetryService.logUsage('mcp_server_connect', { server: name, transport: 'local', source });
         console.log(`Connected to local MCP server: ${name}`);
         // vscode.window.showInformationMessage(`Connected to local MCP server: ${name}`);
     }
 
-    async connectRemote(name: string, url: string, headers: Record<string, string> = {}) {
+    async connectRemote(name: string, url: string, headers: Record<string, string> = {}, source: 'user' | 'restore' | 'startup' = 'startup') {
         // Type assertion to bypass strict Check in DOM lib which might be missing headers in EventSourceInit
         const eventSourceInit = {
             withCredentials: true,
@@ -86,6 +87,7 @@ export class McpClientManager {
             this._serverDefinitions.delete(name);
         }
         this._mcpDefinitionsChanged.fire();
+        this.telemetryService.logUsage('mcp_server_connect', { server: name, transport: 'remote', source });
         console.log(`Connected to remote MCP server: ${name}`);
         vscode.window.showInformationMessage(`Connected to remote MCP server: ${name}`);
     }
