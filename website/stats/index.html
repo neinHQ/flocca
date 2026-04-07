@@ -360,19 +360,19 @@
                         <span class="material-symbols-outlined ${meta.color} text-xl">${meta.icon}</span>
                     </div>
                     <div class="flex-1 min-w-0">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="font-bold text-white text-lg">${item.label}</span>
-                            <span class="${isFirst ? 'text-primary' : 'text-gray-300'} font-black">
-                                ${item.users.toLocaleString()} <span class="text-xs font-normal text-gray-500">users</span>
+                        <div class="flex items-center justify-between mb-2 gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-white text-lg">${item.label}</span>
+                                ${isFirst ? `<span class="text-[10px] font-bold bg-primary/20 text-primary px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">#1 this ${activePeriod}</span>` : ''}
+                            </div>
+                            <span class="${isFirst ? 'text-primary' : 'text-gray-300'} font-black shrink-0">
+                                ${item.users.toLocaleString()} <span class="text-xs font-normal text-gray-500 hidden sm:inline">users</span>
                             </span>
                         </div>
                         <div class="w-full bg-white/10 rounded-full h-2">
                             <div class="h-2 rounded-full ${barColor(item.rank)} bar-animate" style="width:${pct}%"></div>
                         </div>
                     </div>
-                    ${isFirst ? `<div class="absolute top-3 right-3">
-                        <span class="text-[10px] font-bold bg-primary/20 text-primary px-2 py-0.5 rounded-full uppercase tracking-wider">#1 this ${activePeriod}</span>
-                    </div>` : ''}
                 </div>`;
             }).join('');
         }
