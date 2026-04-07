@@ -1,4 +1,5 @@
 const axios = require('axios');
+const z = require('zod');
 const { McpServer } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
 const { StdioServerTransport } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
 
@@ -92,7 +93,7 @@ async function main() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     registerToolWithAliases(server, 'confluence.health',
-        { description: 'Health check for Confluence', inputSchema: { type: 'object', properties: {} } },
+        { description: 'Health check for Confluence', inputSchema: z.object({}) },
         async () => {
             try {
                 await confluenceRequest('get', 'user/current', undefined, { headers: getHeaders() });
@@ -102,7 +103,7 @@ async function main() {
     );
 
     registerToolWithAliases(server, 'confluence.configure',
-        { description: 'Configure Confluence', inputSchema: { type: 'object', properties: { username: { type: 'string' }, token: { type: 'string' }, base_url: { type: 'string' }, deployment_mode: { type: 'string' } }, required: ['token', 'base_url'] } },
+        { description: 'Configure Confluence', inputSchema: z.object({ username: z.string().optional(), token: z.string(), base_url: z.string(), deployment_mode: z.string().optional() }) },
         async (args) => {
             config.token = args.token;
             config.baseUrl = normalizeBaseUrl(args.base_url);
@@ -121,7 +122,7 @@ async function main() {
     );
 
     registerToolWithAliases(server, 'confluence.listSpaces',
-        { description: 'List Spaces', inputSchema: { type: 'object', properties: {} } },
+        { description: 'List Spaces', inputSchema: z.object({}) },
         async () => {
             try {
                 const res = await confluenceRequest('get', 'space', undefined, { headers: getHeaders(), params: { limit: 25 } });
@@ -131,7 +132,7 @@ async function main() {
     );
 
     registerToolWithAliases(server, 'confluence.searchPages',
-        { description: 'Search Pages (CQL)', inputSchema: { type: 'object', properties: { cql: { type: 'string' } }, required: ['cql'] } },
+        { description: 'Search Pages (CQL)', inputSchema: z.object({ cql: z.string() }) },
         async (args) => {
             try {
                 const res = await confluenceRequest('get', 'content/search', undefined, {
@@ -144,7 +145,7 @@ async function main() {
     );
 
     registerToolWithAliases(server, 'confluence.getPage',
-        { description: 'Get Page', inputSchema: { type: 'object', properties: { page_id: { type: 'string' } }, required: ['page_id'] } },
+        { description: 'Get Page', inputSchema: z.object({ page_id: z.string() }) },
         async (args) => {
             try {
                 const res = await confluenceRequest('get', `content/${args.page_id}`, undefined, { headers: getHeaders(), params: { expand: 'body.storage' } });
@@ -156,16 +157,12 @@ async function main() {
     registerToolWithAliases(server, 'confluence.createPage',
         {
             description: 'Create Page',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    space_key: { type: 'string' },
-                    title: { type: 'string' },
-                    body: { type: 'string' },
-                    parent_id: { type: 'string' }
-                },
-                required: ['space_key', 'title']
-            }
+            inputSchema: z.object({
+                space_key: z.string(),
+                title: z.string(),
+                body: z.string().optional(),
+                parent_id: z.string().optional()
+            })
         },
         async (args) => {
             try {
