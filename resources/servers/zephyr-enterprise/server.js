@@ -1171,22 +1171,25 @@ async function main() {
                 type: 'object',
                 properties: {
                     name: { type: 'string', description: 'Name of the release.' },
+                    status: { type: 'string', description: 'Status of the release (e.g., "Not Started", "In Progress").' },
                     description: { type: 'string' },
                     project_id: { type: 'number', description: 'Defaults to configured project.' },
                     start_date: { type: 'string', description: 'ISO date string.' },
                     end_date: { type: 'string', description: 'ISO date string.' }
                 },
-                required: ['name'],
+                required: ['name', 'status'],
                 additionalProperties: false
             }
         },
         async (args) => {
             try {
                 requireNonEmptyString(args.name, 'name');
+                requireNonEmptyString(args.status, 'status');
                 ensureWritable();
                 await ensureConfigured();
                 const payload = {
                     name: args.name,
+                    status: args.status,
                     projectId: args.project_id || sessionConfig.project.id,
                     description: args.description,
                     startDate: args.start_date,

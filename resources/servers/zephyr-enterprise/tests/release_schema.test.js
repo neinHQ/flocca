@@ -80,7 +80,9 @@ describe('Zephyr Enterprise Release Tools Schema & Validation', () => {
             const tool = (list.result?.tools || []).find(t => t.name === 'zephyr_enterprise_create_release');
             expect(tool).toBeDefined();
             expect(tool.inputSchema.required).toContain('name');
+            expect(tool.inputSchema.required).toContain('status');
             expect(tool.inputSchema.properties.name.type).toBe('string');
+            expect(tool.inputSchema.properties.status.type).toBe('string');
         });
 
         test('accepts valid arguments and attempts execution', async () => {
@@ -88,12 +90,12 @@ describe('Zephyr Enterprise Release Tools Schema & Validation', () => {
                 name: 'zephyr_enterprise_create_release',
                 arguments: {
                     name: 'v1.0.0',
+                    status: 'Planned',
                     description: 'Public Beta',
                     start_date: '2026-04-01T00:00:00Z'
                 }
             });
             expect(res.error).toBeUndefined();
-            // Should fail network call (no live backend) but not schema validation
             const text = JSON.stringify(res.result?.content || []);
             expect(text).not.toContain('Input validation error');
         });
@@ -102,7 +104,19 @@ describe('Zephyr Enterprise Release Tools Schema & Validation', () => {
             const res = await harness.request('tools/call', {
                 name: 'zephyr_enterprise_create_release',
                 arguments: {
+                    status: 'Started',
                     description: 'Forgot the name'
+                }
+            });
+            expect(JSON.stringify(res.result?.content || [])).toContain('Input validation error');
+        });
+
+        test('rejects missing status', async () => {
+            const res = await harness.request('tools/call', {
+                name: 'zephyr_enterprise_create_release',
+                arguments: {
+                    name: 'v1.1.0',
+                    description: 'Draft'
                 }
             });
             expect(JSON.stringify(res.result?.content || [])).toContain('Input validation error');
