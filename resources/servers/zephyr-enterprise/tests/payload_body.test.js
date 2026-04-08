@@ -23,8 +23,8 @@ describe('Release Payload Hardening', () => {
                 name: 'v2.0',
                 status: 'Released',
                 description: 'Major Update',
-                startDate: '2026-05-01',
-                endDate: '2026-06-01',
+                releaseStartDate: '2026-05-01',
+                releaseEndDate: '2026-06-01',
                 projectId: 10
             });
         });
@@ -37,8 +37,8 @@ describe('Release Payload Hardening', () => {
                 name: 'v2.0',
                 status: 'Released',
                 description: 'Major Update',
-                startDate: '2026-05-01',
-                endDate: '2026-06-01'
+                releaseStartDate: '2026-05-01',
+                releaseEndDate: '2026-06-01'
             });
         });
 
@@ -50,8 +50,8 @@ describe('Release Payload Hardening', () => {
                  endDate: '2026-08-01'
              };
              const payload = buildCreateReleasePayload(camelArgs);
-             expect(payload.startDate).toBe('2026-07-01');
-             expect(payload.endDate).toBe('2026-08-01');
+             expect(payload.releaseStartDate).toBe('2026-07-01');
+             expect(payload.releaseEndDate).toBe('2026-08-01');
              expect(payload.status).toBe('Draft');
         });
     });
@@ -66,11 +66,12 @@ describe('Release Payload Hardening', () => {
 
         test('Flex: nests provided fields under release', () => {
             sessionConfig.api_family = API_FAMILY.FLEX;
-            const payload = buildUpdateReleasePayload({ id: 1, description: 'New Desc', status: 'In Progress' });
+            const payload = buildUpdateReleasePayload({ id: 1, description: 'New Desc', status: 'In Progress', start_date: '2026-10-01' });
             expect(payload).toEqual({
                 release: {
                     description: 'New Desc',
-                    status: 'In Progress'
+                    status: 'In Progress',
+                    releaseStartDate: '2026-10-01'
                 }
             });
         });

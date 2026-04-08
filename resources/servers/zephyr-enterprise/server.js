@@ -159,8 +159,8 @@ function buildCreateReleasePayload(args) {
     const payload = {
         name: normalized.name,
         description: normalized.description,
-        startDate: normalized.start_date,
-        endDate: normalized.end_date,
+        releaseStartDate: normalized.start_date,
+        releaseEndDate: normalized.end_date,
         status: normalized.status
     };
     if (activeApiFamily() === API_FAMILY.FLEX) {
@@ -181,8 +181,8 @@ function buildUpdateReleasePayload(args) {
     if (normalized.name !== undefined) payload.name = normalized.name;
     if (normalized.description !== undefined) payload.description = normalized.description;
     if (normalized.status !== undefined) payload.status = normalized.status;
-    if (normalized.start_date !== undefined) payload.startDate = normalized.start_date;
-    if (normalized.end_date !== undefined) payload.endDate = normalized.end_date;
+    if (normalized.start_date !== undefined) payload.releaseStartDate = normalized.start_date;
+    if (normalized.end_date !== undefined) payload.releaseEndDate = normalized.end_date;
 
     if (activeApiFamily() === API_FAMILY.FLEX) {
         return { release: payload };
@@ -218,6 +218,13 @@ function releaseCreatePaths() {
 }
 
 function releaseUpdatePaths(id) {
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        return [`flex/services/rest/v3/release/${id}`];
+    }
+    return [`public/rest/api/1.0/releases/${id}`];
+}
+
+function releaseDeletePaths(id) {
     if (activeApiFamily() === API_FAMILY.FLEX) {
         return [`flex/services/rest/v3/release/${id}`];
     }
@@ -352,8 +359,8 @@ function normalizeReleaseArgs(args = {}) {
         name: getStringArg(args, ['name']),
         description: getStringArg(args, ['description']),
         status: getStringArg(args, ['status']),
-        start_date: getStringArg(args, ['start_date', 'startDate']),
-        end_date: getStringArg(args, ['end_date', 'endDate']),
+        start_date: getStringArg(args, ['start_date', 'startDate', 'releaseStartDate']),
+        end_date: getStringArg(args, ['end_date', 'endDate', 'releaseEndDate']),
         project_id: getNumberArg(args, ['project_id', 'projectId'])
     };
 }
@@ -1277,6 +1284,32 @@ async function main() {
     );
 
     server.registerTool(
+        'zephyr_enterprise_delete_release',
+        {
+            description: 'Delete a release. WARNING: This is a destructive action.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    id: { type: 'number', description: 'ID of the release to delete.' }
+                },
+                required: ['id'],
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireNumber(args.id, 'id');
+                ensureWritable();
+                await ensureConfigured();
+                const data = await zFetchWithFallback(releaseDeletePaths(args.id), { method: 'DELETE', operation: 'delete_release' });
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, result: data }) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
         'zephyr_enterprise_list_users',
         { description: 'List users in Zephyr Enterprise.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' } }, additionalProperties: false } },
         async (args) => {
@@ -1460,6 +1493,7 @@ module.exports = {
         extractProjects,
         extractFolders,
         normalizeTestCaseArgs,
-        normalizeReleaseArgs
+        normalizeReleaseArgs,
+        releaseDeletePaths
     }
 };
