@@ -174,6 +174,20 @@ function testCaseUpdateSpec(id) {
     };
 }
 
+function releaseCreatePaths() {
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        return ['flex/services/rest/v3/release'];
+    }
+    return ['public/rest/api/1.0/releases'];
+}
+
+function releaseUpdatePaths(id) {
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        return [`flex/services/rest/v3/release/${id}`];
+    }
+    return [`public/rest/api/1.0/releases/${id}`];
+}
+
 function extractProjects(projectsResp) {
     if (projectsResp && !Array.isArray(projectsResp) && (projectsResp.id !== undefined || projectsResp.projectId !== undefined) && !projectsResp.values && !projectsResp.projects && !projectsResp.data) {
         return [{
@@ -1178,7 +1192,7 @@ async function main() {
                     startDate: args.start_date,
                     endDate: args.end_date
                 };
-                const data = await zFetch('public/rest/api/1.0/releases', { method: 'POST', body: payload, operation: 'create_release' });
+                const data = await zFetchWithFallback(releaseCreatePaths(), { method: 'POST', body: payload, operation: 'create_release' });
                 return { content: [{ type: 'text', text: JSON.stringify(data) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -1217,7 +1231,7 @@ async function main() {
                 if (args.start_date) payload.startDate = args.start_date;
                 if (args.end_date) payload.endDate = args.end_date;
                 
-                const data = await zFetch(`public/rest/api/1.0/releases/${args.id}`, { method: 'PUT', body: payload, operation: 'update_release' });
+                const data = await zFetchWithFallback(releaseUpdatePaths(args.id), { method: 'PUT', body: payload, operation: 'update_release' });
                 return { content: [{ type: 'text', text: JSON.stringify(data) }] };
             } catch (err) {
                 return normalizeError(err.message, err.code, err.details, err.http_status);
@@ -1400,6 +1414,8 @@ module.exports = {
         testCaseGetPaths,
         testCaseCreatePaths,
         testCaseUpdateSpec,
+        releaseCreatePaths,
+        releaseUpdatePaths,
         buildCreateTestCasePayload,
         buildUpdateTestCasePayload,
         extractProjects,

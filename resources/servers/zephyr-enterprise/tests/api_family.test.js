@@ -19,6 +19,22 @@ describe('Zephyr Enterprise API family routing helpers', () => {
         ]);
     });
 
+    test('release creation paths vary by API family', () => {
+        __test.sessionConfig.api_family = __test.API_FAMILY.PUBLIC;
+        expect(__test.releaseCreatePaths()).toEqual(['public/rest/api/1.0/releases']);
+        
+        __test.sessionConfig.api_family = __test.API_FAMILY.FLEX;
+        expect(__test.releaseCreatePaths()).toEqual(['flex/services/rest/v3/release']);
+    });
+
+    test('release update paths vary by API family', () => {
+        __test.sessionConfig.api_family = __test.API_FAMILY.PUBLIC;
+        expect(__test.releaseUpdatePaths(123)).toEqual(['public/rest/api/1.0/releases/123']);
+        
+        __test.sessionConfig.api_family = __test.API_FAMILY.FLEX;
+        expect(__test.releaseUpdatePaths(123)).toEqual(['flex/services/rest/v3/release/123']);
+    });
+
     test('create payload uses public shape by default', () => {
         __test.sessionConfig.api_family = __test.API_FAMILY.PUBLIC;
         __test.sessionConfig.project = { id: 42, key: 'QA' };
