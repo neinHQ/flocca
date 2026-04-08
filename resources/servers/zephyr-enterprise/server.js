@@ -1150,6 +1150,82 @@ async function main() {
     );
 
     server.registerTool(
+        'zephyr_enterprise_create_release',
+        {
+            description: 'Create a new release for a project.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'Name of the release.' },
+                    description: { type: 'string' },
+                    project_id: { type: 'number', description: 'Defaults to configured project.' },
+                    start_date: { type: 'string', description: 'ISO date string.' },
+                    end_date: { type: 'string', description: 'ISO date string.' }
+                },
+                required: ['name'],
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireNonEmptyString(args.name, 'name');
+                ensureWritable();
+                await ensureConfigured();
+                const payload = {
+                    name: args.name,
+                    projectId: args.project_id || sessionConfig.project.id,
+                    description: args.description,
+                    startDate: args.start_date,
+                    endDate: args.end_date
+                };
+                const data = await zFetch('public/rest/api/1.0/releases', { method: 'POST', body: payload, operation: 'create_release' });
+                return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
+        'zephyr_enterprise_update_release',
+        {
+            description: 'Update an existing release.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    id: { type: 'number', description: 'ID of the release to update. NEVER GUESS. Fetch from zephyr_enterprise_list_releases.' },
+                    name: { type: 'string' },
+                    description: { type: 'string' },
+                    status: { type: 'string', description: 'e.g., "In Progress", "Done"' },
+                    start_date: { type: 'string' },
+                    end_date: { type: 'string' }
+                },
+                required: ['id'],
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireNumber(args.id, 'id');
+                requireAtLeastOneField(args, ['name', 'description', 'status', 'start_date', 'end_date']);
+                ensureWritable();
+                await ensureConfigured();
+                const payload = {};
+                if (args.name) payload.name = args.name;
+                if (args.description) payload.description = args.description;
+                if (args.status) payload.status = args.status;
+                if (args.start_date) payload.startDate = args.start_date;
+                if (args.end_date) payload.endDate = args.end_date;
+                
+                const data = await zFetch(`public/rest/api/1.0/releases/${args.id}`, { method: 'PUT', body: payload, operation: 'update_release' });
+                return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+            } catch (err) {
+                return normalizeError(err.message, err.code, err.details, err.http_status);
+            }
+        }
+    );
+
+    server.registerTool(
         'zephyr_enterprise_list_users',
         { description: 'List users in Zephyr Enterprise.', inputSchema: { type: 'object', properties: { project_id: { type: 'number' } }, additionalProperties: false } },
         async (args) => {

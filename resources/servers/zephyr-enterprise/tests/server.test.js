@@ -32,6 +32,8 @@ describe('Zephyr Enterprise MCP Server Smoke Test', () => {
                         expect(names).toContain('zephyr_enterprise_health');
                         expect(names).toContain('zephyr_enterprise_search_test_cases');
                         expect(names).toContain('zephyr_enterprise.searchTestCases');
+                        expect(names).toContain('zephyr_enterprise_create_release');
+                        expect(names).toContain('zephyr_enterprise_update_release');
                         for (const name of names) {
                             expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
                         }
