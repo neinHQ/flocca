@@ -35,6 +35,47 @@ describe('Zephyr Enterprise API family routing helpers', () => {
         expect(__test.releaseUpdatePaths(123)).toEqual(['flex/services/rest/v3/release/123']);
     });
 
+    test('release creation payload vary by API family', () => {
+        __test.sessionConfig.project = { id: 42 };
+        const args = { name: 'R1', status: 'S1', description: 'D1' };
+        
+        __test.sessionConfig.api_family = __test.API_FAMILY.PUBLIC;
+        expect(__test.buildCreateReleasePayload(args)).toEqual({
+            name: 'R1',
+            status: 'S1',
+            description: 'D1',
+            projectId: 42,
+            startDate: undefined,
+            endDate: undefined
+        });
+        
+        __test.sessionConfig.api_family = __test.API_FAMILY.FLEX;
+        expect(__test.buildCreateReleasePayload(args)).toEqual({
+            projectId: 42,
+            release: {
+                name: 'R1',
+                status: 'S1',
+                description: 'D1',
+                startDate: undefined,
+                endDate: undefined
+            }
+        });
+    });
+
+    test('release update payload vary by API family', () => {
+        const args = { id: 101, status: 'Released' };
+        
+        __test.sessionConfig.api_family = __test.API_FAMILY.PUBLIC;
+        expect(__test.buildUpdateReleasePayload(args)).toEqual({
+            status: 'Released'
+        });
+        
+        __test.sessionConfig.api_family = __test.API_FAMILY.FLEX;
+        expect(__test.buildUpdateReleasePayload(args)).toEqual({
+            release: { status: 'Released' }
+        });
+    });
+
     test('create payload uses public shape by default', () => {
         __test.sessionConfig.api_family = __test.API_FAMILY.PUBLIC;
         __test.sessionConfig.project = { id: 42, key: 'QA' };

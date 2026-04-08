@@ -154,6 +154,40 @@ function buildUpdateTestCasePayload(args) {
     return payload;
 }
 
+function buildCreateReleasePayload(args) {
+    const payload = {
+        name: args.name,
+        description: args.description,
+        startDate: args.start_date,
+        endDate: args.end_date,
+        status: args.status
+    };
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        return {
+            projectId: args.project_id || sessionConfig.project.id,
+            release: payload
+        };
+    }
+    return {
+        ...payload,
+        projectId: args.project_id || sessionConfig.project.id
+    };
+}
+
+function buildUpdateReleasePayload(args) {
+    const payload = {};
+    if (args.name) payload.name = args.name;
+    if (args.description) payload.description = args.description;
+    if (args.status) payload.status = args.status;
+    if (args.start_date) payload.startDate = args.start_date;
+    if (args.end_date) payload.endDate = args.end_date;
+
+    if (activeApiFamily() === API_FAMILY.FLEX) {
+        return { release: payload };
+    }
+    return payload;
+}
+
 function testCaseCreatePaths() {
     if (activeApiFamily() === API_FAMILY.FLEX) {
         return ['flex/services/rest/latest/testcase'];
@@ -1177,24 +1211,16 @@ async function main() {
                     start_date: { type: 'string', description: 'ISO date string.' },
                     end_date: { type: 'string', description: 'ISO date string.' }
                 },
-                required: ['name', 'status'],
+                required: ['name'], // status is now optional to prevent "additional property" errors on some Flex versions
                 additionalProperties: false
             }
         },
         async (args) => {
             try {
                 requireNonEmptyString(args.name, 'name');
-                requireNonEmptyString(args.status, 'status');
                 ensureWritable();
                 await ensureConfigured();
-                const payload = {
-                    name: args.name,
-                    status: args.status,
-                    projectId: args.project_id || sessionConfig.project.id,
-                    description: args.description,
-                    startDate: args.start_date,
-                    endDate: args.end_date
-                };
+                const payload = buildCreateReleasePayload(args);
                 const data = await zFetchWithFallback(releaseCreatePaths(), { method: 'POST', body: payload, operation: 'create_release' });
                 return { content: [{ type: 'text', text: JSON.stringify(data) }] };
             } catch (err) {
@@ -1227,13 +1253,7 @@ async function main() {
                 requireAtLeastOneField(args, ['name', 'description', 'status', 'start_date', 'end_date']);
                 ensureWritable();
                 await ensureConfigured();
-                const payload = {};
-                if (args.name) payload.name = args.name;
-                if (args.description) payload.description = args.description;
-                if (args.status) payload.status = args.status;
-                if (args.start_date) payload.startDate = args.start_date;
-                if (args.end_date) payload.endDate = args.end_date;
-                
+                const payload = buildUpdateReleasePayload(args);
                 const data = await zFetchWithFallback(releaseUpdatePaths(args.id), { method: 'PUT', body: payload, operation: 'update_release' });
                 return { content: [{ type: 'text', text: JSON.stringify(data) }] };
             } catch (err) {
@@ -1421,6 +1441,8 @@ module.exports = {
         releaseUpdatePaths,
         buildCreateTestCasePayload,
         buildUpdateTestCasePayload,
+        buildCreateReleasePayload,
+        buildUpdateReleasePayload,
         extractProjects,
         extractFolders,
         normalizeTestCaseArgs
