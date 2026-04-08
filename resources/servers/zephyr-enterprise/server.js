@@ -155,32 +155,34 @@ function buildUpdateTestCasePayload(args) {
 }
 
 function buildCreateReleasePayload(args) {
+    const normalized = normalizeReleaseArgs(args);
     const payload = {
-        name: args.name,
-        description: args.description,
-        startDate: args.start_date,
-        endDate: args.end_date,
-        status: args.status
+        name: normalized.name,
+        description: normalized.description,
+        startDate: normalized.start_date,
+        endDate: normalized.end_date,
+        status: normalized.status
     };
     if (activeApiFamily() === API_FAMILY.FLEX) {
         return {
-            projectId: args.project_id || sessionConfig.project.id,
+            projectId: normalized.project_id || sessionConfig.project?.id,
             release: payload
         };
     }
     return {
         ...payload,
-        projectId: args.project_id || sessionConfig.project.id
+        projectId: normalized.project_id || sessionConfig.project?.id
     };
 }
 
 function buildUpdateReleasePayload(args) {
+    const normalized = normalizeReleaseArgs(args);
     const payload = {};
-    if (args.name) payload.name = args.name;
-    if (args.description) payload.description = args.description;
-    if (args.status) payload.status = args.status;
-    if (args.start_date) payload.startDate = args.start_date;
-    if (args.end_date) payload.endDate = args.end_date;
+    if (normalized.name !== undefined) payload.name = normalized.name;
+    if (normalized.description !== undefined) payload.description = normalized.description;
+    if (normalized.status !== undefined) payload.status = normalized.status;
+    if (normalized.start_date !== undefined) payload.startDate = normalized.start_date;
+    if (normalized.end_date !== undefined) payload.endDate = normalized.end_date;
 
     if (activeApiFamily() === API_FAMILY.FLEX) {
         return { release: payload };
@@ -342,6 +344,18 @@ function normalizePriority(value) {
         return undefined;
     }
     return String(value);
+}
+
+function normalizeReleaseArgs(args = {}) {
+    return {
+        id: getNumberArg(args, ['id', 'release_id', 'releaseId']),
+        name: getStringArg(args, ['name']),
+        description: getStringArg(args, ['description']),
+        status: getStringArg(args, ['status']),
+        start_date: getStringArg(args, ['start_date', 'startDate']),
+        end_date: getStringArg(args, ['end_date', 'endDate']),
+        project_id: getNumberArg(args, ['project_id', 'projectId'])
+    };
 }
 
 function normalizeTestCaseArgs(args = {}) {
@@ -1445,6 +1459,7 @@ module.exports = {
         buildUpdateReleasePayload,
         extractProjects,
         extractFolders,
-        normalizeTestCaseArgs
+        normalizeTestCaseArgs,
+        normalizeReleaseArgs
     }
 };
