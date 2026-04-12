@@ -2,7 +2,7 @@
   "name": "flocca",
   "displayName": "Flocca - Connect MCP Servers in VS Code",
   "description": "Connect MCP servers in your IDE to run workflows across Jira, GitHub, Cloud, QA, and DevOps tools from one dashboard.",
-  "version": "0.3.15",
+  "version": "0.3.18",
   "publisher": "flocca",
   "icon": "resources/icon.png",
   "repository": {
@@ -56,12 +56,14 @@
         {
           "type": "webview",
           "id": "flocca-workflows",
-          "name": "Flocca Workflows"
+          "name": "Flocca Workflows",
+          "icon": "resources/flocca-activity-icon.svg"
         },
         {
           "type": "webview",
           "id": "flocca-docs",
           "name": "Documentation",
+          "icon": "resources/flocca-activity-icon.svg",
           "visibility": "hidden"
         }
       ]
@@ -383,16 +385,27 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
+    "@aws-sdk/client-api-gateway": "^3.1027.0",
+    "@aws-sdk/client-apigatewayv2": "^3.1027.0",
+    "@aws-sdk/client-auto-scaling": "^3.1027.0",
+    "@aws-sdk/client-bedrock": "^3.1027.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1027.0",
+    "@aws-sdk/client-cloudformation": "^3.1027.0",
     "@aws-sdk/client-cloudwatch": "^3.676.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.676.0",
+    "@aws-sdk/client-dynamodb": "^3.1027.0",
     "@aws-sdk/client-ec2": "^3.676.0",
     "@aws-sdk/client-ecs": "^3.676.0",
     "@aws-sdk/client-eks": "^3.676.0",
     "@aws-sdk/client-iam": "^3.676.0",
     "@aws-sdk/client-lambda": "^3.676.0",
+    "@aws-sdk/client-rds-data": "^3.1027.0",
     "@aws-sdk/client-s3": "^3.676.0",
+    "@aws-sdk/client-secrets-manager": "^3.1027.0",
+    "@aws-sdk/client-sfn": "^3.1027.0",
     "@aws-sdk/client-sns": "^3.676.0",
     "@aws-sdk/client-sqs": "^3.676.0",
+    "@aws-sdk/client-ssm": "^3.1027.0",
     "@aws-sdk/client-sts": "^3.676.0",
     "@aws-sdk/util-stream-node": "^3.374.0",
     "@azure/arm-appservice": "^18.0.0",
@@ -405,7 +418,7 @@
     "@azure/storage-queue": "^12.29.0",
     "@kubernetes/client-node": "^1.4.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",
-    "@modelcontextprotocol/sdk": "^1.24.3",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@notionhq/client": "^5.9.0",
     "@octokit/rest": "^22.0.1",
     "axios": "^1.13.5",
@@ -415,7 +428,8 @@
     "isomorphic-fetch": "^3.0.0",
     "js-yaml": "^4.1.1",
     "lodash": "^4.17.23",
-    "pg": "^8.16.3",
-    "posthog-node": "^5.17.2"
+    "pg": "^8.20.0",
+    "posthog-node": "^5.17.2",
+    "zod": "^4.3.6"
   }
 }

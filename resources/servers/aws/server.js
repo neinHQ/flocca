@@ -14,146 +14,154 @@ const { EC2Client, DescribeInstancesCommand, StartInstancesCommand, StopInstance
 const { IAMClient, ListRolesCommand, GetRoleCommand } = require('@aws-sdk/client-iam');
 const { SQSClient, ListQueuesCommand, ReceiveMessageCommand, SendMessageCommand } = require('@aws-sdk/client-sqs');
 const { SNSClient, ListTopicsCommand, PublishCommand } = require('@aws-sdk/client-sns');
-const { CloudWatchClient, GetMetricStatisticsCommand } = require('@aws-sdk/client-cloudwatch');
+const { CloudWatchClient, GetMetricStatisticsCommand, DescribeAlarmsCommand } = require('@aws-sdk/client-cloudwatch');
+const { AutoScalingClient, DescribeAutoScalingGroupsCommand } = require('@aws-sdk/client-auto-scaling');
 const { streamToString } = require('@aws-sdk/util-stream-node');
+const { DynamoDBClient, ListTablesCommand, DescribeTableCommand, GetItemCommand, PutItemCommand, QueryCommand } = require('@aws-sdk/client-dynamodb');
+const { RDSDataClient, ExecuteStatementCommand } = require('@aws-sdk/client-rds-data');
+const { SecretsManagerClient, GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager');
+const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm');
+const { ApiGatewayClient, GetRestApisCommand, GetResourcesCommand } = require('@aws-sdk/client-api-gateway');
+const { CloudFormationClient, DescribeStacksCommand } = require('@aws-sdk/client-cloudformation');
+const { BedrockClient, ListFoundationModelsCommand } = require('@aws-sdk/client-bedrock');
+const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { SFNClient, StartExecutionCommand } = require('@aws-sdk/client-sfn');
 
 const SERVER_INFO = { name: 'aws-mcp', version: '0.1.0' };
 
-const sessionConfig = {
-    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
-    credentials: (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ? {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-        sessionToken: process.env.AWS_SESSION_TOKEN
-    } : undefined,
-    services: undefined,
-    identity: undefined
-};
-
-const clients = {};
-
-function normalizeError(message, code = 'AWS_ERROR', details, http_status) {
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details, http_status } }) }] };
-}
-
-function requireConfigured() {
-    // If Proxy is used, we might rely on stored credentials in Vault, so local credentials might be missing.
-    // However, region is still usually needed for endpoints.
-    if ((!sessionConfig.region || !sessionConfig.credentials) && !process.env.FLOCCA_PROXY_URL) {
-        throw new Error('AWS is not configured. Call aws_configure first.');
-    }
-    // If Proxy, we default region if missing
-    if (process.env.FLOCCA_PROXY_URL && !sessionConfig.region) {
-        sessionConfig.region = 'us-east-1'; // Fallback
-    }
-}
-
-const PROXY_URL = process.env.FLOCCA_PROXY_URL; // e.g., http://localhost:3000/proxy/aws
-const PROXY_USER_ID = process.env.FLOCCA_USER_ID;
-
-function client(key, Factory) {
-    if (!clients[key]) {
-        const config = {
-            region: sessionConfig.region || 'us-east-1', // Default region
-            credentials: sessionConfig.credentials
-        };
-
-        // If Proxy is configured, override endpoint and signer
-        if (PROXY_URL && PROXY_USER_ID) {
-            // 1. Point to Proxy
-            // For AWS SDK v3, endpoint can be a string or a provider.
-            // We need to route specific service calls to specific proxy sub-paths?
-            // The backend proxy expects /proxy/aws/<service_endpoint>
-            // So we need a custom endpoint provider that builds this URL.
-
-            config.endpoint = async (endpointParams) => {
-                // Return proxy URL. The proxy logic handles the final destination including region/service.
-                // However, SDK usually appends paths.
-                // Simple approach: Point ALL requests to the base proxy URL, 
-                // but the backend needs to know the target. The backend parses target from URL path.
-                // We need to make the SDK send requests effectively to:
-                // http://localhost:3000/proxy/aws/sts.us-east-1.amazonaws.com/
-
-                // Let's rely on constructing the target URL here.
-                // But SDK `endpoint` option is usually fixed per client.
-                // Hack: If we set endpoint to Proxy Base, the SDK will append path.
-                // e.g. Proxy Base: http://localhost:3000/proxy/aws/service.region.amazonaws.com
-
-                // Determining the real AWS endpoint is hard inside this generic factory without mapping keys to services.
-                // 'key' is 'sts', 's3', etc.
-                const service = key; // e.g. 'sts'
-                const region = config.region;
-                let targetHost = `${service}.${region}.amazonaws.com`;
-                if (service === 's3') targetHost = `s3.${region}.amazonaws.com`;
-                if (service === 'execute-api') targetHost = `execute-api.${region}.amazonaws.com`; // Generic
-
-                // Construct Proxy Endpoint
-                const proxyEndpoint = `${PROXY_URL}/${targetHost}`;
-
-                const urlObj = new URL(proxyEndpoint);
-                return {
-                    protocol: urlObj.protocol.replace(':', ''),
-                    hostname: urlObj.hostname,
-                    port: parseInt(urlObj.port) || undefined,
-                    path: urlObj.pathname
-                };
-            };
-
-            // 2. Disable Local Signing (The Proxy Signs)
-            // We use an anonymous signer so SDK doesn't try to sign with empty creds
-            config.signer = { sign: async (request) => request };
-        }
-
-        const clientInstance = new Factory(config);
-
-        // 3. Middleware to Inject User ID Header (if Proxying)
-        if (PROXY_URL && PROXY_USER_ID) {
-            clientInstance.middlewareStack.add(
-                (next, context) => async (args) => {
-                    const { request } = args;
-                    if (request.headers) {
-                        request.headers['x-flocca-user-id'] = PROXY_USER_ID;
-                        // Force JSON content type if not present, to match Proxy expectations
-                        // if (!request.headers['Content-Type']) request.headers['Content-Type'] = 'application/json';
-                    }
-                    return next(args);
-                },
-                {
-                    step: "build",
-                    name: "floccaProxyMiddleware",
-                    priority: "high"
-                }
-            );
-        }
-
-        clients[key] = clientInstance;
-    }
-    return clients[key];
-}
-
-function allowed(service) {
-    if (!sessionConfig.services || !sessionConfig.services.length) return true;
-    return sessionConfig.services.includes(service);
-}
-
-async function main() {
-    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
-    const originalRegisterTool = server.registerTool.bind(server);
-    const permissiveInputSchema = z.object({}).passthrough();
-    server.registerTool = (name, config, handler) => {
-        const nextConfig = { ...(config || {}) };
-        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = permissiveInputSchema;
-        }
-        return originalRegisterTool(name, nextConfig, handler);
+function createAwsServer() {
+    const sessionConfig = {
+        region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
+        credentials: (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ? {
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            sessionToken: process.env.AWS_SESSION_TOKEN
+        } : undefined,
+        services: undefined,
+        identity: undefined
     };
 
-    server.registerTool(
+    const clients = {};
+
+    function normalizeError(message, code = 'AWS_ERROR', details, http_status) {
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details, http_status } }) }] };
+    }
+
+    function requireConfigured() {
+        // If Proxy is used, we might rely on stored credentials in Vault, so local credentials might be missing.
+        // However, region is still usually needed for endpoints.
+        if ((!sessionConfig.region || !sessionConfig.credentials) && !process.env.FLOCCA_PROXY_URL) {
+            throw new Error('AWS is not configured. Call aws_configure first.');
+        }
+        // If Proxy, we default region if missing
+        if (process.env.FLOCCA_PROXY_URL && !sessionConfig.region) {
+            sessionConfig.region = 'us-east-1'; // Fallback
+        }
+    }
+
+    const PROXY_URL = process.env.FLOCCA_PROXY_URL; // e.g., http://localhost:3000/proxy/aws
+    const PROXY_USER_ID = process.env.FLOCCA_USER_ID;
+
+    function client(key, Factory) {
+        if (!clients[key]) {
+            const config = {
+                region: sessionConfig.region || 'us-east-1', // Default region
+                credentials: sessionConfig.credentials
+            };
+
+            // If Proxy is configured, override endpoint and signer
+            if (PROXY_URL && PROXY_USER_ID) {
+                // 1. Point to Proxy
+                // For AWS SDK v3, endpoint can be a string or a provider.
+                // We need to route specific service calls to specific proxy sub-paths?
+                // The backend proxy expects /proxy/aws/<service_endpoint>
+                // So we need a custom endpoint provider that builds this URL.
+
+                config.endpoint = async (endpointParams) => {
+                    // Return proxy URL. The proxy logic handles the final destination including region/service.
+                    // However, SDK usually appends paths.
+                    const service = key; // e.g. 'sts'
+                    const region = config.region;
+                    let targetHost = `${service}.${region}.amazonaws.com`;
+                    if (service === 's3') targetHost = `s3.${region}.amazonaws.com`;
+                    if (service === 'execute-api') targetHost = `execute-api.${region}.amazonaws.com`;
+                    if (service === 'dynamodb') targetHost = `dynamodb.${region}.amazonaws.com`;
+                    if (service === 'rds-data') targetHost = `rds-data.${region}.amazonaws.com`;
+                    if (service === 'secretsmanager') targetHost = `secretsmanager.${region}.amazonaws.com`;
+                    if (service === 'ssm') targetHost = `ssm.${region}.amazonaws.com`;
+                    if (service === 'apigateway') targetHost = `apigateway.${region}.amazonaws.com`;
+                    if (service === 'cloudformation') targetHost = `cloudformation.${region}.amazonaws.com`;
+                    if (service === 'bedrock') targetHost = `bedrock.${region}.amazonaws.com`;
+                    if (service === 'bedrock-runtime') targetHost = `bedrock-runtime.${region}.amazonaws.com`;
+                    if (service === 'states') targetHost = `states.${region}.amazonaws.com`;
+                    if (service === 'autoscaling') targetHost = `autoscaling.${region}.amazonaws.com`;
+
+                    // Construct Proxy Endpoint
+                    const proxyEndpoint = `${PROXY_URL}/${targetHost}`;
+
+                    const urlObj = new URL(proxyEndpoint);
+                    return {
+                        protocol: urlObj.protocol.replace(':', ''),
+                        hostname: urlObj.hostname,
+                        port: parseInt(urlObj.port) || undefined,
+                        path: urlObj.pathname
+                    };
+                };
+
+                // 2. Disable Local Signing (The Proxy Signs)
+                // We use an anonymous signer so SDK doesn't try to sign with empty creds
+                config.signer = { sign: async (request) => request };
+            }
+
+            const clientInstance = new Factory(config);
+
+            // 3. Middleware to Inject User ID Header (if Proxying)
+            if (PROXY_URL && PROXY_USER_ID) {
+                clientInstance.middlewareStack.add(
+                    (next, context) => async (args) => {
+                        const { request } = args;
+                        if (request.headers) {
+                            request.headers['x-flocca-user-id'] = PROXY_USER_ID;
+                            // Force JSON content type if not present, to match Proxy expectations
+                            // if (!request.headers['Content-Type']) request.headers['Content-Type'] = 'application/json';
+                        }
+                        return next(args);
+                    },
+                    {
+                        step: "build",
+                        name: "floccaProxyMiddleware",
+                        priority: "high"
+                    }
+                );
+            }
+
+            clients[key] = clientInstance;
+        }
+        return clients[key];
+    }
+
+    function allowed(service) {
+        if (!sessionConfig.services || sessionConfig.services.length === 0) return true;
+        return sessionConfig.services.includes(service) || sessionConfig.services.includes('*');
+    }
+
+    async function discovery() {
+        if (sessionConfig.identity) return sessionConfig.identity;
+        try {
+            const sts = client('sts', STSClient);
+            const resp = await sts.send(new GetCallerIdentityCommand({}));
+            sessionConfig.identity = resp.Arn;
+            return sessionConfig.identity;
+        } catch {
+            return undefined;
+        }
+    }
+
+    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+
+    server.tool(
         'aws_health',
-        {
-            description: 'Health check for AWS MCP server.',
-            inputSchema: { type: 'object', properties: {}, additionalProperties: false }
-        },
+        {},
         async () => {
             try {
                 requireConfigured();
@@ -167,28 +175,16 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_configure',
         {
-            description: 'Configure AWS for this session using temporary credentials.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    region: { type: 'string' },
-                    credentials: {
-                        type: 'object',
-                        properties: {
-                            access_key_id: { type: 'string' },
-                            secret_access_key: { type: 'string' },
-                            session_token: { type: 'string' }
-                        },
-                        required: ['access_key_id', 'secret_access_key']
-                    },
-                    services: { type: 'array', items: { type: 'string' } }
-                },
-                required: ['region', 'credentials'],
-                additionalProperties: false
-            }
+            region: z.string(),
+            credentials: z.object({
+                access_key_id: z.string(),
+                secret_access_key: z.string(),
+                session_token: z.string().optional()
+            }),
+            services: z.array(z.string()).optional()
         },
         async (args) => {
             try {
@@ -214,9 +210,9 @@ async function main() {
     );
 
     // S3
-    server.registerTool(
+    server.tool(
         'aws_s3_list_buckets',
-        { description: 'List S3 buckets.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+        {},
         async () => {
             try {
                 requireConfigured();
@@ -231,20 +227,13 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_s3_list_objects',
         {
-            description: 'List S3 objects in a bucket/prefix.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    bucket: { type: 'string' },
-                    prefix: { type: 'string' },
-                    max_keys: { type: 'number' }
-                },
-                required: ['bucket'],
-                additionalProperties: false
-            }
+            bucket: z.string(),
+            prefix: z.string().optional(),
+            max_keys: z.number().optional().default(100),
+            continuation_token: z.string().optional()
         },
         async (args) => {
             try {
@@ -254,26 +243,22 @@ async function main() {
                 const resp = await s3.send(new ListObjectsV2Command({
                     Bucket: args.bucket,
                     Prefix: args.prefix,
-                    MaxKeys: args.max_keys || 100
+                    MaxKeys: args.max_keys,
+                    ContinuationToken: args.continuation_token
                 }));
                 const objects = (resp.Contents || []).map((o) => ({ key: o.Key, size: o.Size, lastModified: o.LastModified }));
-                return { content: [{ type: 'text', text: JSON.stringify({ objects, isTruncated: resp.IsTruncated }) }] };
+                return { content: [{ type: 'text', text: JSON.stringify({ objects, isTruncated: resp.IsTruncated, nextContinuationToken: resp.NextContinuationToken }) }] };
             } catch (err) {
                 return normalizeError(err.message, err.name === 'AccessDenied' ? 'ACCESS_DENIED' : 'AWS_ERROR', err);
             }
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_s3_get_object',
-        {
-            description: 'Get an S3 object (returns text content).',
-            inputSchema: {
-                type: 'object',
-                properties: { bucket: { type: 'string' }, key: { type: 'string' } },
-                required: ['bucket', 'key'],
-                additionalProperties: false
-            }
+        { 
+            bucket: z.string(), 
+            key: z.string() 
         },
         async (args) => {
             try {
@@ -289,21 +274,13 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_s3_put_object',
         {
-            description: 'Upload text content to S3.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    bucket: { type: 'string' },
-                    key: { type: 'string' },
-                    content: { type: 'string' },
-                    content_type: { type: 'string' }
-                },
-                required: ['bucket', 'key', 'content'],
-                additionalProperties: false
-            }
+            bucket: z.string(),
+            key: z.string(),
+            content: z.string(),
+            content_type: z.string().optional().default('text/plain')
         },
         async (args) => {
             try {
@@ -314,7 +291,7 @@ async function main() {
                     Bucket: args.bucket,
                     Key: args.key,
                     Body: args.content,
-                    ContentType: args.content_type || 'text/plain'
+                    ContentType: args.content_type
                 }));
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, bucket: args.bucket, key: args.key }) }] };
             } catch (err) {
@@ -324,26 +301,32 @@ async function main() {
     );
 
     // Lambda
-    server.registerTool(
+    server.tool(
         'aws_lambda_list_functions',
-        { description: 'List Lambda functions.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
+        {
+            limit: z.number().optional().default(50),
+            marker: z.string().optional()
+        },
+        async (args) => {
             try {
                 requireConfigured();
                 if (!allowed('lambda')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
                 const lambda = client('lambda', LambdaClient);
-                const resp = await lambda.send(new ListFunctionsCommand({}));
+                const resp = await lambda.send(new ListFunctionsCommand({
+                    MaxItems: args.limit,
+                    Marker: args.marker
+                }));
                 const functions = (resp.Functions || []).map((f) => ({ name: f.FunctionName, runtime: f.Runtime, lastModified: f.LastModified, arn: f.FunctionArn }));
-                return { content: [{ type: 'text', text: JSON.stringify({ functions }) }] };
+                return { content: [{ type: 'text', text: JSON.stringify({ functions, nextMarker: resp.NextMarker }) }] };
             } catch (err) {
                 return normalizeError(err.message, 'AWS_ERROR', err);
             }
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_lambda_get_function',
-        { description: 'Get Lambda function configuration.', inputSchema: { type: 'object', properties: { function_name: { type: 'string' } }, required: ['function_name'], additionalProperties: false } },
+        { function_name: z.string() },
         async (args) => {
             try {
                 requireConfigured();
@@ -357,21 +340,13 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_lambda_invoke',
         {
-            description: 'Invoke a Lambda function.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    function_name: { type: 'string' },
-                    payload: { type: 'object' },
-                    invocation_type: { type: 'string', enum: ['RequestResponse', 'Event'], default: 'RequestResponse' },
-                    log_type: { type: 'string', enum: ['None', 'Tail'], default: 'None' }
-                },
-                required: ['function_name'],
-                additionalProperties: false
-            }
+            function_name: z.string(),
+            payload: z.record(z.string(), z.any()).optional(),
+            invocation_type: z.enum(['RequestResponse', 'Event']).optional().default('RequestResponse'),
+            log_type: z.enum(['None', 'Tail']).optional().default('None')
         },
         async (args) => {
             try {
@@ -381,8 +356,8 @@ async function main() {
                 const resp = await lambda.send(new InvokeCommand({
                     FunctionName: args.function_name,
                     Payload: args.payload ? Buffer.from(JSON.stringify(args.payload)) : undefined,
-                    InvocationType: args.invocation_type || 'RequestResponse',
-                    LogType: args.log_type || 'None'
+                    InvocationType: args.invocation_type,
+                    LogType: args.log_type
                 }));
                 let payload;
                 if (resp.Payload) {
@@ -407,58 +382,66 @@ async function main() {
     );
 
     // CloudWatch Logs
-    server.registerTool(
+    server.tool(
         'aws_logs_list_log_groups',
-        { description: 'List CloudWatch log groups.', inputSchema: { type: 'object', properties: { prefix: { type: 'string' } }, additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                if (!allowed('cloudwatch')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
-                const logs = client('logs', CloudWatchLogsClient);
-                const resp = await logs.send(new DescribeLogGroupsCommand({ logGroupNamePrefix: args.prefix }));
-                return { content: [{ type: 'text', text: JSON.stringify({ logGroups: resp.logGroups || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, 'AWS_ERROR', err);
-            }
-        }
-    );
-
-    server.registerTool(
-        'aws_logs_get_log_streams',
         {
-            description: 'List log streams for a log group.',
-            inputSchema: { type: 'object', properties: { log_group_name: { type: 'string' } }, required: ['log_group_name'], additionalProperties: false }
+            prefix: z.string().optional(),
+            limit: z.number().optional().default(50),
+            next_token: z.string().optional()
         },
         async (args) => {
             try {
                 requireConfigured();
                 if (!allowed('cloudwatch')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
                 const logs = client('logs', CloudWatchLogsClient);
-                const resp = await logs.send(new DescribeLogStreamsCommand({ logGroupName: args.log_group_name, orderBy: 'LastEventTime', descending: true }));
-                return { content: [{ type: 'text', text: JSON.stringify({ logStreams: resp.logStreams || [] }) }] };
+                const resp = await logs.send(new DescribeLogGroupsCommand({
+                    logGroupNamePrefix: args.prefix,
+                    limit: args.limit,
+                    nextToken: args.next_token
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ logGroups: resp.logGroups || [], nextToken: resp.nextToken }) }] };
             } catch (err) {
                 return normalizeError(err.message, 'AWS_ERROR', err);
             }
         }
     );
 
-    server.registerTool(
+    server.tool(
+        'aws_logs_get_log_streams',
+        {
+            log_group_name: z.string(),
+            limit: z.number().optional().default(50),
+            next_token: z.string().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('cloudwatch')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const logs = client('logs', CloudWatchLogsClient);
+                const resp = await logs.send(new DescribeLogStreamsCommand({
+                    logGroupName: args.log_group_name,
+                    orderBy: 'LastEventTime',
+                    descending: true,
+                    limit: args.limit,
+                    nextToken: args.next_token
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ logStreams: resp.logStreams || [], nextToken: resp.nextToken }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
         'aws_logs_get_log_events',
         {
-            description: 'Get log events (with optional filter pattern).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    log_group_name: { type: 'string' },
-                    log_stream_name: { type: 'string' },
-                    start_time: { type: 'number' },
-                    end_time: { type: 'number' },
-                    filter_pattern: { type: 'string' },
-                    limit: { type: 'number' }
-                },
-                required: ['log_group_name'],
-                additionalProperties: false
-            }
+            log_group_name: z.string(),
+            log_stream_name: z.string().optional(),
+            start_time: z.number().optional(),
+            end_time: z.number().optional(),
+            filter_pattern: z.string().optional(),
+            limit: z.number().optional().default(100),
+            next_token: z.string().optional()
         },
         async (args) => {
             try {
@@ -471,10 +454,11 @@ async function main() {
                     startTime: args.start_time,
                     endTime: args.end_time,
                     filterPattern: args.filter_pattern,
-                    limit: args.limit || 100
+                    limit: args.limit,
+                    nextToken: args.next_token
                 }));
                 const events = (resp.events || []).map((e) => ({ message: e.message, timestamp: e.timestamp, logStreamName: e.logStreamName }));
-                return { content: [{ type: 'text', text: JSON.stringify({ events }) }] };
+                return { content: [{ type: 'text', text: JSON.stringify({ events, nextToken: resp.nextToken }) }] };
             } catch (err) {
                 return normalizeError(err.message, 'AWS_ERROR', err);
             }
@@ -482,46 +466,57 @@ async function main() {
     );
 
     // ECS
-    server.registerTool(
+    server.tool(
         'aws_ecs_list_clusters',
-        { description: 'List ECS clusters.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                if (!allowed('ecs')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
-                const ecs = client('ecs', ECSClient);
-                const resp = await ecs.send(new ListClustersCommand({}));
-                return { content: [{ type: 'text', text: JSON.stringify({ clusterArns: resp.clusterArns || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, 'AWS_ERROR', err);
-            }
-        }
-    );
-
-    server.registerTool(
-        'aws_ecs_list_services',
         {
-            description: 'List ECS services for a cluster.',
-            inputSchema: { type: 'object', properties: { cluster: { type: 'string' } }, required: ['cluster'], additionalProperties: false }
+            max_results: z.number().optional(),
+            next_token: z.string().optional()
         },
         async (args) => {
             try {
                 requireConfigured();
                 if (!allowed('ecs')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
                 const ecs = client('ecs', ECSClient);
-                const resp = await ecs.send(new ListServicesCommand({ cluster: args.cluster }));
-                return { content: [{ type: 'text', text: JSON.stringify({ serviceArns: resp.serviceArns || [] }) }] };
+                const resp = await ecs.send(new ListClustersCommand({
+                    maxResults: args.max_results,
+                    nextToken: args.next_token
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ clusterArns: resp.clusterArns || [], nextToken: resp.nextToken }) }] };
             } catch (err) {
                 return normalizeError(err.message, 'AWS_ERROR', err);
             }
         }
     );
 
-    server.registerTool(
-        'aws_ecs_describe_service',
+    server.tool(
+        'aws_ecs_list_services',
         {
-            description: 'Describe an ECS service.',
-            inputSchema: { type: 'object', properties: { cluster: { type: 'string' }, service: { type: 'string' } }, required: ['cluster', 'service'], additionalProperties: false }
+            cluster: z.string(),
+            max_results: z.number().optional(),
+            next_token: z.string().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('ecs')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const ecs = client('ecs', ECSClient);
+                const resp = await ecs.send(new ListServicesCommand({
+                    cluster: args.cluster,
+                    maxResults: args.max_results,
+                    nextToken: args.next_token
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ serviceArns: resp.serviceArns || [], nextToken: resp.nextToken }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_ecs_describe_service',
+        { 
+            cluster: z.string(), 
+            service: z.string() 
         },
         async (args) => {
             try {
@@ -536,16 +531,12 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_ecs_update_service',
-        {
-            description: 'Update an ECS service (e.g., desired count).',
-            inputSchema: {
-                type: 'object',
-                properties: { cluster: { type: 'string' }, service: { type: 'string' }, desired_count: { type: 'number' } },
-                required: ['cluster', 'service', 'desired_count'],
-                additionalProperties: false
-            }
+        { 
+            cluster: z.string(), 
+            service: z.string(), 
+            desired_count: z.number() 
         },
         async (args) => {
             try {
@@ -565,9 +556,9 @@ async function main() {
     );
 
     // EKS
-    server.registerTool(
+    server.tool(
         'aws_eks_list_clusters',
-        { description: 'List EKS clusters.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+        {},
         async () => {
             try {
                 requireConfigured();
@@ -581,9 +572,9 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_eks_describe_cluster',
-        { description: 'Describe an EKS cluster.', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'], additionalProperties: false } },
+        { name: z.string() },
         async (args) => {
             try {
                 requireConfigured();
@@ -597,39 +588,47 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_eks_update_kubeconfig_token',
-        {
-            description: 'Placeholder for EKS auth token (not implemented).',
-            inputSchema: { type: 'object', properties: { cluster: { type: 'string' } }, required: ['cluster'], additionalProperties: false }
-        },
+        { cluster: z.string() },
         async () => normalizeError('Not implemented in this MVP', 'NOT_IMPLEMENTED', 400)
     );
 
     // EC2
-    server.registerTool(
+    server.tool(
         'aws_ec2_list_instances',
-        { description: 'List EC2 instances.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
+        {
+            filters: z.array(z.object({
+                name: z.string(),
+                values: z.array(z.string())
+            })).optional(),
+            next_token: z.string().optional(),
+            max_results: z.number().optional()
+        },
+        async (args) => {
             try {
                 requireConfigured();
                 if (!allowed('ec2')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
                 const ec2 = client('ec2', EC2Client);
-                const resp = await ec2.send(new DescribeInstancesCommand({}));
+                const resp = await ec2.send(new DescribeInstancesCommand({
+                    Filters: args.filters ? args.filters.map(f => ({ Name: f.name, Values: f.values })) : undefined,
+                    NextToken: args.next_token,
+                    MaxResults: args.max_results
+                }));
                 const instances = [];
                 (resp.Reservations || []).forEach((r) => {
                     (r.Instances || []).forEach((i) => instances.push(i));
                 });
-                return { content: [{ type: 'text', text: JSON.stringify({ instances }) }] };
+                return { content: [{ type: 'text', text: JSON.stringify({ instances, nextToken: resp.NextToken }) }] };
             } catch (err) {
                 return normalizeError(err.message, 'AWS_ERROR', err);
             }
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_ec2_describe_instance',
-        { description: 'Describe a single EC2 instance.', inputSchema: { type: 'object', properties: { instance_id: { type: 'string' } }, required: ['instance_id'], additionalProperties: false } },
+        { instance_id: z.string() },
         async (args) => {
             try {
                 requireConfigured();
@@ -644,9 +643,9 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_ec2_start_instance',
-        { description: 'Start an EC2 instance.', inputSchema: { type: 'object', properties: { instance_id: { type: 'string' } }, required: ['instance_id'], additionalProperties: false } },
+        { instance_id: z.string() },
         async (args) => {
             try {
                 requireConfigured();
@@ -660,9 +659,9 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_ec2_stop_instance',
-        { description: 'Stop an EC2 instance.', inputSchema: { type: 'object', properties: { instance_id: { type: 'string' } }, required: ['instance_id'], additionalProperties: false } },
+        { instance_id: z.string() },
         async (args) => {
             try {
                 requireConfigured();
@@ -677,9 +676,9 @@ async function main() {
     );
 
     // IAM (read-only)
-    server.registerTool(
+    server.tool(
         'aws_iam_get_caller_identity',
-        { description: 'Return STS caller identity.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+        {},
         async () => {
             try {
                 requireConfigured();
@@ -692,25 +691,31 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_iam_list_roles',
-        { description: 'List IAM roles (paginated first page).', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
+        {
+            limit: z.number().optional().default(100),
+            marker: z.string().optional()
+        },
+        async (args) => {
             try {
                 requireConfigured();
                 if (!allowed('iam')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
                 const iam = client('iam', IAMClient);
-                const resp = await iam.send(new ListRolesCommand({}));
-                return { content: [{ type: 'text', text: JSON.stringify({ roles: resp.Roles || [] }) }] };
+                const resp = await iam.send(new ListRolesCommand({
+                    MaxItems: args.limit,
+                    Marker: args.marker
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ roles: resp.Roles || [], isTruncated: resp.IsTruncated, marker: resp.Marker }) }] };
             } catch (err) {
                 return normalizeError(err.message, 'AWS_ERROR', err);
             }
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_iam_get_role',
-        { description: 'Get IAM role.', inputSchema: { type: 'object', properties: { role_name: { type: 'string' } }, required: ['role_name'], additionalProperties: false } },
+        { role_name: z.string() },
         async (args) => {
             try {
                 requireConfigured();
@@ -725,36 +730,36 @@ async function main() {
     );
 
     // SQS
-    server.registerTool(
+    server.tool(
         'aws_sqs_list_queues',
-        { description: 'List SQS queues.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
+        {
+            prefix: z.string().optional(),
+            max_results: z.number().optional(),
+            next_token: z.string().optional()
+        },
+        async (args) => {
             try {
                 requireConfigured();
                 if (!allowed('sqs')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
                 const sqs = client('sqs', SQSClient);
-                const resp = await sqs.send(new ListQueuesCommand({}));
-                return { content: [{ type: 'text', text: JSON.stringify({ queueUrls: resp.QueueUrls || [] }) }] };
+                const resp = await sqs.send(new ListQueuesCommand({
+                    QueueNamePrefix: args.prefix,
+                    MaxResults: args.max_results,
+                    NextToken: args.next_token
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ queueUrls: resp.QueueUrls || [], nextToken: resp.NextToken }) }] };
             } catch (err) {
                 return normalizeError(err.message, 'AWS_ERROR', err);
             }
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_sqs_receive_messages',
         {
-            description: 'Receive messages from SQS.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    queue_url: { type: 'string' },
-                    max_number: { type: 'number' },
-                    wait_time_seconds: { type: 'number' }
-                },
-                required: ['queue_url'],
-                additionalProperties: false
-            }
+            queue_url: z.string(),
+            max_number: z.number().optional().default(1),
+            wait_time_seconds: z.number().optional().default(0)
         },
         async (args) => {
             try {
@@ -763,8 +768,8 @@ async function main() {
                 const sqs = client('sqs', SQSClient);
                 const resp = await sqs.send(new ReceiveMessageCommand({
                     QueueUrl: args.queue_url,
-                    MaxNumberOfMessages: args.max_number || 1,
-                    WaitTimeSeconds: args.wait_time_seconds || 0
+                    MaxNumberOfMessages: args.max_number,
+                    WaitTimeSeconds: args.wait_time_seconds
                 }));
                 return { content: [{ type: 'text', text: JSON.stringify({ messages: resp.Messages || [] }) }] };
             } catch (err) {
@@ -773,16 +778,11 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_sqs_send_message',
-        {
-            description: 'Send a message to SQS.',
-            inputSchema: {
-                type: 'object',
-                properties: { queue_url: { type: 'string' }, message_body: { type: 'string' } },
-                required: ['queue_url', 'message_body'],
-                additionalProperties: false
-            }
+        { 
+            queue_url: z.string(), 
+            message_body: z.string() 
         },
         async (args) => {
             try {
@@ -798,32 +798,30 @@ async function main() {
     );
 
     // SNS
-    server.registerTool(
+    server.tool(
         'aws_sns_list_topics',
-        { description: 'List SNS topics.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
+        {
+            next_token: z.string().optional()
+        },
+        async (args) => {
             try {
                 requireConfigured();
                 if (!allowed('sns')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
                 const sns = client('sns', SNSClient);
-                const resp = await sns.send(new ListTopicsCommand({}));
-                return { content: [{ type: 'text', text: JSON.stringify({ topics: resp.Topics || [] }) }] };
+                const resp = await sns.send(new ListTopicsCommand({ NextToken: args.next_token }));
+                return { content: [{ type: 'text', text: JSON.stringify({ topics: resp.Topics || [], nextToken: resp.NextToken }) }] };
             } catch (err) {
                 return normalizeError(err.message, 'AWS_ERROR', err);
             }
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_sns_publish',
-        {
-            description: 'Publish a message to SNS.',
-            inputSchema: {
-                type: 'object',
-                properties: { topic_arn: { type: 'string' }, message: { type: 'string' }, subject: { type: 'string' } },
-                required: ['topic_arn', 'message'],
-                additionalProperties: false
-            }
+        { 
+            topic_arn: z.string(), 
+            message: z.string(), 
+            subject: z.string().optional() 
         },
         async (args) => {
             try {
@@ -838,21 +836,430 @@ async function main() {
         }
     );
 
+    // Pillar 1: Data & State (DynamoDB & RDS Data)
+    server.tool(
+        'aws_dynamodb_list_tables',
+        {
+            limit: z.number().optional(),
+            exclusive_start_table_name: z.string().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('dynamodb')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const dynamodb = client('dynamodb', DynamoDBClient);
+                const resp = await dynamodb.send(new ListTablesCommand({
+                    Limit: args.limit,
+                    ExclusiveStartTableName: args.exclusive_start_table_name
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ tableNames: resp.TableNames || [], lastEvaluatedTableName: resp.LastEvaluatedTableName }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_dynamodb_describe_table',
+        { table_name: z.string() },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('dynamodb')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const dynamodb = client('dynamodb', DynamoDBClient);
+                const resp = await dynamodb.send(new DescribeTableCommand({ TableName: args.table_name }));
+                return { content: [{ type: 'text', text: JSON.stringify({ table: resp.Table }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_dynamodb_get_item',
+        {
+            table_name: z.string(),
+            key: z.record(z.string(), z.any())
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('dynamodb')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const dynamodb = client('dynamodb', DynamoDBClient);
+                const resp = await dynamodb.send(new GetItemCommand({
+                    TableName: args.table_name,
+                    Key: args.key
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ item: resp.Item }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_dynamodb_put_item',
+        {
+            table_name: z.string(),
+            item: z.record(z.string(), z.any())
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('dynamodb')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const dynamodb = client('dynamodb', DynamoDBClient);
+                await dynamodb.send(new PutItemCommand({
+                    TableName: args.table_name,
+                    Item: args.item
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_dynamodb_query',
+        {
+            table_name: z.string(),
+            key_condition_expression: z.string(),
+            expression_attribute_values: z.record(z.string(), z.any()).optional(),
+            limit: z.number().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('dynamodb')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const dynamodb = client('dynamodb', DynamoDBClient);
+                const resp = await dynamodb.send(new QueryCommand({
+                    TableName: args.table_name,
+                    KeyConditionExpression: args.key_condition_expression,
+                    ExpressionAttributeValues: args.expression_attribute_values,
+                    Limit: args.limit
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ items: resp.Items || [], count: resp.Count }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_rds_execute_statement',
+        {
+            resource_arn: z.string(),
+            secret_arn: z.string(),
+            sql: z.string(),
+            database: z.string().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('rds-data')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const rdsData = client('rds-data', RDSDataClient);
+                const resp = await rdsData.send(new ExecuteStatementCommand({
+                    resourceArn: args.resource_arn,
+                    secretArn: args.secret_arn,
+                    sql: args.sql,
+                    database: args.database
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ records: resp.records, numberOfRecordsUpdated: resp.numberOfRecordsUpdated }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    // Pillar 2: Configuration & Secrets (Secrets Manager & SSM)
+    server.tool(
+        'aws_secrets_get_value',
+        { secret_id: z.string() },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('secretsmanager')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const secrets = client('secretsmanager', SecretsManagerClient);
+                const resp = await secrets.send(new GetSecretValueCommand({ SecretId: args.secret_id }));
+                return { content: [{ type: 'text', text: JSON.stringify({ secret: resp.SecretString || resp.SecretBinary }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_ssm_get_parameter',
+        {
+            name: z.string(),
+            with_decryption: z.boolean().optional().default(true)
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('ssm')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const ssm = client('ssm', SSMClient);
+                const resp = await ssm.send(new GetParameterCommand({
+                    Name: args.name,
+                    WithDecryption: args.with_decryption
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ parameter: resp.Parameter }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    // Pillar 3: Infrastructure (API Gateway, CloudFormation, Networking)
+    server.tool(
+        'aws_apigateway_list_rest_apis',
+        {
+            limit: z.number().optional().default(25),
+            position: z.string().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('apigateway')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const apigw = client('apigateway', ApiGatewayClient);
+                const resp = await apigw.send(new GetRestApisCommand({
+                    limit: args.limit,
+                    position: args.position
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ items: resp.items || [], position: resp.position }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_apigateway_get_resources',
+        {
+            rest_api_id: z.string(),
+            limit: z.number().optional().default(25),
+            position: z.string().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('apigateway')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const apigw = client('apigateway', ApiGatewayClient);
+                const resp = await apigw.send(new GetResourcesCommand({
+                    restApiId: args.rest_api_id,
+                    limit: args.limit,
+                    position: args.position
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ items: resp.items || [], position: resp.position }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_cloudformation_describe_stacks',
+        {
+            stack_name: z.string().optional(),
+            next_token: z.string().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('cloudformation')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const cf = client('cloudformation', CloudFormationClient);
+                const resp = await cf.send(new DescribeStacksCommand({
+                    StackName: args.stack_name,
+                    NextToken: args.next_token
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ stacks: resp.Stacks || [], nextToken: resp.NextToken }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_ec2_describe_security_groups',
+        {
+            group_ids: z.array(z.string()).optional(),
+            next_token: z.string().optional(),
+            max_results: z.number().optional().default(50)
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('ec2')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const ec2 = client('ec2', EC2Client);
+                const resp = await ec2.send(new DescribeSecurityGroupsCommand({
+                    GroupIds: args.group_ids,
+                    NextToken: args.next_token,
+                    MaxResults: args.max_results
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ securityGroups: resp.SecurityGroups || [], nextToken: resp.NextToken }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_ec2_describe_subnets',
+        {
+            subnet_ids: z.array(z.string()).optional(),
+            next_token: z.string().optional(),
+            max_results: z.number().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('ec2')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const ec2 = client('ec2', EC2Client);
+                const resp = await ec2.send(new DescribeSubnetsCommand({
+                    SubnetIds: args.subnet_ids,
+                    NextToken: args.next_token,
+                    MaxResults: args.max_results
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ subnets: resp.Subnets || [], nextToken: resp.NextToken }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    // Pillar 4: AI & Orchestration (Bedrock & Step Functions)
+    server.tool(
+        'aws_bedrock_list_foundation_models',
+        {
+            by_provider: z.string().optional(),
+            by_customization_type: z.string().optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('bedrock')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const bedrock = client('bedrock', BedrockClient);
+                const resp = await bedrock.send(new ListFoundationModelsCommand({
+                    byProvider: args.by_provider,
+                    byCustomizationType: args.by_customization_type
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ modelSummaries: resp.modelSummaries || [] }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_bedrock_invoke_model',
+        {
+            model_id: z.string(),
+            body: z.record(z.string(), z.any()),
+            content_type: z.string().optional().default('application/json'),
+            accept: z.string().optional().default('application/json')
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('bedrock')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const runtime = client('bedrock-runtime', BedrockRuntimeClient);
+                const resp = await runtime.send(new InvokeModelCommand({
+                    modelId: args.model_id,
+                    body: JSON.stringify(args.body),
+                    contentType: args.content_type,
+                    accept: args.accept
+                }));
+                const payload = Buffer.from(resp.body).toString('utf-8');
+                return { content: [{ type: 'text', text: JSON.stringify({ body: JSON.parse(payload), contentType: resp.contentType }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_sfn_start_execution',
+        {
+            state_machine_arn: z.string(),
+            name: z.string().optional(),
+            input: z.record(z.string(), z.any()).optional()
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('states')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const sfn = client('states', SFNClient);
+                const resp = await sfn.send(new StartExecutionCommand({
+                    stateMachineArn: args.state_machine_arn,
+                    name: args.name,
+                    input: args.input ? JSON.stringify(args.input) : undefined
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ executionArn: resp.executionArn, startDate: resp.startDate }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    // --- DevOps & Environment Pillar ---
+    server.tool(
+        'aws_cloudwatch_describe_alarms',
+        {
+            alarm_names: z.array(z.string()).optional(),
+            state_value: z.enum(['OK', 'ALARM', 'INSUFFICIENT_DATA']).optional(),
+            next_token: z.string().optional(),
+            max_records: z.number().optional().default(50)
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('cloudwatch')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const cw = client('cloudwatch', CloudWatchClient);
+                const resp = await cw.send(new DescribeAlarmsCommand({
+                    AlarmNames: args.alarm_names,
+                    StateValue: args.state_value,
+                    NextToken: args.next_token,
+                    MaxRecords: args.max_records
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ metricAlarms: resp.MetricAlarms || [], nextToken: resp.NextToken }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
+    server.tool(
+        'aws_autoscaling_describe_auto_scaling_groups',
+        {
+            auto_scaling_group_names: z.array(z.string()).optional(),
+            next_token: z.string().optional(),
+            max_records: z.number().optional().default(50)
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                if (!allowed('autoscaling')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
+                const asg = client('autoscaling', AutoScalingClient);
+                const resp = await asg.send(new DescribeAutoScalingGroupsCommand({
+                    AutoScalingGroupNames: args.auto_scaling_group_names,
+                    NextToken: args.next_token,
+                    MaxRecords: args.max_records
+                }));
+                return { content: [{ type: 'text', text: JSON.stringify({ autoScalingGroups: resp.AutoScalingGroups || [], nextToken: resp.NextToken }) }] };
+            } catch (err) {
+                return normalizeError(err.message, 'AWS_ERROR', err);
+            }
+        }
+    );
+
     // Incident helpers
-    server.registerTool(
+    server.tool(
         'aws_incident_find_errors',
         {
-            description: 'Find recent errors in CloudWatch Logs for a service.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    log_group_name: { type: 'string' },
-                    service: { type: 'string' },
-                    minutes: { type: 'number', default: 30 },
-                    limit: { type: 'number' }
-                },
-                additionalProperties: false
-            }
+            log_group_name: z.string().optional(),
+            service: z.string().optional(),
+            minutes: z.number().optional().default(30),
+            limit: z.number().optional().default(100)
         },
         async (args) => {
             try {
@@ -860,14 +1267,14 @@ async function main() {
                 if (!allowed('cloudwatch')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
                 const logs = client('logs', CloudWatchLogsClient);
                 const end = Date.now();
-                const start = end - (args.minutes || 30) * 60 * 1000;
+                const start = end - (args.minutes) * 60 * 1000;
                 const logGroup = args.log_group_name || `/aws/lambda/${args.service || ''}`;
                 const resp = await logs.send(new FilterLogEventsCommand({
                     logGroupName: logGroup,
                     startTime: start,
                     endTime: end,
                     filterPattern: '?"ERROR" ?Exception ?Traceback',
-                    limit: args.limit || 100
+                    limit: args.limit
                 }));
                 const events = (resp.events || []).map((e) => ({ message: e.message, timestamp: e.timestamp, logStreamName: e.logStreamName }));
                 return { content: [{ type: 'text', text: JSON.stringify({ logGroup, events }) }] };
@@ -877,22 +1284,14 @@ async function main() {
         }
     );
 
-    server.registerTool(
+    server.tool(
         'aws_incident_summarize_service_health',
         {
-            description: 'Summarize service health using CloudWatch metrics.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    namespace: { type: 'string', description: 'CloudWatch namespace, e.g., AWS/ApplicationELB' },
-                    metric_error: { type: 'string', description: 'Metric name for errors, e.g., HTTPCode_Target_5XX_Count' },
-                    metric_count: { type: 'string', description: 'Metric name for total requests, e.g., RequestCount' },
-                    dimensions: { type: 'array', items: { type: 'object' }, description: 'Array of {Name,Value} pairs' },
-                    minutes: { type: 'number', default: 30 }
-                },
-                required: ['namespace', 'metric_error', 'metric_count', 'dimensions'],
-                additionalProperties: false
-            }
+            namespace: z.string(),
+            metric_error: z.string(),
+            metric_count: z.string(),
+            dimensions: z.array(z.record(z.string(), z.any())),
+            minutes: z.number().optional().default(30)
         },
         async (args) => {
             try {
@@ -900,8 +1299,7 @@ async function main() {
                 if (!allowed('cloudwatch')) return normalizeError('Service not allowed', 'ACCESS_DENIED');
                 const cw = client('cloudwatch', CloudWatchClient);
                 const end = new Date();
-                const start = new Date(end.getTime() - (args.minutes || 30) * 60 * 1000);
-
+                const start = new Date(end.getTime() - (args.minutes) * 60 * 1000);
                 const errResp = await cw.send(new GetMetricStatisticsCommand({
                     Namespace: args.namespace,
                     MetricName: args.metric_error,
@@ -939,16 +1337,25 @@ async function main() {
         }
     );
 
-    server.server.oninitialized = () => {
-        console.log('AWS MCP server initialized.');
-    };
-
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.log('AWS MCP server running on stdio.');
+    return server;
 }
 
-main().catch((err) => {
-    console.error('AWS MCP server failed to start:', err);
-    process.exit(1);
-});
+if (require.main === module) {
+    const server = createAwsServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('AWS MCP server running on stdio');
+    }).catch((error) => {
+        console.error("Server error:", error);
+        process.exit(1);
+    });
+}
+
+module.exports = { 
+    createAwsServer, 
+    STSClient, S3Client, LambdaClient, CloudWatchLogsClient, ECSClient, 
+    EKSClient, EC2Client, IAMClient, SQSClient, SNSClient, CloudWatchClient,
+    AutoScalingClient, DynamoDBClient, RDSDataClient, SecretsManagerClient,
+    SSMClient, ApiGatewayClient, CloudFormationClient, BedrockClient,
+    BedrockRuntimeClient, SFNClient, GetCallerIdentityCommand, ListBucketsCommand
+};

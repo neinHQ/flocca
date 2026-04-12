@@ -4,7 +4,9 @@
     "description": "MCP Server for Cypress execution",
     "main": "server.js",
     "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "cross-spawn": "^7.0.3",
         "glob": "^10.3.10",
-        "cross-spawn": "^7.0.3"
+        "zod": "^4.3.6"
     }
 }

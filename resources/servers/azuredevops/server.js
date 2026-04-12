@@ -100,6 +100,18 @@ function buildUrl(pathPart, query = {}) {
     return url.toString();
 }
 
+/**
+ * Builds a URL for Release Management APIs (VSRM).
+ * These often reside on vsrm.dev.azure.com instead of dev.azure.com.
+ */
+function buildReleaseUrl(pathPart, query = {}) {
+    const base = sessionConfig.serviceUrl.replace('dev.azure.com', 'vsrm.dev.azure.com');
+    const url = new URL(`${base}/${sessionConfig.project}/${pathPart}`);
+    const params = new URLSearchParams({ 'api-version': API_VERSION, ...query });
+    url.search = params.toString();
+    return url.toString();
+}
+
 function buildOrgUrl(pathPart, query = {}) {
     const url = new URL(`${sessionConfig.serviceUrl}/${pathPart}`);
     const params = new URLSearchParams({ 'api-version': API_VERSION, ...query });
@@ -484,7 +496,7 @@ async function main() {
             description: 'List pipeline runs.',
             inputSchema: {
                 type: 'object',
-                properties: { pipeline_id: { type: 'number' } },
+                properties: { pipeline_id: { type: 'number' }, top: { type: 'number' } },
                 required: ['pipeline_id'],
                 additionalProperties: false
             }
@@ -492,9 +504,65 @@ async function main() {
         async (args) => {
             try {
                 requireConfigured();
-                const url = buildUrl(`_apis/pipelines/${args.pipeline_id}/runs`);
+                const url = buildUrl(`_apis/pipelines/${args.pipeline_id}/runs`, { '$top': args.top });
                 const data = await adoFetch(url, { headers: authHeaders() });
                 return { content: [{ type: 'text', text: JSON.stringify({ runs: data.value || [] }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    // --- Pillar 4: Discovery ---
+    server.registerTool(
+        'azuredevops_list_projects',
+        {
+            description: 'List all projects in the organization.',
+            inputSchema: { type: 'object', properties: { top: { type: 'number' } }, additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                const url = buildOrgUrl('_apis/projects', { '$top': args.top });
+                const data = await adoFetch(url, { headers: authHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify({ projects: data.value || [] }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    server.registerTool(
+        'azuredevops_list_pipelines',
+        {
+            description: 'List pipelines in the project.',
+            inputSchema: { type: 'object', properties: { top: { type: 'number' } }, additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                const url = buildUrl('_apis/pipelines', { '$top': args.top });
+                const data = await adoFetch(url, { headers: authHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify({ pipelines: data.value || [] }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    // --- Pillar 5: Releases (DevOps) ---
+    server.registerTool(
+        'azuredevops_list_releases',
+        {
+            description: 'List releases in the project.',
+            inputSchema: { type: 'object', properties: { top: { type: 'number' } }, additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                const url = buildReleaseUrl('_apis/release/releases', { '$top': args.top });
+                const data = await adoFetch(url, { headers: authHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify({ releases: data.value || [] }) }] };
             } catch (err) {
                 return unifyError(err);
             }
@@ -518,6 +586,231 @@ async function main() {
                 const url = buildUrl(`_apis/pipelines/${args.pipeline_id}/runs/${args.run_id}`);
                 const data = await adoFetch(url, { headers: authHeaders() });
                 return { content: [{ type: 'text', text: JSON.stringify({ state: data.state, result: data.result }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    // --- Pillar 1: Testing (SDET Core) ---
+    server.registerTool(
+        'azuredevops_list_test_plans',
+        {
+            description: 'List test plans in the project.',
+            inputSchema: { type: 'object', properties: { top: { type: 'number' } }, additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                const url = buildUrl('_apis/test/plans', { '$top': args.top });
+                const data = await adoFetch(url, { headers: authHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify({ plans: data.value || [] }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    server.registerTool(
+        'azuredevops_list_test_suites',
+        {
+            description: 'List test suites in a test plan.',
+            inputSchema: {
+                type: 'object',
+                properties: { plan_id: { type: 'number' }, top: { type: 'number' } },
+                required: ['plan_id'],
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                const url = buildUrl(`_apis/test/plans/${args.plan_id}/suites`, { '$top': args.top });
+                const data = await adoFetch(url, { headers: authHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify({ suites: data.value || [] }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    server.registerTool(
+        'azuredevops_list_test_runs',
+        {
+            description: 'List test runs in the project.',
+            inputSchema: { type: 'object', properties: { top: { type: 'number' } }, additionalProperties: false }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                const url = buildUrl('_apis/test/runs', { '$top': args.top });
+                const data = await adoFetch(url, { headers: authHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify({ runs: data.value || [] }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    server.registerTool(
+        'azuredevops_get_test_run_results',
+        {
+            description: 'Get details for a test run.',
+            inputSchema: {
+                type: 'object',
+                properties: { run_id: { type: 'number' } },
+                required: ['run_id'],
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                const url = buildUrl(`_apis/test/runs/${args.run_id}/results`);
+                const data = await adoFetch(url, { headers: authHeaders() });
+                return { content: [{ type: 'text', text: JSON.stringify({ results: data.value || [] }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    // --- Pillar 2: Observability ---
+    server.registerTool(
+        'azuredevops_get_build_logs',
+        {
+            description: 'Get build logs for a pipeline run.',
+            inputSchema: {
+                type: 'object',
+                properties: { build_id: { type: 'number' } },
+                required: ['build_id'],
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                // 1. Get log metadata
+                const metaUrl = buildUrl(`_apis/build/builds/${args.build_id}/logs`);
+                const meta = await adoFetch(metaUrl, { headers: authHeaders() });
+                const logs = meta.value || [];
+                
+                // 2. Fetch last log content as a sample (or all metadata if too big)
+                const results = [];
+                for (const log of logs.slice(-3)) { // Just last 3 logs for brevity
+                    const contentUrl = log.url;
+                    const content = await adoFetch(contentUrl, { headers: authHeaders() });
+                    results.push({ id: log.id, lineCount: log.lineCount, content: typeof content === 'string' ? content.substring(0, 5000) : content });
+                }
+                
+                return { content: [{ type: 'text', text: JSON.stringify({ logs: results }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    // --- Pillar 3: Work Items (Management) ---
+    server.registerTool(
+        'azuredevops_create_work_item',
+        {
+            description: 'Create a new work item.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    type: { type: 'string', description: 'e.g. Task, Bug, User Story' },
+                    title: { type: 'string' },
+                    description: { type: 'string' },
+                    assigned_to: { type: 'string' }
+                },
+                required: ['type', 'title'],
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                const operations = [
+                    { op: 'add', path: '/fields/System.Title', value: args.title },
+                    { op: 'add', path: '/fields/System.Description', value: args.description || '' }
+                ];
+                if (args.assigned_to) operations.push({ op: 'add', path: '/fields/System.AssignedTo', value: args.assigned_to });
+                
+                const url = buildUrl(`_apis/wit/workitems/$${args.type}`);
+                const data = await adoFetch(url, {
+                    method: 'POST',
+                    headers: { ...authHeaders(), 'Content-Type': 'application/json-patch+json' },
+                    body: JSON.stringify(operations)
+                });
+                return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    server.registerTool(
+        'azuredevops_add_work_item_comment',
+        {
+            description: 'Add a comment to a work item.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    id: { type: 'number' },
+                    text: { type: 'string' }
+                },
+                required: ['id', 'text'],
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                const url = buildOrgUrl(`_apis/wit/workitems/${args.id}/comments`);
+                const data = await adoFetch(url, {
+                    method: 'POST',
+                    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: args.text })
+                });
+                return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, text: data.text }) }] };
+            } catch (err) {
+                return unifyError(err);
+            }
+        }
+    );
+
+    server.registerTool(
+        'azuredevops_query_work_items',
+        {
+            description: 'Query work items using simple filters (Helper).',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    state: { type: 'string' },
+                    assigned_to: { type: 'string' },
+                    type: { type: 'string' },
+                    top: { type: 'number', default: 50 }
+                },
+                additionalProperties: false
+            }
+        },
+        async (args) => {
+            try {
+                requireConfigured();
+                let wiql = `SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.TeamProject] = '${sessionConfig.project}'`;
+                if (args.state) wiql += ` AND [System.State] = '${args.state}'`;
+                if (args.assigned_to) wiql += ` AND [System.AssignedTo] = '${args.assigned_to}'`;
+                if (args.type) wiql += ` AND [System.WorkItemType] = '${args.type}'`;
+                wiql += ' ORDER BY [System.CreatedDate] DESC';
+
+                const url = buildOrgUrl('_apis/wit/wiql', { '$top': args.top });
+                const data = await adoFetch(url, {
+                    method: 'POST',
+                    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: wiql })
+                });
+                const ids = (data.workItems || []).map((w) => w.id);
+                return { content: [{ type: 'text', text: JSON.stringify({ ids, count: ids.length }) }] };
             } catch (err) {
                 return unifyError(err);
             }

@@ -1,13 +1,13 @@
 const path = require('path');
-const z = require('zod');
+const { z } = require('zod');
 const { spawn } = require('child_process');
 
-const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 
-const SERVER_INFO = { name: 'docker-mcp', version: '0.1.0' };
+const SERVER_INFO = { name: 'docker-mcp', version: '1.1.0' };
 
-const sessionConfig = {
+let sessionConfig = {
     daemon: process.env.DOCKER_HOST
         ? (process.env.DOCKER_HOST.startsWith('tcp://')
             ? { type: 'tcp', host: process.env.DOCKER_HOST.replace('tcp://', '') }
@@ -69,62 +69,38 @@ async function validateDocker() {
     return res.stdout.trim();
 }
 
-async function main() {
-    // Best-effort startup validation with defaults; failures are logged but do not crash
-    try {
-        const version = await validateDocker();
-        console.log(`Docker reachable. Server version: ${version}`);
-    } catch (e) {
-        console.warn('Docker validation on startup failed:', e.message);
-    }
+function createDockerServer() {
+    const server = new McpServer(SERVER_INFO);
 
-    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
-    const originalRegisterTool = server.registerTool.bind(server);
-    const permissiveInputSchema = z.object({}).passthrough();
-    server.registerTool = (name, config, handler) => {
-        const nextConfig = { ...(config || {}) };
-        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = permissiveInputSchema;
+    // --- Core Tools ---
+
+    server.tool('docker_health', {}, async () => {
+        try {
+            const version = await validateDocker();
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, serverVersion: version }) }] };
+        } catch (err) {
+            return normalizeError('Failed to connect to Docker daemon', 'DAEMON_UNREACHABLE', err.message);
         }
-        return originalRegisterTool(name, nextConfig, handler);
-    };
+    });
 
-    server.registerTool(
-        'docker_health',
-        { description: 'Health check for Docker MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                const version = await validateDocker();
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, serverVersion: version }) }] };
-            } catch (err) {
-                return normalizeError('Failed to connect to Docker daemon', 'DAEMON_UNREACHABLE', err.message);
-            }
-        }
-    );
-
-    server.registerTool(
-        'docker_configure',
+    server.tool('docker_configure',
         {
-            description: 'Configure Docker daemon connectivity.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    daemon: {
-                        type: 'object',
-                        properties: {
-                            type: { type: 'string', enum: ['local_socket', 'tcp'] },
-                            socket_path: { type: 'string' },
-                            host: { type: 'string' }
-                        },
-                        required: ['type']
-                    }
-                },
-                required: ['daemon'],
-                additionalProperties: false
-            }
+            daemon: z.any()
         },
         async (args) => {
-            sessionConfig.daemon = args.daemon;
+            // Internal validation to bypass SDK registration bug with z.object
+            const daemonSchema = z.object({
+                type: z.enum(['local_socket', 'tcp']),
+                socket_path: z.string().optional(),
+                host: z.string().optional()
+            });
+
+            const parsed = daemonSchema.safeParse(args.daemon);
+            if (!parsed.success) {
+                return normalizeError('Invalid daemon configuration', 'INVALID_CONFIG', JSON.stringify(parsed.error.format()));
+            }
+
+            sessionConfig.daemon = parsed.data;
             try {
                 const version = await validateDocker();
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, serverVersion: version }) }] };
@@ -135,14 +111,16 @@ async function main() {
         }
     );
 
-    server.registerTool(
-        'docker_list_containers',
+    // --- Container Pillar ---
+
+    server.tool('docker_list_containers',
         {
-            description: 'List running and stopped containers.',
-            inputSchema: { type: 'object', properties: {}, additionalProperties: false }
+            all: z.boolean().default(true).optional()
         },
-        async () => {
-            const res = await runDocker(['ps', '-a', '--format', '{{json .}}']);
+        async (args) => {
+            const cmd = ['ps', '--format', '{{json .}}'];
+            if (args.all) cmd.push('-a');
+            const res = await runDocker(cmd);
             if (res.code !== 0) return mapDockerError(res.stderr);
             const containers = res.stdout.trim().split('\n').filter(Boolean).map((line) => {
                 try { return JSON.parse(line); } catch (_) { return null; }
@@ -151,36 +129,24 @@ async function main() {
         }
     );
 
-    server.registerTool(
-        'docker_run_container',
+    server.tool('docker_run_container',
         {
-            description: 'Run a container with given parameters.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    image: { type: 'string' },
-                    name: { type: 'string' },
-                    env: { type: 'object' },
-                    command: { type: 'array', items: { type: 'string' } },
-                    detach: { type: 'boolean', default: true },
-                    mounts: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            properties: {
-                                type: { type: 'string', enum: ['bind', 'volume'] },
-                                source: { type: 'string' },
-                                target: { type: 'string' }
-                            },
-                            required: ['type', 'source', 'target']
-                        }
-                    }
-                },
-                required: ['image'],
-                additionalProperties: false
-            }
+            image: z.string(),
+            name: z.string().optional(),
+            env: z.any().optional(),
+            command: z.array(z.string()).optional(),
+            detach: z.boolean().default(true),
+            mounts: z.array(z.any()).optional()
         },
         async (args) => {
+            // Internal validation for z.any() fields
+            if (args.env && typeof args.env !== 'object') {
+                return normalizeError('env must be an object', 'INVALID_PARAMS');
+            }
+            if (args.mounts && !Array.isArray(args.mounts)) {
+                return normalizeError('mounts must be an array', 'INVALID_PARAMS');
+            }
+
             const cliArgs = ['run'];
             if (args.detach !== false) cliArgs.push('-d');
             if (args.name) cliArgs.push('--name', args.name);
@@ -189,12 +155,10 @@ async function main() {
             }
             if (args.mounts) {
                 for (const m of args.mounts) {
-                    // basic unsafe mount check
-                    if (m.type === 'bind' && m.source.startsWith('/')) {
-                        cliArgs.push('--mount', `type=${m.type},source=${m.source},target=${m.target}`);
-                    } else if (m.type === 'volume') {
-                        cliArgs.push('--mount', `type=volume,source=${m.source},target=${m.target}`);
+                    if (typeof m !== 'object' || !m.type || !m.source || !m.target) {
+                        return normalizeError('Invalid mount format', 'INVALID_PARAMS');
                     }
+                    cliArgs.push('--mount', `type=${m.type},source=${m.source},target=${m.target}`);
                 }
             }
             cliArgs.push(args.image);
@@ -203,7 +167,6 @@ async function main() {
             const res = await runDocker(cliArgs);
             if (res.code !== 0) {
                 if (res.stderr.includes('pull access denied') || res.stderr.includes('not found')) {
-                    // attempt auto-pull
                     const pull = await runDocker(['pull', args.image]);
                     if (pull.code !== 0) return mapDockerError(pull.stderr || res.stderr);
                     const retry = await runDocker(cliArgs);
@@ -216,81 +179,53 @@ async function main() {
         }
     );
 
-    server.registerTool(
-        'docker_stop_container',
-        {
-            description: 'Stop a container.',
-            inputSchema: { type: 'object', properties: { container_id: { type: 'string' } }, required: ['container_id'], additionalProperties: false }
-        },
+    server.tool('docker_stop_container',
+        { container_id: z.string() },
         async (args) => {
             const res = await runDocker(['stop', args.container_id]);
-            if (res.code !== 0) return mapDockerError(res.stderr || 'Failed to stop container');
+            if (res.code !== 0) return mapDockerError(res.stderr);
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, message: res.stdout.trim() }) }] };
         }
     );
 
-    server.registerTool(
-        'docker_remove_container',
-        {
-            description: 'Remove a container.',
-            inputSchema: {
-                type: 'object',
-                properties: { container_id: { type: 'string' }, force: { type: 'boolean', default: false } },
-                required: ['container_id'],
-                additionalProperties: false
-            }
-        },
+    server.tool('docker_remove_container',
+        { container_id: z.string(), force: z.boolean().default(false) },
         async (args) => {
             const cli = ['rm'];
             if (args.force) cli.push('-f');
             cli.push(args.container_id);
             const res = await runDocker(cli);
-            if (res.code !== 0) return mapDockerError(res.stderr || 'Failed to remove container');
+            if (res.code !== 0) return mapDockerError(res.stderr);
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, message: res.stdout.trim() }) }] };
         }
     );
 
-    server.registerTool(
-        'docker_exec',
+    server.tool('docker_exec',
         {
-            description: 'Exec a command in a running container.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    container_id: { type: 'string' },
-                    command: { type: 'array', items: { type: 'string' } }
-                },
-                required: ['container_id', 'command'],
-                additionalProperties: false
-            }
+            container_id: z.string(),
+            command: z.array(z.string())
         },
         async (args) => {
             const cli = ['exec', args.container_id, ...args.command];
             const res = await runDocker(cli);
-            if (res.code !== 0) return mapDockerError(res.stderr || 'Exec failed');
+            if (res.code !== 0) return mapDockerError(res.stderr);
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, exitCode: res.code, output: res.stdout }) }] };
         }
     );
 
-    server.registerTool(
-        'docker_list_images',
-        { description: 'List local images.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            const res = await runDocker(['images', '--format', '{{json .}}']);
-            if (res.code !== 0) return mapDockerError(res.stderr);
-            const images = res.stdout.trim().split('\n').filter(Boolean).map((line) => {
-                try { return JSON.parse(line); } catch (_) { return null; }
-            }).filter(Boolean);
-            return { content: [{ type: 'text', text: JSON.stringify({ images }) }] };
-        }
-    );
+    // --- Image Pillar ---
 
-    server.registerTool(
-        'docker_pull_image',
-        {
-            description: 'Pull an image.',
-            inputSchema: { type: 'object', properties: { image: { type: 'string' } }, required: ['image'], additionalProperties: false }
-        },
+    server.tool('docker_list_images', {}, async () => {
+        const res = await runDocker(['images', '--format', '{{json .}}']);
+        if (res.code !== 0) return mapDockerError(res.stderr);
+        const images = res.stdout.trim().split('\n').filter(Boolean).map((line) => {
+            try { return JSON.parse(line); } catch (_) { return null; }
+        }).filter(Boolean);
+        return { content: [{ type: 'text', text: JSON.stringify({ images }) }] };
+    });
+
+    server.tool('docker_pull_image',
+        { image: z.string() },
         async (args) => {
             const res = await runDocker(['pull', args.image]);
             if (res.code !== 0) return mapDockerError(res.stderr);
@@ -298,20 +233,11 @@ async function main() {
         }
     );
 
-    server.registerTool(
-        'docker_build_image',
+    server.tool('docker_build_image',
         {
-            description: 'Build an image from context.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    context_path: { type: 'string' },
-                    dockerfile_path: { type: 'string' },
-                    tags: { type: 'array', items: { type: 'string' } }
-                },
-                required: ['context_path'],
-                additionalProperties: false
-            }
+            context_path: z.string(),
+            dockerfile_path: z.string().optional(),
+            tags: z.array(z.string()).optional()
         },
         async (args) => {
             const cli = ['build', args.context_path];
@@ -323,35 +249,26 @@ async function main() {
         }
     );
 
-    server.registerTool(
-        'docker_remove_image',
-        {
-            description: 'Remove an image.',
-            inputSchema: { type: 'object', properties: { image: { type: 'string' }, force: { type: 'boolean', default: false } }, required: ['image'], additionalProperties: false }
-        },
+    // --- Observability Pillar ---
+
+    server.tool('docker_container_stats',
+        { container_id: z.string().optional() },
         async (args) => {
-            const cli = ['rmi'];
-            if (args.force) cli.push('-f');
-            cli.push(args.image);
+            const cli = ['stats', '--no-stream', '--format', '{{json .}}'];
+            if (args.container_id) cli.push(args.container_id);
             const res = await runDocker(cli);
             if (res.code !== 0) return mapDockerError(res.stderr);
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, output: res.stdout }) }] };
+            const stats = res.stdout.trim().split('\n').filter(Boolean).map((line) => {
+                try { return JSON.parse(line); } catch (_) { return null; }
+            }).filter(Boolean);
+            return { content: [{ type: 'text', text: JSON.stringify({ stats }) }] };
         }
     );
 
-    server.registerTool(
-        'docker_get_logs',
-        {
-            description: 'Get container logs (stdout+stderr).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    container_id: { type: 'string' },
-                    tail: { type: 'number', description: 'Number of lines from the end' }
-                },
-                required: ['container_id'],
-                additionalProperties: false
-            }
+    server.tool('docker_get_logs',
+        { 
+            container_id: z.string(), 
+            tail: z.number().optional().describe('Number of lines from the end') 
         },
         async (args) => {
             const cli = ['logs'];
@@ -363,115 +280,95 @@ async function main() {
         }
     );
 
-    server.registerTool(
-        'docker_inspect_container',
-        {
-            description: 'Inspect a container.',
-            inputSchema: { type: 'object', properties: { container_id: { type: 'string' } }, required: ['container_id'], additionalProperties: false }
-        },
-        async (args) => {
-            const res = await runDocker(['inspect', args.container_id]);
-            if (res.code !== 0) return mapDockerError(res.stderr);
-            let data;
-            try { data = JSON.parse(res.stdout); } catch (_) { data = res.stdout; }
-            return { content: [{ type: 'text', text: JSON.stringify({ inspect: data }) }] };
-        }
-    );
+    server.tool('docker_system_info', {}, async () => {
+        const res = await runDocker(['info', '--format', '{{json .}}']);
+        if (res.code !== 0) return mapDockerError(res.stderr);
+        let data;
+        try { data = JSON.parse(res.stdout); } catch (_) { data = res.stdout; }
+        return { content: [{ type: 'text', text: JSON.stringify({ info: data }) }] };
+    });
 
-    // Networks
-    server.registerTool(
-        'docker_list_networks',
-        { description: 'List Docker networks.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            const res = await runDocker(['network', 'ls', '--format', '{{json .}}']);
-            if (res.code !== 0) return mapDockerError(res.stderr);
-            const networks = res.stdout.trim().split('\n').filter(Boolean).map((line) => {
-                try { return JSON.parse(line); } catch (_) { return null; }
-            }).filter(Boolean);
-            return { content: [{ type: 'text', text: JSON.stringify({ networks }) }] };
-        }
-    );
+    // --- Resource Lifecycle (Cleanup) ---
 
-    server.registerTool(
-        'docker_create_network',
-        {
-            description: 'Create a Docker network.',
-            inputSchema: { type: 'object', properties: { name: { type: 'string' }, driver: { type: 'string', default: 'bridge' } }, required: ['name'], additionalProperties: false }
-        },
+    server.tool('docker_system_prune',
+        { all: z.boolean().default(false), volumes: z.boolean().default(false) },
         async (args) => {
-            const cli = ['network', 'create', '--driver', args.driver || 'bridge', args.name];
+            const cli = ['system', 'prune', '-f'];
+            if (args.all) cli.push('--all');
+            if (args.volumes) cli.push('--volumes');
             const res = await runDocker(cli);
             if (res.code !== 0) return mapDockerError(res.stderr);
-            return { content: [{ type: 'text', text: JSON.stringify({ networkId: res.stdout.trim() }) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, output: res.stdout.trim() }) }] };
         }
     );
 
-    server.registerTool(
-        'docker_remove_network',
-        {
-            description: 'Remove a Docker network.',
-            inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'], additionalProperties: false }
-        },
+    server.tool('docker_image_prune',
+        { all: z.boolean().default(false) },
         async (args) => {
-            const res = await runDocker(['network', 'rm', args.name]);
-            if (res.code !== 0) return mapDockerError(res.stderr);
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, message: res.stdout.trim() }) }] };
-        }
-    );
-
-    // Volumes
-    server.registerTool(
-        'docker_list_volumes',
-        { description: 'List Docker volumes.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            const res = await runDocker(['volume', 'ls', '--format', '{{json .}}']);
-            if (res.code !== 0) return mapDockerError(res.stderr);
-            const volumes = res.stdout.trim().split('\n').filter(Boolean).map((line) => {
-                try { return JSON.parse(line); } catch (_) { return null; }
-            }).filter(Boolean);
-            return { content: [{ type: 'text', text: JSON.stringify({ volumes }) }] };
-        }
-    );
-
-    server.registerTool(
-        'docker_create_volume',
-        {
-            description: 'Create a Docker volume.',
-            inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'], additionalProperties: false }
-        },
-        async (args) => {
-            const res = await runDocker(['volume', 'create', args.name]);
-            if (res.code !== 0) return mapDockerError(res.stderr);
-            return { content: [{ type: 'text', text: JSON.stringify({ volumeName: res.stdout.trim() }) }] };
-        }
-    );
-
-    server.registerTool(
-        'docker_remove_volume',
-        {
-            description: 'Remove a Docker volume.',
-            inputSchema: { type: 'object', properties: { name: { type: 'string' }, force: { type: 'boolean', default: false } }, required: ['name'], additionalProperties: false }
-        },
-        async (args) => {
-            const cli = ['volume', 'rm'];
-            if (args.force) cli.push('-f');
-            cli.push(args.name);
+            const cli = ['image', 'prune', '-f'];
+            if (args.all) cli.push('-a');
             const res = await runDocker(cli);
             if (res.code !== 0) return mapDockerError(res.stderr);
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, message: res.stdout.trim() }) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, output: res.stdout.trim() }) }] };
         }
     );
 
-    server.server.oninitialized = () => {
-        console.log('Docker MCP server initialized.');
-    };
+    // --- Utility Pillar ---
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.log('Docker MCP server running on stdio.');
+    server.tool('docker_cp',
+        {
+            source: z.string().describe("Source path (e.g. host_path or container_id:path)"),
+            target: z.string().describe("Target path (e.g. container_id:path or host_path)")
+        },
+        async (args) => {
+            const res = await runDocker(['cp', args.source, args.target]);
+            if (res.code !== 0) return mapDockerError(res.stderr);
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, message: "File(s) copied successfully" }) }] };
+        }
+    );
+
+    server.tool('docker_top',
+        { container_id: z.string() },
+        async (args) => {
+            const res = await runDocker(['top', args.container_id, '-aux']);
+            if (res.code !== 0) return mapDockerError(res.stderr);
+            return { content: [{ type: 'text', text: JSON.stringify({ processes: res.stdout.trim() }) }] };
+        }
+    );
+
+    // Reuse other existing tools (simplified logic)
+    server.tool('docker_list_networks', {}, async () => {
+        const res = await runDocker(['network', 'ls', '--format', '{{json .}}']);
+        if (res.code !== 0) return mapDockerError(res.stderr);
+        const networks = res.stdout.trim().split('\n').filter(Boolean).map((line) => {
+            try { return JSON.parse(line); } catch (_) { return null; }
+        }).filter(Boolean);
+        return { content: [{ type: 'text', text: JSON.stringify({ networks }) }] };
+    });
+
+    server.tool('docker_list_volumes', {}, async () => {
+        const res = await runDocker(['volume', 'ls', '--format', '{{json .}}']);
+        if (res.code !== 0) return mapDockerError(res.stderr);
+        const volumes = res.stdout.trim().split('\n').filter(Boolean).map((line) => {
+            try { return JSON.parse(line); } catch (_) { return null; }
+        }).filter(Boolean);
+        return { content: [{ type: 'text', text: JSON.stringify({ volumes }) }] };
+    });
+
+    return server;
 }
 
-main().catch((err) => {
-    console.error('Docker MCP server failed to start:', err);
-    process.exit(1);
-});
+// Only start the server if this file is run directly
+if (require.main === module) {
+    const server = createDockerServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('Docker MCP server running on stdio');
+    }).catch((err) => {
+        console.error('Docker MCP server failed to start:', err);
+        process.exit(1);
+    });
+}
+
+// Export for testing
+module.exports = { createDockerServer, runDocker, mapDockerError, sessionConfig };

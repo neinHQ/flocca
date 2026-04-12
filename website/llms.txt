@@ -1,4 +1,4 @@
-# Flocca: Connect MCPs Simply and Securely
+# Flocca: The IDE-First Platform for AI-Powered Engineering Workflows
 
 ## What is Flocca?
 Flocca is an IDE-first MCP platform and VS Code extension that connects local environments, cloud infrastructure, and AI agents. Teams use Flocca to connect tools once and run cross-tool workflows from one workspace.

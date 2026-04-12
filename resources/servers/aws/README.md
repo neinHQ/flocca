@@ -21,12 +21,15 @@ Validation uses STS GetCallerIdentity; credentials are not logged or persisted.
 - Lambda: `aws_lambda_list_functions`, `aws_lambda_get_function`, `aws_lambda_invoke`
 - CloudWatch Logs: `aws_logs_list_log_groups`, `aws_logs_get_log_streams`, `aws_logs_get_log_events` (supports filterPattern/time)
 - ECS: `aws_ecs_list_clusters`, `aws_ecs_list_services`, `aws_ecs_describe_service`, `aws_ecs_update_service`
-- EKS: `aws_eks_list_clusters`, `aws_eks_describe_cluster`, `aws_eks_update_kubeconfig_token` (placeholder, not implemented)
-- EC2: `aws_ec2_list_instances`, `aws_ec2_describe_instance`, `aws_ec2_start_instance`, `aws_ec2_stop_instance`
+- EC2: `aws_ec2_list_instances`, `aws_ec2_describe_instance`, `aws_ec2_start_instance`, `aws_ec2_stop_instance`, `aws_ec2_describe_security_groups`, `aws_ec2_describe_subnets`
+- Data: `aws_dynamodb_list_tables`, `aws_dynamodb_describe_table`, `aws_dynamodb_get_item`, `aws_dynamodb_put_item`, `aws_dynamodb_query`, `aws_rds_execute_statement`
+- Configuration: `aws_secrets_get_value`, `aws_ssm_get_parameter`
+- Infrastructure: `aws_apigateway_list_rest_apis`, `aws_apigateway_get_resources`, `aws_cloudformation_describe_stacks`
+- AI & Orchestration: `aws_bedrock_list_foundation_models`, `aws_bedrock_invoke_model`, `aws_sfn_start_execution`
+- DevOps & Monitor: `aws_cloudwatch_describe_alarms`, `aws_autoscaling_describe_auto_scaling_groups`
 - IAM (read-only): `aws_iam_get_caller_identity`, `aws_iam_list_roles`, `aws_iam_get_role`
-- SQS: `aws_sqs_list_queues`, `aws_sqs_receive_messages`, `aws_sqs_send_message`
-- SNS: `aws_sns_list_topics`, `aws_sns_publish`
-- Incident helpers: `aws_incident_find_errors` (logs), `aws_incident_summarize_service_health` (CloudWatch metrics)
+- SQS/SNS: `aws_sqs_list_queues`, `aws_sns_list_topics`, `aws_sns_publish`
+- Incident helpers: `aws_incident_find_errors`, `aws_incident_summarize_service_health`
 
 ### Error shape
 All errors: `{ "error": { "message": "...", "code": "AWS_ERROR|ACCESS_DENIED|NOT_FOUND|NOT_CONFIGURED|NOT_IMPLEMENTED", "details": "...", "http_status": 400 } }`

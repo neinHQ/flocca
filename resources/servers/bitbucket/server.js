@@ -1,5 +1,7 @@
 const axios = require('axios');
-const readline = require('readline');
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { z } = require('zod');
 
 // Configuration State
 let config = {
@@ -31,7 +33,7 @@ function getApi() {
 
     if (proxyUrl && userId) {
         return axios.create({
-            baseURL: proxyUrl, // Proxy URL acts as base
+            baseURL: proxyUrl, 
             headers: {
                 'X-Flocca-User-ID': userId,
                 'Content-Type': 'application/json'
@@ -49,73 +51,74 @@ function getApi() {
     });
 }
 
-// Helper: Determine API Mode (Cloud vs Server)
 function isCloud() {
     return config.serviceUrl.includes('api.bitbucket.org');
 }
 
-// Helper: Construct Repo Path
 function getRepoPath(workspace, repo) {
-    if (isCloud()) {
-        return `/repositories/${workspace}/${repo}`;
-    } else {
-        // Bitbucket Server API v1.0
-        return `/projects/${workspace}/repos/${repo}`; // 'workspace' acts as Project Key
-    }
+    return isCloud() ? `/repositories/${workspace}/${repo}` : `/projects/${workspace}/repos/${repo}`;
 }
 
-// JSON-RPC Setup
-let sendCallback = (response) => {
-    process.stdout.write(JSON.stringify(response) + "\n");
-};
-
-function send(response) {
-    if (sendCallback) sendCallback(response);
+function normalizeError(err) {
+    const msg = err.message || JSON.stringify(err);
+    const details = err.response ? { status: err.response.status, data: err.response.data } : undefined;
+    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, details }) }] };
 }
 
-// Tool Handlers
-async function handleToolCall(name, args) {
-    try {
-        const api = getApi();
-        // Default workspace/repo from config if missing (optional convenience)
-        const workspace = args.workspace || config.workspace;
+function createBitbucketServer() {
+    const server = new McpServer({
+        name: "bitbucket-mcp",
+        version: "1.1.0"
+    });
 
-        switch (name) {
-            case 'bitbucket_health':
-                try {
-                    await getApi().get(isCloud() ? '/user' : '/users/' + config.username);
-                    return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-                } catch (e) {
-                    return { isError: true, content: [{ type: 'text', text: `Bitbucket Auth Failed: ${e.message}` }] };
-                }
+    // --- Core Tools ---
 
-            case 'bitbucket_configure':
-                if (args.service_url) config.serviceUrl = normalizeServiceUrl(args.service_url);
-                if (args.auth) {
-                    config.username = args.auth.username;
-                    config.password = args.auth.password;
-                }
-                if (args.workspace) config.workspace = args.workspace;
+    server.tool("bitbucket_health", {}, async () => {
+        try {
+            await getApi().get(isCloud() ? '/user' : '/users/' + config.username);
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+        } catch (e) {
+            return normalizeError(e);
+        }
+    });
 
-                // Verify
-                try {
-                    await getApi().get(isCloud() ? '/user' : '/users/' + config.username); // Simple auth check
-                    return { content: [{ type: 'text', text: "Configuration updated and verified." }] };
-                } catch (e) {
-                    return { isError: true, content: [{ type: 'text', text: `Auth Verification Failed: ${e.message}` }] };
-                }
+    server.tool("bitbucket_configure",
+        {
+            service_url: z.string().optional(),
+            username: z.string().optional(),
+            password: z.string().optional(),
+            workspace: z.string().optional()
+        },
+        async (args) => {
+            if (args.service_url) config.serviceUrl = normalizeServiceUrl(args.service_url);
+            if (args.username) config.username = args.username;
+            if (args.password) config.password = args.password;
+            if (args.workspace) config.workspace = args.workspace;
 
-            case 'bitbucket_list_repositories':
-                // Cloud: /repositories/{workspace}
-                // Server: /projects/{project}/repos
-                let listUrl;
-                if (isCloud()) {
-                    listUrl = `/repositories/${workspace}`;
-                } else {
-                    listUrl = `/projects/${workspace}/repos`;
-                }
+            try {
+                await getApi().get(isCloud() ? '/user' : '/users/' + config.username);
+                return { content: [{ type: 'text', text: "Configuration updated and verified." }] };
+            } catch (e) {
+                return normalizeError(e);
+            }
+        }
+    );
 
-                const repos = await api.get(listUrl, { params: { role: 'member' } });
+    // --- Git Tools ---
+
+    server.tool("bitbucket_list_repositories",
+        {
+            workspace: z.string().optional(),
+            pagelen: z.number().default(50),
+            page: z.number().default(1)
+        },
+        async (args) => {
+            try {
+                const api = getApi();
+                const ws = args.workspace || config.workspace;
+                if (!ws) throw new Error("Workspace is required.");
+                const listUrl = isCloud() ? `/repositories/${ws}` : `/projects/${ws}/repos`;
+                const repos = await api.get(listUrl, { params: { role: 'member', pagelen: args.pagelen, page: args.page } });
                 const repoList = (repos.data.values || []).map(r => ({
                     id: r.uuid || r.id,
                     name: r.name,
@@ -123,288 +126,154 @@ async function handleToolCall(name, args) {
                     links: r.links
                 }));
                 return { content: [{ type: 'text', text: JSON.stringify(repoList, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
 
-            case 'bitbucket_list_branches':
-                // Cloud: /repositories/{w}/{r}/refs/branches
-                // Server: /projects/{p}/repos/{r}/branches
-                const branchUrl = isCloud()
-                    ? `${getRepoPath(workspace, args.repo_slug)}/refs/branches`
-                    : `${getRepoPath(workspace, args.repo_slug)}/branches`;
-
-                const branches = await api.get(branchUrl);
-                return {
-                    content: [{
-                        type: 'text',
-                        text: JSON.stringify((branches.data.values || []).map(b => ({
-                            name: b.name || b.displayId,
-                            target: b.target.hash || b.latestCommit
-                        })), null, 2)
-                    }]
-                };
-
-            case 'bitbucket_get_repository_tree':
-                // Cloud: /repositories/{w}/{r}/src/{commit}/{path}
-                // Server: /projects/{p}/repos/{r}/browse/{path}?at={ref}
-                let treeData;
-                if (isCloud()) {
-                    const commit = args.branch || 'HEAD'; // Default to HEAD main
-                    const path = args.path || '';
-                    const treeUrl = `${getRepoPath(workspace, args.repo_slug)}/src/${commit}/${path}`;
-                    const res = await api.get(treeUrl);
-                    treeData = res.data.values || []; // Cloud returns paged values for directory
-                } else {
-                    const params = { at: args.branch };
-                    const browseUrl = `${getRepoPath(workspace, args.repo_slug)}/browse/${args.path || ''}`;
-                    const res = await api.get(browseUrl, { params });
-                    treeData = res.data.children ? res.data.children.values : [];
-                }
-                return { content: [{ type: 'text', text: JSON.stringify(treeData, null, 2) }] };
-
-            case 'bitbucket_get_file_content':
-                // Cloud: Same as tree but returns raw if file
-                // Server: /browse endpoint returns lines or `raw` param?
-                // For simplicity, let's use the 'format=meta' check or try fetching text.
-                // Cloud raw: https://api.bitbucket.org/2.0/repositories/.../src/.../file?format=meta not needed creates download link
-                // Actually Cloud src endpoint returns the file content if it's a file.
-
+    server.tool("bitbucket_get_file_content",
+        {
+            workspace: z.string().optional(),
+            repo_slug: z.string(),
+            path: z.string(),
+            branch: z.string().optional()
+        },
+        async (args) => {
+            try {
+                const api = getApi();
+                const ws = args.workspace || config.workspace;
                 if (isCloud()) {
                     const commit = args.branch || 'HEAD';
-                    const url = `${getRepoPath(workspace, args.repo_slug)}/src/${commit}/${args.path}`;
-                    const fileRes = await api.get(url, { responseType: 'text' }); // Get raw text
+                    const url = `${getRepoPath(ws, args.repo_slug)}/src/${commit}/${args.path}`;
+                    const fileRes = await api.get(url, { responseType: 'text' });
                     return { content: [{ type: 'text', text: fileRes.data }] };
                 } else {
-                    // Server: /raw/path...
-                    const rawUrl = `/projects/${workspace}/repos/${args.repo_slug}/raw/${args.path}`;
+                    const rawUrl = `/projects/${ws}/repos/${args.repo_slug}/raw/${args.path}`;
                     const fileRes = await api.get(rawUrl, { params: { at: args.branch }, responseType: 'text' });
                     return { content: [{ type: 'text', text: fileRes.data }] };
                 }
-
-            case 'bitbucket_create_branch':
-                // Cloud: POST /repositories/{w}/{r}/refs/branches
-                // Body: { name, target: { hash } }
-                if (!isCloud()) throw new Error("Branch creation implementation limited to Cloud for MVP.");
-
-                const createData = {
-                    name: args.name,
-                    target: { hash: args.from_branch } // Assuming from_branch is a commit/branch name
-                    // Actually if it's a branch name, we might need to resolve it to hash first or pass config.
-                    // Cloud API accepts "branch name" as target usually? No, it wants 'hash'.
-                    // Let's quickly fetch the from_branch hash.
-                };
-
-                // Resolve from_branch to hash if needed (skipped for brevity, assuming generic string works or user passes hash)
-                // Actually users usually pass "main".
-                // We'll try passing "name" in target. hash is preferred.
-                // Let's do a quick lookup if easy. 
-                // For now, assume from_branch is handled or API accepts generic ref.
-
-                const brRes = await api.post(`${getRepoPath(workspace, args.repo_slug)}/refs/branches`, {
-                    name: args.name,
-                    target: { hash: args.from_branch }
-                });
-                return { content: [{ type: 'text', text: `Branch created: ${brRes.data.name}` }] };
-
-            case 'bitbucket_create_pull_request':
-                const prBody = {
-                    title: args.title,
-                    description: args.description,
-                    source: { branch: { name: args.source_branch } },
-                    destination: { branch: { name: args.target_branch } }
-                };
-
-                const prUrl = isCloud()
-                    ? `${getRepoPath(workspace, args.repo_slug)}/pullrequests`
-                    : `${getRepoPath(workspace, args.repo_slug)}/pull-requests`;
-
-                const prRes = await api.post(prUrl, prBody);
-                return {
-                    content: [{
-                        type: 'text',
-                        // Cloud vs Server response fields might differ slightly
-                        text: JSON.stringify({
-                            id: prRes.data.id,
-                            link: prRes.data.links ? prRes.data.links.html.href : prRes.data.link.url,
-                            title: prRes.data.title
-                        }, null, 2)
-                    }]
-                };
-
-            case 'bitbucket_list_pull_requests':
-                const prListUrl = isCloud()
-                    ? `${getRepoPath(workspace, args.repo_slug)}/pullrequests`
-                    : `${getRepoPath(workspace, args.repo_slug)}/pull-requests`;
-
-                const prs = await api.get(prListUrl, { params: { state: args.state || 'OPEN' } });
-                return {
-                    content: [{
-                        type: 'text',
-                        text: JSON.stringify((prs.data.values || []).map(p => ({
-                            id: p.id,
-                            title: p.title,
-                            state: p.state,
-                            author: p.author.display_name,
-                            url: p.links ? p.links.html.href : ''
-                        })), null, 2)
-                    }]
-                };
-
-            case 'bitbucket_run_pipeline':
-                if (!isCloud()) throw new Error("Pipelines only supported on Bitbucket Cloud");
-                const pipeUrl = `${getRepoPath(workspace, args.repo_slug)}/pipelines`;
-                const pipeRes = await api.post(pipeUrl, {
-                    target: {
-                        ref_type: 'branch',
-                        type: 'pipeline_ref_target',
-                        ref_name: args.branch
-                    }
-                });
-                return { content: [{ type: 'text', text: JSON.stringify(pipeRes.data, null, 2) }] };
-
-            default:
-                throw new Error(`Unknown tool: ${name}`);
+            } catch (e) { return normalizeError(e); }
         }
-    } catch (error) {
-        const msg = error.response ? `${error.response.status} - ${JSON.stringify(error.response.data)}` : error.message;
-        return {
-            isError: true,
-            content: [{ type: 'text', text: `Bitbucket API Error: ${msg}` }]
-        };
-    }
+    );
+
+    // --- Pull Requests (SDET/Dev) ---
+
+    server.tool("bitbucket_get_pull_request_diff",
+        {
+            workspace: z.string().optional(),
+            repo_slug: z.string(),
+            pull_request_id: z.number()
+        },
+        async (args) => {
+            try {
+                const api = getApi();
+                const ws = args.workspace || config.workspace;
+                const url = isCloud() 
+                    ? `${getRepoPath(ws, args.repo_slug)}/pullrequests/${args.pull_request_id}/diff`
+                    : `${getRepoPath(ws, args.repo_slug)}/pull-requests/${args.pull_request_id}/diff`;
+                const diffRes = await api.get(url, { responseType: 'text' });
+                return { content: [{ type: 'text', text: diffRes.data }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    server.tool("bitbucket_add_pull_request_comment",
+        {
+            workspace: z.string().optional(),
+            repo_slug: z.string(),
+            pull_request_id: z.number(),
+            text: z.string()
+        },
+        async (args) => {
+            try {
+                const api = getApi();
+                const ws = args.workspace || config.workspace;
+                const url = isCloud()
+                    ? `${getRepoPath(ws, args.repo_slug)}/pullrequests/${args.pull_request_id}/comments`
+                    : `${getRepoPath(ws, args.repo_slug)}/pull-requests/${args.pull_request_id}/comments`;
+                const payload = isCloud() ? { content: { raw: args.text } } : { text: args.text };
+                const res = await api.post(url, payload);
+                return { content: [{ type: 'text', text: `Comment added. ID: ${res.data.id}` }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    // --- Pipelines (DevOps) ---
+
+    server.tool("bitbucket_get_pipeline_logs",
+        {
+            workspace: z.string().optional(),
+            repo_slug: z.string(),
+            pipeline_uuid: z.string(),
+            step_uuid: z.string().optional()
+        },
+        async (args) => {
+            try {
+                const api = getApi();
+                const ws = args.workspace || config.workspace;
+                if (!isCloud()) throw new Error("Pipelines only supported on Cloud.");
+                
+                let url = `${getRepoPath(ws, args.repo_slug)}/pipelines/${args.pipeline_uuid}`;
+                if (args.step_uuid) {
+                    url += `/steps/${args.step_uuid}/log`;
+                } else {
+                    // If no step, list steps to help agent find the right one
+                    const stepsRes = await api.get(`${url}/steps`);
+                    return { content: [{ type: 'text', text: JSON.stringify({ steps: stepsRes.data.values || [] }) }] };
+                }
+                
+                const logRes = await api.get(url, { responseType: 'text' });
+                return { content: [{ type: 'text', text: logRes.data.substring(0, 5000) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    // --- Discovery (DevOps/Admin) ---
+
+    server.tool("bitbucket_list_workspaces",
+        {
+            pagelen: z.number().default(50),
+            page: z.number().default(1)
+        },
+        async (args) => {
+            try {
+                const api = getApi();
+                if (!isCloud()) throw new Error("Workspace listing only supported on Cloud.");
+                const res = await api.get('/workspaces', { params: { pagelen: args.pagelen, page: args.page } });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data.values || []) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    server.tool("bitbucket_list_deployments",
+        {
+            workspace: z.string().optional(),
+            repo_slug: z.string(),
+            pagelen: z.number().default(50)
+        },
+        async (args) => {
+            try {
+                const api = getApi();
+                const ws = args.workspace || config.workspace;
+                if (!isCloud()) throw new Error("Deployments only supported on Cloud.");
+                const url = `${getRepoPath(ws, args.repo_slug)}/deployments`;
+                const res = await api.get(url, { params: { pagelen: args.pagelen } });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data.values || []) }] };
+            } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
+        }
+    );
+
+    return server;
 }
 
-// Request Handler
-async function handleRequest(request) {
-    if (request.method === 'initialize') {
-        send({
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {
-                protocolVersion: "2024-11-05",
-                capabilities: { tools: {} },
-                serverInfo: { name: "bitbucket-mcp", version: "1.0.0" }
-            }
-        });
-    } else if (request.method === 'tools/list') {
-        send({
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {
-                tools: [
-                    {
-                        name: "bitbucket_health",
-                        description: "Health check for Bitbucket auth",
-                        inputSchema: { type: "object", properties: {} }
-                    },
-                    {
-                        name: "bitbucket_configure",
-                        description: "Configure Bitbucket credentials",
-                        inputSchema: {
-                            type: "object",
-                            properties: {
-                                service_url: { type: "string" },
-                                auth: { type: "object", properties: { username: { type: "string" }, password: { type: "string" } } },
-                                workspace: { type: "string" }
-                            }
-                        }
-                    },
-                    {
-                        name: "bitbucket_list_repositories",
-                        description: "List repositories",
-                        inputSchema: {
-                            type: "object",
-                            properties: { workspace: { type: "string" } },
-                            required: ["workspace"]
-                        }
-                    },
-                    {
-                        name: "bitbucket_list_branches",
-                        description: "List branches",
-                        inputSchema: {
-                            type: "object",
-                            properties: { workspace: { type: "string" }, repo_slug: { type: "string" } },
-                            required: ["workspace", "repo_slug"]
-                        }
-                    },
-                    {
-                        name: "bitbucket_get_repository_tree",
-                        description: "List files",
-                        inputSchema: {
-                            type: "object",
-                            properties: { workspace: { type: "string" }, repo_slug: { type: "string" }, branch: { type: "string" }, path: { type: "string" } },
-                            required: ["workspace", "repo_slug"]
-                        }
-                    },
-                    {
-                        name: "bitbucket_get_file_content",
-                        description: "Get file content",
-                        inputSchema: {
-                            type: "object",
-                            properties: { workspace: { type: "string" }, repo_slug: { type: "string" }, branch: { type: "string" }, path: { type: "string" } },
-                            required: ["workspace", "repo_slug", "path"]
-                        }
-                    },
-                    {
-                        name: "bitbucket_create_branch",
-                        description: "Create Branch",
-                        inputSchema: {
-                            type: "object",
-                            properties: { workspace: { type: "string" }, repo_slug: { type: "string" }, name: { type: "string" }, from_branch: { type: "string" } },
-                            required: ["workspace", "repo_slug", "name", "from_branch"]
-                        }
-                    },
-                    {
-                        name: "bitbucket_create_pull_request",
-                        description: "Create Pull Request",
-                        inputSchema: {
-                            type: "object",
-                            properties: { workspace: { type: "string" }, repo_slug: { type: "string" }, title: { type: "string" }, source_branch: { type: "string" }, target_branch: { type: "string" } },
-                            required: ["workspace", "repo_slug", "title", "source_branch", "target_branch"]
-                        }
-                    },
-                    {
-                        name: "bitbucket_list_pull_requests",
-                        description: "List Pull Requests",
-                        inputSchema: {
-                            type: "object",
-                            properties: { workspace: { type: "string" }, repo_slug: { type: "string" }, state: { type: "string" } },
-                            required: ["workspace", "repo_slug"]
-                        }
-                    },
-                    {
-                        name: "bitbucket_run_pipeline",
-                        description: "Run Pipeline",
-                        inputSchema: {
-                            type: "object",
-                            properties: { workspace: { type: "string" }, repo_slug: { type: "string" }, branch: { type: "string" } },
-                            required: ["workspace", "repo_slug", "branch"]
-                        }
-                    }
-                ]
-            }
-        });
-    } else if (request.method === 'tools/call') {
-        handleToolCall(request.params.name, request.params.arguments || {}).then(result => {
-            send({
-                jsonrpc: "2.0",
-                id: request.id,
-                result: result
-            });
-        });
-    }
-}
-
-// Stdio Loop
 if (require.main === module) {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        terminal: false
-    });
-
-    rl.on('line', (line) => {
-        try {
-            const request = JSON.parse(line);
-            handleRequest(request);
-        } catch (e) { }
+    const server = createBitbucketServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('Bitbucket MCP server running on stdio');
+    }).catch((error) => {
+        console.error("Server error:", error);
+        process.exit(1);
     });
 }
+
+module.exports = { createBitbucketServer, config };
