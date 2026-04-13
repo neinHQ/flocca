@@ -154,7 +154,59 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
     'postgres': {
         title: 'Connect PostgreSQL',
         fields: [
-            { id: 'connection_string', label: 'Connection String', placeholder: 'postgresql://user:pass@localhost:5432/db', type: 'password' }
+            { id: 'host', label: 'Host', placeholder: 'localhost', type: 'text' },
+            { id: 'port', label: 'Port', placeholder: '5432', type: 'text', required: false },
+            { id: 'user', label: 'Username', placeholder: 'postgres', type: 'text' },
+            { id: 'password', label: 'Password', placeholder: 'Password', type: 'password' },
+            { id: 'database', label: 'Database Name', placeholder: 'mydb', type: 'text' }
+        ],
+        links: []
+    },
+    'mysql': {
+        title: 'Connect MySQL',
+        fields: [
+            { id: 'host', label: 'Host', placeholder: 'localhost', type: 'text' },
+            { id: 'port', label: 'Port (Optional)', placeholder: '3306', type: 'text', required: false },
+            { id: 'user', label: 'Username', placeholder: 'root', type: 'text' },
+            { id: 'password', label: 'Password', placeholder: 'Password', type: 'password' },
+            { id: 'database', label: 'Database Name', placeholder: 'mydb', type: 'text' }
+        ],
+        links: []
+    },
+    'mongodb': {
+        title: 'Connect MongoDB',
+        fields: [
+            { id: 'uri', label: 'Connection URI', placeholder: 'mongodb://user:pass@localhost:27017', type: 'password' },
+            { id: 'database', label: 'Database Name', placeholder: 'mydb', type: 'text' }
+        ],
+        links: []
+    },
+    'redis': {
+        title: 'Connect Redis',
+        fields: [
+            { id: 'host', label: 'Host (Optional)', placeholder: 'localhost', type: 'text', required: false },
+            { id: 'port', label: 'Port (Optional)', placeholder: '6379', type: 'text', required: false },
+            { id: 'password', label: 'Password (Optional)', placeholder: 'Password', type: 'password', required: false },
+            { id: 'db', label: 'Database Index (Optional)', placeholder: '0', type: 'text', required: false }
+        ],
+        links: []
+    },
+    'dynamodb': {
+        title: 'Connect DynamoDB',
+        fields: [
+            { id: 'region', label: 'AWS Region (Optional)', placeholder: 'us-east-1', type: 'text', required: false },
+            { id: 'access_key_id', label: 'Access Key ID (Optional)', placeholder: 'AKIA...', type: 'password', required: false },
+            { id: 'secret_access_key', label: 'Secret Access Key (Optional)', placeholder: 'Secret...', type: 'password', required: false }
+        ],
+        links: []
+    },
+    'elasticsearch': {
+        title: 'Connect Elasticsearch',
+        fields: [
+            { id: 'node', label: 'Node URL', placeholder: 'https://localhost:9200', type: 'text' },
+            { id: 'api_key', label: 'API Key (Optional)', placeholder: 'Base64 Encoded Key', type: 'password', required: false },
+            { id: 'username', label: 'Username (Optional)', placeholder: 'elastic', type: 'text', required: false },
+            { id: 'password', label: 'Password (Optional)', placeholder: 'changeme', type: 'password', required: false }
         ],
         links: []
     },

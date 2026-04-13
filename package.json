@@ -203,6 +203,31 @@
         "icon": "$(database)"
       },
       {
+        "command": "flocca.connectMySQL",
+        "title": "Connect MySQL",
+        "icon": "$(database)"
+      },
+      {
+        "command": "flocca.connectMongoDB",
+        "title": "Connect MongoDB",
+        "icon": "$(database)"
+      },
+      {
+        "command": "flocca.connectRedis",
+        "title": "Connect Redis Database",
+        "icon": "$(database)"
+      },
+      {
+        "command": "flocca.connectElasticsearch",
+        "title": "Connect Elasticsearch",
+        "icon": "$(search)"
+      },
+      {
+        "command": "flocca.connectDynamoDB",
+        "title": "Connect DynamoDB",
+        "icon": "$(database)"
+      },
+      {
         "command": "flocca.connectPytest",
         "title": "Connect Pytest",
         "icon": "$(beaker)"
@@ -407,6 +432,7 @@
     "@aws-sdk/client-sqs": "^3.676.0",
     "@aws-sdk/client-ssm": "^3.1027.0",
     "@aws-sdk/client-sts": "^3.676.0",
+    "@aws-sdk/util-dynamodb": "^3.996.2",
     "@aws-sdk/util-stream-node": "^3.374.0",
     "@azure/arm-appservice": "^18.0.0",
     "@azure/arm-compute": "^23.3.0",
@@ -416,6 +442,7 @@
     "@azure/monitor-query": "^1.3.3",
     "@azure/storage-blob": "^12.31.0",
     "@azure/storage-queue": "^12.29.0",
+    "@elastic/elasticsearch": "^9.3.4",
     "@kubernetes/client-node": "^1.4.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -425,9 +452,12 @@
     "eventsource": "^4.1.0",
     "form-data": "^4.0.5",
     "glob": "^13.0.5",
+    "ioredis": "^5.10.1",
     "isomorphic-fetch": "^3.0.0",
     "js-yaml": "^4.1.1",
     "lodash": "^4.17.23",
+    "mongodb": "^7.1.1",
+    "mysql2": "^3.22.0",
     "pg": "^8.20.0",
     "posthog-node": "^5.17.2",
     "zod": "^4.3.6"

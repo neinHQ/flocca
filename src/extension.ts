@@ -981,9 +981,56 @@ export async function activate(context: vscode.ExtensionContext) {
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectPostgres', () =>
-        connectWithWebview('postgres', 'postgres', 'resources/servers/db/server.js', 'node', (data) => ({
-            'POSTGRES_CONNECTION_STRING': data.connection_string
+        connectWithWebview('postgres', 'postgres', 'resources/servers/db/postgres/server.js', 'node', (data) => ({
+            'POSTGRES_HOST': data.host,
+            'POSTGRES_PORT': data.port || '5432',
+            'POSTGRES_USER': data.user,
+            'POSTGRES_PASSWORD': data.password,
+            'POSTGRES_DATABASE': data.database
         }), createValidationHook('postgres_health'))
+    ));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.connectMySQL', () =>
+        connectWithWebview('mysql', 'mysql', 'resources/servers/db/mysql/server.js', 'node', (data) => ({
+            'MYSQL_HOST': data.host,
+            'MYSQL_PORT': data.port || '3306',
+            'MYSQL_USER': data.user,
+            'MYSQL_PASSWORD': data.password,
+            'MYSQL_DATABASE': data.database
+        }), createValidationHook('mysql_health'))
+    ));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.connectMongoDB', () =>
+        connectWithWebview('mongodb', 'mongodb', 'resources/servers/db/mongodb/server.js', 'node', (data) => ({
+            'MONGO_URI': data.uri,
+            'MONGO_DATABASE': data.database
+        }), createValidationHook('mongo_health'))
+    ));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.connectRedis', () =>
+        connectWithWebview('redis', 'redis', 'resources/servers/db/redis/server.js', 'node', (data) => ({
+            'REDIS_HOST': data.host || 'localhost',
+            'REDIS_PORT': data.port || '6379',
+            'REDIS_PASSWORD': data.password || '',
+            'REDIS_DB': data.db || '0'
+        }), createValidationHook('redis_health'))
+    ));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.connectElasticsearch', () =>
+        connectWithWebview('elasticsearch', 'elasticsearch', 'resources/servers/db/elasticsearch/server.js', 'node', (data) => ({
+            'ELASTIC_NODE': data.node,
+            'ELASTIC_API_KEY': data.api_key || '',
+            'ELASTIC_USERNAME': data.username || '',
+            'ELASTIC_PASSWORD': data.password || ''
+        }), createValidationHook('elastic_health'))
+    ));
+
+    context.subscriptions.push(vscode.commands.registerCommand('flocca.connectDynamoDB', () =>
+        connectWithWebview('dynamodb', 'dynamodb', 'resources/servers/db/dynamodb/server.js', 'node', (data) => ({
+            'AWS_REGION': data.region || 'us-east-1',
+            'AWS_ACCESS_KEY_ID': data.access_key_id || '',
+            'AWS_SECRET_ACCESS_KEY': data.secret_access_key || ''
+        }), createValidationHook('dynamo_health'))
     ));
 
     context.subscriptions.push(vscode.commands.registerCommand('flocca.connectTestRail', () =>
