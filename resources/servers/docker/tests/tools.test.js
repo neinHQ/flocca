@@ -146,10 +146,16 @@ describe('Docker MCP Tools Logic', () => {
     });
 
     describe('docker_system_prune', () => {
-        it('should include --all and --volumes when requested', async () => {
+        it('should require confirm: true', async () => {
+            const result = await callTool('docker_system_prune', { all: true });
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).toContain('CONFIRMATION_REQUIRED');
+        });
+
+        it('should include --all and --volumes when requested and confirmed', async () => {
             setupMockProcess({ stdout: 'Total reclaimed space: 0B' });
 
-            await callTool('docker_system_prune', { all: true, volumes: true });
+            await callTool('docker_system_prune', { all: true, volumes: true, confirm: true });
 
             const calledArgs = mockSpawn.mock.calls[0][1];
             expect(calledArgs).toContain('system');
@@ -157,6 +163,34 @@ describe('Docker MCP Tools Logic', () => {
             expect(calledArgs).toContain('--all');
             expect(calledArgs).toContain('--volumes');
             expect(calledArgs).toContain('-f');
+        });
+    });
+
+    describe('docker_stop_container', () => {
+        it('should require confirm: true', async () => {
+            const result = await callTool('docker_stop_container', { container_id: '123' });
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).toContain('CONFIRMATION_REQUIRED');
+        });
+
+        it('should call docker stop when confirmed', async () => {
+            setupMockProcess({ stdout: '123' });
+            await callTool('docker_stop_container', { container_id: '123', confirm: true });
+            expect(mockSpawn).toHaveBeenCalledWith('docker', expect.arrayContaining(['stop', '123']), expect.any(Object));
+        });
+    });
+
+    describe('docker_remove_image', () => {
+        it('should require confirm: true', async () => {
+            const result = await callTool('docker_remove_image', { image: 'alpine' });
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).toContain('CONFIRMATION_REQUIRED');
+        });
+
+        it('should call docker rmi when confirmed', async () => {
+            setupMockProcess({ stdout: 'Untagged: alpine:latest' });
+            await callTool('docker_remove_image', { image: 'alpine', confirm: true });
+            expect(mockSpawn).toHaveBeenCalledWith('docker', expect.arrayContaining(['rmi', 'alpine']), expect.any(Object));
         });
     });
 });

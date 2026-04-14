@@ -85,22 +85,14 @@ function createDockerServer() {
 
     server.tool('docker_configure',
         {
-            daemon: z.any()
-        },
-        async (args) => {
-            // Internal validation to bypass SDK registration bug with z.object
-            const daemonSchema = z.object({
+            daemon: z.object({
                 type: z.enum(['local_socket', 'tcp']),
                 socket_path: z.string().optional(),
                 host: z.string().optional()
-            });
-
-            const parsed = daemonSchema.safeParse(args.daemon);
-            if (!parsed.success) {
-                return normalizeError('Invalid daemon configuration', 'INVALID_CONFIG', JSON.stringify(parsed.error.format()));
-            }
-
-            sessionConfig.daemon = parsed.data;
+            }).catchall(z.any()).describe('Docker daemon configuration')
+        },
+        async (args) => {
+            sessionConfig.daemon = args.daemon;
             try {
                 const version = await validateDocker();
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, serverVersion: version }) }] };
@@ -133,20 +125,16 @@ function createDockerServer() {
         {
             image: z.string(),
             name: z.string().optional(),
-            env: z.any().optional(),
+            env: z.object({}).catchall(z.any()).optional().describe('Environment variables as key-value pairs'),
             command: z.array(z.string()).optional(),
             detach: z.boolean().default(true),
-            mounts: z.array(z.any()).optional()
+            mounts: z.array(z.object({
+                type: z.enum(['bind', 'volume', 'tmpfs']),
+                source: z.string(),
+                target: z.string()
+            }).catchall(z.any())).optional().describe('List of mounts')
         },
         async (args) => {
-            // Internal validation for z.any() fields
-            if (args.env && typeof args.env !== 'object') {
-                return normalizeError('env must be an object', 'INVALID_PARAMS');
-            }
-            if (args.mounts && !Array.isArray(args.mounts)) {
-                return normalizeError('mounts must be an array', 'INVALID_PARAMS');
-            }
-
             const cliArgs = ['run'];
             if (args.detach !== false) cliArgs.push('-d');
             if (args.name) cliArgs.push('--name', args.name);
@@ -180,8 +168,12 @@ function createDockerServer() {
     );
 
     server.tool('docker_stop_container',
-        { container_id: z.string() },
+        { 
+            container_id: z.string(),
+            confirm: z.boolean().optional().describe('Must be true to stop the container')
+        },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set 'confirm: true' to stop the container." }] };
             const res = await runDocker(['stop', args.container_id]);
             if (res.code !== 0) return mapDockerError(res.stderr);
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, message: res.stdout.trim() }) }] };
@@ -189,8 +181,13 @@ function createDockerServer() {
     );
 
     server.tool('docker_remove_container',
-        { container_id: z.string(), force: z.boolean().default(false) },
+        { 
+            container_id: z.string(), 
+            force: z.boolean().default(false),
+            confirm: z.boolean().optional().describe('Must be true to remove the container')
+        },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set 'confirm: true' to remove the container." }] };
             const cli = ['rm'];
             if (args.force) cli.push('-f');
             cli.push(args.container_id);
@@ -230,6 +227,23 @@ function createDockerServer() {
             const res = await runDocker(['pull', args.image]);
             if (res.code !== 0) return mapDockerError(res.stderr);
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, output: res.stdout }) }] };
+        }
+    );
+
+    server.tool('docker_remove_image',
+        {
+            image: z.string().describe('Image ID or name to remove'),
+            force: z.boolean().default(false),
+            confirm: z.boolean().optional().describe('Must be true to remove the image')
+        },
+        async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set 'confirm: true' to remove the image." }] };
+            const cli = ['rmi'];
+            if (args.force) cli.push('-f');
+            cli.push(args.image);
+            const res = await runDocker(cli);
+            if (res.code !== 0) return mapDockerError(res.stderr);
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, message: res.stdout.trim() }) }] };
         }
     );
 
@@ -291,8 +305,13 @@ function createDockerServer() {
     // --- Resource Lifecycle (Cleanup) ---
 
     server.tool('docker_system_prune',
-        { all: z.boolean().default(false), volumes: z.boolean().default(false) },
+        { 
+            all: z.boolean().default(false), 
+            volumes: z.boolean().default(false),
+            confirm: z.boolean().optional().describe('Must be true to prune system resources')
+        },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set 'confirm: true' to prune system resources." }] };
             const cli = ['system', 'prune', '-f'];
             if (args.all) cli.push('--all');
             if (args.volumes) cli.push('--volumes');
@@ -303,8 +322,12 @@ function createDockerServer() {
     );
 
     server.tool('docker_image_prune',
-        { all: z.boolean().default(false) },
+        { 
+            all: z.boolean().default(false),
+            confirm: z.boolean().optional().describe('Must be true to prune images')
+        },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set 'confirm: true' to prune images." }] };
             const cli = ['image', 'prune', '-f'];
             if (args.all) cli.push('-a');
             const res = await runDocker(cli);

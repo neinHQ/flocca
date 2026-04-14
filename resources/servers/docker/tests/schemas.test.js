@@ -16,10 +16,11 @@ describe('Docker MCP Schema Validation', () => {
     };
 
     describe('docker_stop_container', () => {
-        it('should require a string container_id', () => {
+        it('should require a string container_id and accept optional confirm', () => {
             const schema = getValidator('docker_stop_container');
             
             // Valid
+            expect(schema.safeParse({ container_id: '123', confirm: true }).success).toBe(true);
             expect(schema.safeParse({ container_id: '123' }).success).toBe(true);
             
             // Invalid
@@ -74,12 +75,15 @@ describe('Docker MCP Schema Validation', () => {
     });
 
     describe('docker_configure', () => {
-        it('should accept any payload (bypassing SDK bug) but we expect an object', () => {
+        it('should require a structured daemon object', () => {
             const schema = getValidator('docker_configure');
             
-            // The schema is currently z.any() due to the SDK bug
             expect(schema.safeParse({ daemon: { type: 'tcp', host: 'localhost' } }).success).toBe(true);
-            expect(schema.safeParse({ daemon: 'not-an-object' }).success).toBe(true); // Should pass schema but fail handler
+            expect(schema.safeParse({ daemon: { type: 'local_socket', socket_path: '/tmp/docker.sock' } }).success).toBe(true);
+            
+            // Invalid
+            expect(schema.safeParse({ daemon: 'not-an-object' }).success).toBe(false);
+            expect(schema.safeParse({ daemon: { type: 'invalid' } }).success).toBe(false);
         });
     });
 });

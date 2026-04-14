@@ -1,31 +1,51 @@
-const path = require('path');
-const z = require('zod');
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { z } = require('zod');
 
-const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
+const SERVER_INFO = { name: 'gcp-mcp', version: '2.0.0' };
 
-const SERVER_INFO = { name: 'gcp-mcp', version: '0.1.0' };
-
-const sessionConfig = {
+let sessionConfig = {
     project_id: process.env.GCP_PROJECT_ID,
-    token: process.env.GCP_ACCESS_TOKEN, // Access Token
+    token: process.env.GCP_ACCESS_TOKEN,
     default_region: process.env.GCP_REGION,
     default_zone: process.env.GCP_ZONE,
     identity: undefined
 };
 
-function normalizeError(message, code = 'GCP_ERROR', details, http_status) {
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details, http_status } }) }] };
+function normalizeError(err) {
+    const msg = err.message || JSON.stringify(err);
+    const code = err.code || 'GCP_ERROR';
+    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message: msg, code, status: err.http_status, details: err.details } }) }] };
 }
 
-function requireConfigured() {
-    if (!sessionConfig.project_id || !sessionConfig.token) {
-        throw new Error('GCP not configured. Call gcp_configure first.');
+async function gcpFetch(url, { method = 'GET', query, body, headers } = {}) {
+    const u = new URL(url);
+    if (query) {
+        Object.entries(query).forEach(([k, v]) => {
+            if (v !== undefined && v !== null) u.searchParams.append(k, v);
+        });
     }
-}
 
-function authHeaders() {
-    return { Authorization: `Bearer ${sessionConfig.token}` };
+    if (!sessionConfig.token) throw { message: 'GCP access token not configured', code: 'AUTH_FAILED' };
+
+    const resp = await fetch(u.toString(), {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionConfig.token}`,
+            ...(headers || {})
+        },
+        body: body ? JSON.stringify(body) : undefined
+    });
+
+    let data = {};
+    try { data = await resp.json(); } catch (_) { data = {}; }
+
+    if (!resp.ok || data.error) {
+        const err = data.error || {};
+        throw { message: err.message || resp.statusText || 'GCP request failed', code: err.status || 'GCP_ERROR', details: err, http_status: resp.status };
+    }
+    return data;
 }
 
 function parseRelativeNow(expr) {
@@ -38,795 +58,273 @@ function parseRelativeNow(expr) {
     return new Date(Date.now() - value * map[unit]);
 }
 
-async function gcpFetch(url, { method = 'GET', query, body, headers } = {}) {
-    const u = new URL(url);
-    if (query) {
-        Object.entries(query).forEach(([k, v]) => {
-            if (v !== undefined && v !== null) u.searchParams.append(k, v);
-        });
-    }
-    const resp = await fetch(u.toString(), {
-        method,
-        headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders(),
-            ...(headers || {})
-        },
-        body: body ? JSON.stringify(body) : undefined
-    });
-    let data = {};
-    try { data = await resp.json(); } catch (_) { data = {}; }
-    if (!resp.ok || data.error) {
-        const err = data.error || {};
-        const message = err.message || resp.statusText || 'GCP request failed';
-        throw { message, code: err.status || 'GCP_ERROR', details: err, http_status: resp.status };
-    }
-    return data;
-}
-
-async function validateToken(projectId, token) {
-    const infoResp = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${encodeURIComponent(token)}`);
-    const info = await infoResp.json().catch(() => ({}));
-    if (!infoResp.ok || info.error) {
-        throw { message: 'Token validation failed', code: 'AUTH_FAILED', details: info, http_status: infoResp.status };
-    }
-    // Try to fetch project metadata to confirm access
-    const resp = await fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${projectId}`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!resp.ok) {
-        const detail = await resp.json().catch(() => ({}));
-        throw { message: 'Project access failed', code: 'INVALID_PROJECT', details: detail, http_status: resp.status };
-    }
-    const identity = info.email ? `serviceAccount:${info.email}` : info.issued_to || 'unknown';
-    return { identity };
-}
-
-function timeRangeFilter(time_range) {
-    if (!time_range) return {};
-    const from = parseRelativeNow(time_range.from || 'now-1h').toISOString();
-    const to = parseRelativeNow(time_range.to || 'now').toISOString();
-    return { from, to };
-}
-
-async function main() {
+function createGcpServer() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
-    const originalRegisterTool = server.registerTool.bind(server);
-    const permissiveInputSchema = z.object({}).passthrough();
-    server.registerTool = (name, config, handler) => {
-        const nextConfig = { ...(config || {}) };
-        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = permissiveInputSchema;
-        }
-        return originalRegisterTool(name, nextConfig, handler);
-    };
 
-    server.registerTool(
-        'gcp_health',
-        { description: 'Health check for GCP MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const info = await gcpFetch('https://cloudresourcemanager.googleapis.com/v1/projects/' + sessionConfig.project_id);
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, project_id: sessionConfig.project_id, identity: sessionConfig.identity || 'unknown', project_number: info.projectNumber }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code || 'GCP_ERROR', err.details, err.http_status);
+    async function ensureConnected() {
+        if (!sessionConfig.project_id || !sessionConfig.token) {
+            // Re-check environment variables in case they were set later
+            sessionConfig.project_id = process.env.GCP_PROJECT_ID;
+            sessionConfig.token = process.env.GCP_ACCESS_TOKEN;
+            sessionConfig.default_region = process.env.GCP_REGION;
+            sessionConfig.default_zone = process.env.GCP_ZONE;
+
+            if (!sessionConfig.project_id || !sessionConfig.token) {
+                throw { message: 'GCP not configured. Provide GCP_PROJECT_ID and GCP_ACCESS_TOKEN.', code: 'AUTH_FAILED' };
             }
         }
-    );
+    }
 
-    server.registerTool(
-        'gcp_configure',
+    // --- Core & Config ---
+
+    server.tool('gcp_health', {}, async () => {
+        try {
+            await ensureConnected();
+            const info = await gcpFetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${sessionConfig.project_id}`);
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, project_id: sessionConfig.project_id, project_number: info.projectNumber }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('gcp_configure',
         {
-            description: 'Configure GCP session with bearer token.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    project_id: { type: 'string' },
-                    credentials: {
-                        type: 'object',
-                        properties: {
-                            type: { type: 'string', enum: ['access_token'] },
-                            token: { type: 'string' }
-                        },
-                        required: ['type', 'token']
-                    },
-                    default_region: { type: 'string' },
-                    default_zone: { type: 'string' }
-                },
-                required: ['project_id', 'credentials'],
-                additionalProperties: false
-            }
+            project_id: z.string().describe('GCP Project ID'),
+            token: z.string().describe('GCP Access Token'),
+            default_region: z.string().optional(),
+            default_zone: z.string().optional()
         },
         async (args) => {
             try {
                 sessionConfig.project_id = args.project_id;
-                sessionConfig.token = args.credentials.token;
+                sessionConfig.token = args.token;
                 sessionConfig.default_region = args.default_region;
                 sessionConfig.default_zone = args.default_zone;
 
-                const validation = await validateToken(args.project_id, args.credentials.token);
-                sessionConfig.identity = validation.identity;
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, project_id: args.project_id, identity: validation.identity }) }] };
-            } catch (err) {
-                sessionConfig.project_id = undefined;
+                const info = await gcpFetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${args.project_id}`);
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, project_id: args.project_id, message: "Successfully configured GCP." }) }] };
+            } catch (e) {
                 sessionConfig.token = undefined;
-                sessionConfig.default_region = undefined;
-                sessionConfig.default_zone = undefined;
-                sessionConfig.identity = undefined;
-                return normalizeError(err.message, err.code || 'AUTH_FAILED', err.details, err.http_status);
+                return normalizeError(e);
             }
         }
     );
 
-    // Resource discovery
-    server.registerTool(
-        'gcp_list_services',
-        { description: 'List enabled services (APIs).', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://serviceusage.googleapis.com/v1/projects/${sessionConfig.project_id}/services`, { query: { filter: 'state:ENABLED' } });
-                const services = (data.services || []).map((s) => ({ name: s.name, state: s.state }));
-                return { content: [{ type: 'text', text: JSON.stringify({ services }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
+    // --- Discovery ---
 
-    server.registerTool(
-        'gcp_list_regions',
-        { description: 'List GCP regions.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://compute.googleapis.com/compute/v1/projects/${sessionConfig.project_id}/regions`);
-                const regions = (data.items || []).map((r) => ({ name: r.name, status: r.status }));
-                return { content: [{ type: 'text', text: JSON.stringify({ regions }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
+    server.tool('gcp_list_services', {}, async () => {
+        try {
+            await ensureConnected();
+            const data = await gcpFetch(`https://serviceusage.googleapis.com/v1/projects/${sessionConfig.project_id}/services`, { query: { filter: 'state:ENABLED' } });
+            return { content: [{ type: 'text', text: JSON.stringify({ services: (data.services || []).map(s => ({ name: s.name, state: s.state })) }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
 
-    server.registerTool(
-        'gcp_list_zones',
-        { description: 'List GCP zones.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://compute.googleapis.com/compute/v1/projects/${sessionConfig.project_id}/zones`);
-                const zones = (data.items || []).map((z) => ({ name: z.name, status: z.status, region: z.region }));
-                return { content: [{ type: 'text', text: JSON.stringify({ zones }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
+    server.tool('gcp_list_regions', {}, async () => {
+        try {
+            await ensureConnected();
+            const data = await gcpFetch(`https://compute.googleapis.com/compute/v1/projects/${sessionConfig.project_id}/regions`);
+            return { content: [{ type: 'text', text: JSON.stringify({ regions: (data.items || []).map(r => ({ name: r.name, status: r.status })) }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
 
-    // Cloud Run
-    server.registerTool(
-        'gcp_cloudrun_list_services',
-        { description: 'List Cloud Run services for a region.', inputSchema: { type: 'object', properties: { region: { type: 'string' } }, required: ['region'], additionalProperties: false } },
+    // --- Cloud Run ---
+
+    server.tool('gcp_cloudrun_list_services',
+        { region: z.string().describe('GCP region (e.g. us-central1)') },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConnected();
                 const data = await gcpFetch(`https://run.googleapis.com/apis/serving.knative.dev/v1/namespaces/${sessionConfig.project_id}/services`, { query: { location: args.region } });
-                const services = (data.items || []).map((s) => ({
-                    name: s.metadata?.name,
-                    url: s.status?.url,
-                    latestReadyRevision: s.status?.latestReadyRevisionName,
-                    traffic: s.status?.traffic
-                }));
-                return { content: [{ type: 'text', text: JSON.stringify({ services }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+                return { content: [{ type: 'text', text: JSON.stringify({ services: (data.items || []).map(s => ({ name: s.metadata?.name, url: s.status?.url })) }) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'gcp_cloudrun_get_service',
-        { description: 'Get Cloud Run service details.', inputSchema: { type: 'object', properties: { region: { type: 'string' }, name: { type: 'string' } }, required: ['region', 'name'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://run.googleapis.com/apis/serving.knative.dev/v1/namespaces/${sessionConfig.project_id}/services/${args.name}`);
-                const info = {
-                    name: data.metadata?.name,
-                    url: data.status?.url,
-                    env: data.spec?.template?.spec?.containers?.[0]?.env,
-                    traffic: data.status?.traffic,
-                    latestReadyRevision: data.status?.latestReadyRevisionName
-                };
-                return { content: [{ type: 'text', text: JSON.stringify(info) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'gcp_cloudrun_invoke',
+    server.tool('gcp_cloudrun_invoke',
         {
-            description: 'Invoke a Cloud Run service URL.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    url: { type: 'string' },
-                    method: { type: 'string' },
-                    body: { type: 'object' },
-                    headers: { type: 'object' }
-                },
-                required: ['url'],
-                additionalProperties: false
-            }
+            url: z.string().describe('Full service URL'),
+            method: z.string().default('GET'),
+            body: z.object({}).catchall(z.any()).optional(),
+            headers: z.object({}).catchall(z.any()).optional()
         },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConnected();
                 const resp = await fetch(args.url, {
-                    method: args.method || 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${sessionConfig.token}`,
-                        ...(args.headers || {})
-                    },
+                    method: args.method,
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionConfig.token}`, ...(args.headers || {}) },
                     body: args.body ? JSON.stringify(args.body) : undefined
                 });
                 const text = await resp.text();
-                let json;
-                try { json = JSON.parse(text); } catch (_) { json = text; }
-                if (!resp.ok) throw { message: 'Cloud Run invocation failed', code: 'PERMISSION_DENIED', details: text, http_status: resp.status };
-                return { content: [{ type: 'text', text: JSON.stringify({ status: resp.status, body: json }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+                return { content: [{ type: 'text', text: JSON.stringify({ status: resp.status, body: text }) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    // Cloud Functions
-    server.registerTool(
-        'gcp_functions_list_functions',
-        { description: 'List Cloud Functions in a region.', inputSchema: { type: 'object', properties: { region: { type: 'string' } }, required: ['region'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://cloudfunctions.googleapis.com/v1/projects/${sessionConfig.project_id}/locations/${args.region}/functions`);
-                const functions = (data.functions || []).map((f) => ({ name: f.name, runtime: f.runtime, entryPoint: f.entryPoint, updateTime: f.updateTime, httpsTrigger: f.httpsTrigger }));
-                return { content: [{ type: 'text', text: JSON.stringify({ functions }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
+    // --- Compute Engine ---
 
-    server.registerTool(
-        'gcp_functions_get_function',
-        { description: 'Get Cloud Function details.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, region: { type: 'string' } }, required: ['name', 'region'], additionalProperties: false } },
+    server.tool('gcp_compute_list_instances',
+        { zone: z.string().optional().describe('GCP zone (e.g. us-central1-a)') },
         async (args) => {
             try {
-                requireConfigured();
-                const data = await gcpFetch(`https://cloudfunctions.googleapis.com/v1/projects/${sessionConfig.project_id}/locations/${args.region}/functions/${args.name}`);
-                return { content: [{ type: 'text', text: JSON.stringify(data) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'gcp_functions_invoke',
-        {
-            description: 'Invoke HTTP-triggered Cloud Function.',
-            inputSchema: {
-                type: 'object',
-                properties: { name: { type: 'string' }, region: { type: 'string' }, payload: { type: 'object' } },
-                required: ['name', 'region'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const meta = await gcpFetch(`https://cloudfunctions.googleapis.com/v1/projects/${sessionConfig.project_id}/locations/${args.region}/functions/${args.name}`);
-                if (!meta.httpsTrigger?.url) throw { message: 'Function is not HTTP-triggered', code: 'INVALID_REQUEST' };
-                const resp = await fetch(meta.httpsTrigger.url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionConfig.token}` },
-                    body: args.payload ? JSON.stringify(args.payload) : undefined
-                });
-                const text = await resp.text();
-                let json;
-                try { json = JSON.parse(text); } catch (_) { json = text; }
-                if (!resp.ok) throw { message: 'Function invocation failed', code: 'PERMISSION_DENIED', details: json, http_status: resp.status };
-                return { content: [{ type: 'text', text: JSON.stringify({ status: resp.status, body: json }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    // Compute Engine
-    server.registerTool(
-        'gcp_compute_list_instances',
-        { description: 'List Compute Engine instances.', inputSchema: { type: 'object', properties: { zone: { type: 'string' } }, additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
+                await ensureConnected();
                 const zone = args.zone || sessionConfig.default_zone;
                 if (!zone) throw { message: 'Zone required', code: 'INVALID_REQUEST' };
                 const data = await gcpFetch(`https://compute.googleapis.com/compute/v1/projects/${sessionConfig.project_id}/zones/${zone}/instances`);
                 return { content: [{ type: 'text', text: JSON.stringify({ instances: data.items || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'gcp_compute_get_instance',
-        { description: 'Get a Compute Engine instance.', inputSchema: { type: 'object', properties: { zone: { type: 'string' }, name: { type: 'string' } }, required: ['zone', 'name'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://compute.googleapis.com/compute/v1/projects/${sessionConfig.project_id}/zones/${args.zone}/instances/${args.name}`);
-                return { content: [{ type: 'text', text: JSON.stringify({ instance: data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    async function computeAction(zone, name, action) {
-        return await gcpFetch(`https://compute.googleapis.com/compute/v1/projects/${sessionConfig.project_id}/zones/${zone}/instances/${name}/${action}`, { method: 'POST' });
+    async function handleComputeAction(zone, name, action, confirm) {
+        if (!confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Are you sure you want to ${action} instance ${name} in ${zone}? Set confirm: true to proceed.` }] };
+        await ensureConnected();
+        const data = await gcpFetch(`https://compute.googleapis.com/compute/v1/projects/${sessionConfig.project_id}/zones/${zone}/instances/${name}/${action}`, { method: 'POST' });
+        return { content: [{ type: 'text', text: JSON.stringify({ operation: data }) }] };
     }
 
-    server.registerTool(
-        'gcp_compute_start_instance',
-        { description: 'Start a Compute Engine instance.', inputSchema: { type: 'object', properties: { zone: { type: 'string' }, name: { type: 'string' } }, required: ['zone', 'name'], additionalProperties: false } },
+    server.tool('gcp_compute_start_instance',
+        { zone: z.string(), name: z.string(), confirm: z.boolean().describe('Safety gate') },
+        async (args) => {
+            try { return await handleComputeAction(args.zone, args.name, 'start', args.confirm); }
+            catch (e) { return normalizeError(e); }
+        }
+    );
+
+    server.tool('gcp_compute_stop_instance',
+        { zone: z.string(), name: z.string(), confirm: z.boolean().describe('Safety gate') },
+        async (args) => {
+            try { return await handleComputeAction(args.zone, args.name, 'stop', args.confirm); }
+            catch (e) { return normalizeError(e); }
+        }
+    );
+
+    // --- Storage (GCS) ---
+
+    server.tool('gcp_storage_list_buckets', {}, async () => {
+        try {
+            await ensureConnected();
+            const data = await gcpFetch(`https://storage.googleapis.com/storage/v1/b`, { query: { project: sessionConfig.project_id } });
+            return { content: [{ type: 'text', text: JSON.stringify({ buckets: data.items || [] }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('gcp_storage_list_objects',
+        { bucket: z.string(), prefix: z.string().optional() },
         async (args) => {
             try {
-                requireConfigured();
-                const data = await computeAction(args.zone, args.name, 'start');
-                return { content: [{ type: 'text', text: JSON.stringify({ operation: data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'gcp_compute_stop_instance',
-        { description: 'Stop a Compute Engine instance.', inputSchema: { type: 'object', properties: { zone: { type: 'string' }, name: { type: 'string' } }, required: ['zone', 'name'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const data = await computeAction(args.zone, args.name, 'stop');
-                return { content: [{ type: 'text', text: JSON.stringify({ operation: data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'gcp_compute_reset_instance',
-        { description: 'Reset a Compute Engine instance.', inputSchema: { type: 'object', properties: { zone: { type: 'string' }, name: { type: 'string' } }, required: ['zone', 'name'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const data = await computeAction(args.zone, args.name, 'reset');
-                return { content: [{ type: 'text', text: JSON.stringify({ operation: data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    // GKE
-    server.registerTool(
-        'gcp_gke_list_clusters',
-        { description: 'List GKE clusters.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://container.googleapis.com/v1/projects/${sessionConfig.project_id}/locations/-/clusters`);
-                return { content: [{ type: 'text', text: JSON.stringify({ clusters: data.clusters || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'gcp_gke_get_cluster',
-        { description: 'Get a GKE cluster.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, location: { type: 'string' } }, required: ['name', 'location'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://container.googleapis.com/v1/projects/${sessionConfig.project_id}/locations/${args.location}/clusters/${args.name}`);
-                return { content: [{ type: 'text', text: JSON.stringify({ cluster: data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'gcp_gke_get_kube_access_token',
-        { description: 'Return kube API info with bearer token for client handoff.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, location: { type: 'string' } }, required: ['name', 'location'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://container.googleapis.com/v1/projects/${sessionConfig.project_id}/locations/${args.location}/clusters/${args.name}`);
-                return { content: [{ type: 'text', text: JSON.stringify({ api_server: data.endpoint, auth: { type: 'bearer', token: sessionConfig.token } }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    // GCS
-    server.registerTool(
-        'gcp_storage_list_buckets',
-        { description: 'List GCS buckets.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://storage.googleapis.com/storage/v1/b`, { query: { project: sessionConfig.project_id } });
-                return { content: [{ type: 'text', text: JSON.stringify({ buckets: data.items || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'gcp_storage_list_objects',
-        { description: 'List objects in a bucket/prefix.', inputSchema: { type: 'object', properties: { bucket: { type: 'string' }, prefix: { type: 'string' } }, required: ['bucket'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
+                await ensureConnected();
                 const data = await gcpFetch(`https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(args.bucket)}/o`, { query: { prefix: args.prefix } });
                 return { content: [{ type: 'text', text: JSON.stringify({ objects: data.items || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'gcp_storage_get_object',
-        { description: 'Get object content (text).', inputSchema: { type: 'object', properties: { bucket: { type: 'string' }, object: { type: 'string' } }, required: ['bucket', 'object'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const url = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(args.bucket)}/o/${encodeURIComponent(args.object)}?alt=media`;
-                const resp = await fetch(url, { headers: authHeaders() });
-                const text = await resp.text();
-                if (!resp.ok) throw { message: 'GCS getObject failed', code: 'PERMISSION_DENIED', details: text, http_status: resp.status };
-                return { content: [{ type: 'text', text: JSON.stringify({ bucket: args.bucket, object: args.object, content: text }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'gcp_storage_put_object',
+    server.tool('gcp_storage_put_object',
         {
-            description: 'Upload text content to GCS.',
-            inputSchema: {
-                type: 'object',
-                properties: { bucket: { type: 'string' }, object: { type: 'string' }, content: { type: 'string' }, content_type: { type: 'string' } },
-                required: ['bucket', 'object', 'content'],
-                additionalProperties: false
-            }
+            bucket: z.string(),
+            object: z.string().describe('Target object path'),
+            content: z.string().describe('Text content to upload'),
+            content_type: z.string().default('text/plain'),
+            confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
             try {
-                requireConfigured();
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Uploading to gs://${args.bucket}/${args.object}. Set confirm: true to proceed.` }] };
+                await ensureConnected();
                 const url = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(args.bucket)}/o?uploadType=media&name=${encodeURIComponent(args.object)}`;
                 const resp = await fetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': args.content_type || 'text/plain', ...authHeaders() },
+                    headers: { 'Content-Type': args.content_type, 'Authorization': `Bearer ${sessionConfig.token}` },
                     body: args.content
                 });
                 const data = await resp.json().catch(() => ({}));
                 if (!resp.ok) throw { message: 'GCS putObject failed', code: 'PERMISSION_DENIED', details: data, http_status: resp.status };
                 return { content: [{ type: 'text', text: JSON.stringify({ bucket: args.bucket, object: args.object, mediaLink: data.mediaLink }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    // Pub/Sub
-    server.registerTool(
-        'gcp_pubsub_list_topics',
-        { description: 'List Pub/Sub topics.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const data = await gcpFetch(`https://pubsub.googleapis.com/v1/projects/${sessionConfig.project_id}/topics`);
-                return { content: [{ type: 'text', text: JSON.stringify({ topics: data.topics || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
+    // --- Pub/Sub ---
 
-    server.registerTool(
-        'gcp_pubsub_publish_message',
+    server.tool('gcp_pubsub_publish_message',
         {
-            description: 'Publish a message to Pub/Sub topic.',
-            inputSchema: {
-                type: 'object',
-                properties: { topic: { type: 'string' }, data: { type: 'string' }, attributes: { type: 'object' } },
-                required: ['topic', 'data'],
-                additionalProperties: false
-            }
+            topic: z.string().describe('Full topic name: projects/[ID]/topics/[NAME]'),
+            data: z.string().describe('Message string'),
+            attributes: z.object({}).catchall(z.any()).optional(),
+            confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
             try {
-                requireConfigured();
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Publishing to ${args.topic}. Set confirm: true to proceed.` }] };
+                await ensureConnected();
                 const body = { messages: [{ data: Buffer.from(args.data).toString('base64'), attributes: args.attributes }] };
                 const data = await gcpFetch(`https://pubsub.googleapis.com/v1/${args.topic}:publish`, { method: 'POST', body });
                 return { content: [{ type: 'text', text: JSON.stringify({ messageIds: data.messageIds }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'gcp_pubsub_pull_messages',
-        {
-            description: 'Pull messages from a subscription.',
-            inputSchema: {
-                type: 'object',
-                properties: { subscription: { type: 'string' }, max_messages: { type: 'number' } },
-                required: ['subscription'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const body = { maxMessages: args.max_messages || 1 };
-                const data = await gcpFetch(`https://pubsub.googleapis.com/v1/${args.subscription}:pull`, { method: 'POST', body });
-                return { content: [{ type: 'text', text: JSON.stringify({ receivedMessages: data.receivedMessages || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
+    // --- Monitoring & Logging ---
 
-    server.registerTool(
-        'gcp_pubsub_ack_message',
+    server.tool('gcp_logging_query_logs',
         {
-            description: 'Acknowledge Pub/Sub messages.',
-            inputSchema: {
-                type: 'object',
-                properties: { subscription: { type: 'string' }, ack_ids: { type: 'array', items: { type: 'string' } } },
-                required: ['subscription', 'ack_ids'],
-                additionalProperties: false
-            }
+            filter: z.string().describe('Logging query filter'),
+            limit: z.number().default(100),
+            time_range: z.object({ from: z.string().optional(), to: z.string().optional() }).optional()
         },
         async (args) => {
             try {
-                requireConfigured();
-                const body = { ackIds: args.ack_ids };
-                await gcpFetch(`https://pubsub.googleapis.com/v1/${args.subscription}:acknowledge`, { method: 'POST', body });
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    // Monitoring
-    server.registerTool(
-        'gcp_monitoring_query_metrics',
-        {
-            description: 'Query Cloud Monitoring metrics via timeSeries:list.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    metric: { type: 'string' },
-                    resource_type: { type: 'string' },
-                    filter: { type: 'string' },
-                    time_range: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } } },
-                    interval_minutes: { type: 'number' }
-                },
-                required: ['metric'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const tr = timeRangeFilter(args.time_range);
-                const filter = args.filter || `metric.type="${args.metric}"`;
-                const data = await gcpFetch(`https://monitoring.googleapis.com/v3/projects/${sessionConfig.project_id}/timeSeries`, {
-                    query: {
-                        filter,
-                        interval_startTime: tr.from,
-                        interval_endTime: tr.to,
-                        'view': 'FULL'
-                    }
-                });
-                return { content: [{ type: 'text', text: JSON.stringify({ timeSeries: data.timeSeries || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    // Logging
-    server.registerTool(
-        'gcp_logging_query_logs',
-        {
-            description: 'Query Cloud Logging entries.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    filter: { type: 'string' },
-                    limit: { type: 'number' },
-                    time_range: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } } }
-                },
-                required: ['filter'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const tr = timeRangeFilter(args.time_range);
+                await ensureConnected();
+                const tr = args.time_range || {};
+                const from = parseRelativeNow(tr.from || 'now-1h').toISOString();
+                const to = parseRelativeNow(tr.to || 'now').toISOString();
+                
                 const body = {
                     resourceNames: [`projects/${sessionConfig.project_id}`],
                     filter: args.filter,
-                    pageSize: args.limit || 100,
+                    pageSize: args.limit,
                     orderBy: 'timestamp desc'
                 };
-                if (tr.from) body['interval'] = { startTime: tr.from, endTime: tr.to };
+                if (from) body['interval'] = { startTime: from, endTime: to };
+                
                 const data = await gcpFetch(`https://logging.googleapis.com/v2/entries:list`, { method: 'POST', body });
-                const entries = (data.entries || []).map((e) => ({
-                    timestamp: e.timestamp,
-                    textPayload: e.textPayload,
-                    jsonPayload: e.jsonPayload,
-                    resource: e.resource,
-                    insertId: e.insertId,
-                    severity: e.severity,
-                    trace: e.trace
-                }));
-                return { content: [{ type: 'text', text: JSON.stringify({ entries }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'gcp_logging_get_log_context',
-        {
-            description: 'Get log context around an insertId.',
-            inputSchema: { type: 'object', properties: { insertId: { type: 'string' }, before: { type: 'number' }, after: { type: 'number' } }, required: ['insertId'], additionalProperties: false }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const baseFilter = `insertId="${args.insertId}"`;
-                const centerResp = await gcpFetch(`https://logging.googleapis.com/v2/entries:list`, {
-                    method: 'POST',
-                    body: { resourceNames: [`projects/${sessionConfig.project_id}`], filter: baseFilter, pageSize: 1 }
-                });
-                const entry = centerResp.entries?.[0];
-                if (!entry) throw { message: 'Log entry not found', code: 'NOT_FOUND' };
-                const ts = entry.timestamp;
-                const before = parseRelativeNow('now');
-                const tsDate = new Date(ts);
-                const windowMs = 5 * 60 * 1000;
-                const start = new Date(tsDate.getTime() - (args.before || 20) * 1000) || new Date(tsDate.getTime() - windowMs);
-                const end = new Date(tsDate.getTime() + (args.after || 20) * 1000) || new Date(tsDate.getTime() + windowMs);
-                const contextResp = await gcpFetch(`https://logging.googleapis.com/v2/entries:list`, {
-                    method: 'POST',
-                    body: {
-                        resourceNames: [`projects/${sessionConfig.project_id}`],
-                        filter: `timestamp>="${start.toISOString()}" AND timestamp<="${end.toISOString()}"`,
-                        orderBy: 'timestamp asc',
-                        pageSize: 200
-                    }
-                });
-                return { content: [{ type: 'text', text: JSON.stringify({ target: entry, context: contextResp.entries || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    // Incident helpers
-    server.registerTool(
-        'gcp_incident_find_recent_errors',
-        {
-            description: 'Search recent errors in Cloud Logging.',
-            inputSchema: {
-                type: 'object',
-                properties: { service: { type: 'string' }, minutes: { type: 'number', default: 30 } },
-                required: ['service'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const to = new Date();
-                const from = new Date(to.getTime() - (args.minutes || 30) * 60000);
-                const filter = `resource.labels.service_name="${args.service}" AND severity>=ERROR AND timestamp>="${from.toISOString()}" AND timestamp<="${to.toISOString()}"`;
-                const data = await gcpFetch(`https://logging.googleapis.com/v2/entries:list`, { method: 'POST', body: { resourceNames: [`projects/${sessionConfig.project_id}`], filter, orderBy: 'timestamp desc', pageSize: 200 } });
                 return { content: [{ type: 'text', text: JSON.stringify({ entries: data.entries || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'gcp_incident_summarize_service_health',
+    server.tool('gcp_incident_find_recent_errors',
         {
-            description: 'Summarize service health via logging + metrics.',
-            inputSchema: { type: 'object', properties: { service: { type: 'string' }, minutes: { type: 'number' } }, required: ['service'], additionalProperties: false }
+            service: z.string().describe('Cloud Run / GAE service name'),
+            minutes: z.number().default(30)
         },
         async (args) => {
             try {
-                requireConfigured();
-                const minutes = args.minutes || 30;
-                const to = new Date();
-                const from = new Date(to.getTime() - minutes * 60000);
-
-                // Error logs
-                const logFilter = `resource.labels.service_name="${args.service}" AND severity>=ERROR AND timestamp>="${from.toISOString()}" AND timestamp<="${to.toISOString()}"`;
-                const logs = await gcpFetch(`https://logging.googleapis.com/v2/entries:list`, { method: 'POST', body: { resourceNames: [`projects/${sessionConfig.project_id}`], filter: logFilter, pageSize: 100, orderBy: 'timestamp desc' } });
-
-                // Basic latency/error metrics via Monitoring if available
-                const metricFilter = `metric.type="run.googleapis.com/request_latencies" AND resource.labels.service_name="${args.service}"`;
-                let metrics = {};
-                try {
-                    const mdata = await gcpFetch(`https://monitoring.googleapis.com/v3/projects/${sessionConfig.project_id}/timeSeries`, {
-                        query: {
-                            filter: metricFilter,
-                            interval_startTime: from.toISOString(),
-                            interval_endTime: to.toISOString(),
-                            view: 'FULL'
-                        }
-                    });
-                    metrics = { timeSeries: mdata.timeSeries || [] };
-                } catch (_) {
-                    metrics = { note: 'metrics unavailable or permission denied' };
-                }
-
-                const summary = {
-                    status: (logs.entries || []).length > 0 ? 'degraded' : 'healthy',
-                    logs: logs.entries || [],
-                    metrics
-                };
-                return { content: [{ type: 'text', text: JSON.stringify(summary) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+                await ensureConnected();
+                const to = new Date().toISOString();
+                const from = new Date(Date.now() - args.minutes * 60000).toISOString();
+                const filter = `resource.labels.service_name="${args.service}" AND severity>=ERROR AND timestamp>="${from}" AND timestamp<="${to}"`;
+                const data = await gcpFetch(`https://logging.googleapis.com/v2/entries:list`, { 
+                    method: 'POST', 
+                    body: { resourceNames: [`projects/${sessionConfig.project_id}`], filter, orderBy: 'timestamp desc', pageSize: 200 } 
+                });
+                return { content: [{ type: 'text', text: JSON.stringify({ entries: (data.entries || []).map(e => ({ severity: e.severity, message: e.textPayload || e.jsonPayload })) }) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.server.oninitialized = () => {
-        console.log('GCP MCP server initialized.');
-    };
-
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.log('GCP MCP server running on stdio.');
+    return server;
 }
 
-main().catch((err) => {
-    console.error('GCP MCP server failed to start:', err);
-    process.exit(1);
-});
+if (require.main === module) {
+    const server = createGcpServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('GCP MCP server running on stdio');
+    }).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
+}
+
+module.exports = { createGcpServer };

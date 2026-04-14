@@ -1,120 +1,115 @@
-#!/usr/bin/env node
+const axios = require('axios');
+const { z } = require('zod');
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 
-const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
-const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
-const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
-const axios = require("axios");
+const SERVER_INFO = { name: 'stripe-mcp', version: '2.0.0' };
 
-// Config: Use Proxy if available, else local Key
-const proxyUrl = process.env.FLOCCA_PROXY_URL;
-const userId = process.env.FLOCCA_USER_ID;
-const localKey = process.env.STRIPE_SECRET_KEY;
+let config = {
+    key: process.env.STRIPE_SECRET_KEY,
+    proxyUrl: process.env.FLOCCA_PROXY_URL,
+    userId: process.env.FLOCCA_USER_ID
+};
 
-if (!localKey && !(proxyUrl && userId)) {
-    console.error("Stripe not configured. Set STRIPE_SECRET_KEY or Connect via Flocca Vault.");
-    process.exit(1);
+function normalizeError(err) {
+    const data = err.response?.data || {};
+    const msg = data.error?.message || err.message || JSON.stringify(data);
+    return { isError: true, content: [{ type: 'text', text: `Stripe Error: ${msg}` }] };
 }
 
-// Axios Instance
-let api;
-if (proxyUrl && userId) {
-    api = axios.create({
-        baseURL: proxyUrl, // e.g. http://localhost:3000/proxy/stripe
-        headers: {
-            'X-Flocca-User-ID': userId,
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-    });
-} else {
-    api = axios.create({
-        baseURL: 'https://api.stripe.com',
-        headers: {
-            'Authorization': `Bearer ${localKey}`,
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-    });
-}
+function createStripeServer() {
+    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    let api = null;
 
-const server = new Server(
-    {
-        name: "stripe-server",
-        version: "1.0.0",
-    },
-    {
-        capabilities: {
-            tools: {},
-        },
-    }
-);
+    async function ensureConnected() {
+        if (!config.key && !(config.proxyUrl && config.userId)) {
+            // Re-read env for dynamic updates
+            config.key = process.env.STRIPE_SECRET_KEY;
+            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            config.userId = process.env.FLOCCA_USER_ID;
 
-// Tools
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-        tools: [
-            {
-                name: "stripe_health",
-                description: "Health check for Stripe authentication.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "get_balance",
-                description: "Retrieve current Stripe balance.",
-                inputSchema: {
-                    type: "object",
-                    properties: {},
-                },
-            },
-            {
-                name: "list_customers",
-                description: "List recent customers.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        limit: { type: "number", description: "Number of customers to return (default 10)" }
-                    },
-                },
+            if (!config.key && !(config.proxyUrl && config.userId)) {
+                throw new Error("Stripe Not Configured. Provide STRIPE_SECRET_KEY or use Proxy.");
             }
-        ],
-    };
-});
+        }
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
+        if (!api) {
+            const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+            let baseURL = 'https://api.stripe.com';
 
-    try {
-        if (name === "stripe_health") {
+            if (config.proxyUrl && config.userId) {
+                baseURL = config.proxyUrl.replace(/\/$/, '');
+                headers['X-Flocca-User-ID'] = config.userId;
+            } else {
+                headers['Authorization'] = `Bearer ${config.key}`;
+            }
+
+            api = axios.create({ baseURL, headers });
+        }
+        return api;
+    }
+
+    server.tool('stripe_health', {}, async () => {
+        try {
+            const client = await ensureConnected();
+            await client.get('/v1/balance');
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('stripe_get_balance', {}, async () => {
+        try {
+            const client = await ensureConnected();
+            const res = await client.get('/v1/balance');
+            return { content: [{ type: 'text', text: JSON.stringify(res.data, null, 2) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('stripe_list_customers',
+        { limit: z.number().int().positive().optional().default(10) },
+        async (args) => {
             try {
-                await api.get('/v1/balance');
-                return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
-            } catch (error) {
-                return { content: [{ type: "text", text: JSON.stringify({ error: error.message }) }] };
-            }
+                const client = await ensureConnected();
+                const res = await client.get('/v1/customers', { params: { limit: args.limit } });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data.data || [], null, 2) }] };
+            } catch (e) { return normalizeError(e); }
         }
+    );
 
-        if (name === "get_balance") {
-            const response = await api.get('/v1/balance');
-            return {
-                content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }],
-            };
+    server.tool('stripe_get_customer',
+        { customer_id: z.string().describe('Stripe customer ID (e.g. cus_...)') },
+        async (args) => {
+            try {
+                const client = await ensureConnected();
+                const res = await client.get(`/v1/customers/${args.customer_id}`);
+                return { content: [{ type: 'text', text: JSON.stringify(res.data, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
         }
+    );
 
-        if (name === "list_customers") {
-            const limit = args?.limit || 10;
-            const response = await api.get('/v1/customers', { params: { limit } });
-            return {
-                content: [{ type: "text", text: JSON.stringify(response.data.data, null, 2) }],
-            };
+    server.tool('stripe_list_recent_charges',
+        { limit: z.number().int().positive().optional().default(10) },
+        async (args) => {
+            try {
+                const client = await ensureConnected();
+                const res = await client.get('/v1/charges', { params: { limit: args.limit } });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data.data || [], null, 2) }] };
+            } catch (e) { return normalizeError(e); }
         }
+    );
 
-        throw new Error(`Unknown tool: ${name}`);
-    } catch (error) {
-        return {
-            content: [{ type: "text", text: `Error: ${error.message} \n ${JSON.stringify(error.response?.data || {})}` }],
-            isError: true,
-        };
-    }
-});
+    return server;
+}
 
-const transport = new StdioServerTransport();
-server.connect(transport);
-console.error("Stripe MCP Server running on stdio");
+if (require.main === module) {
+    const server = createStripeServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('Stripe MCP server running on stdio');
+    }).catch(error => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
+}
+
+module.exports = { createStripeServer };

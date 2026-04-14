@@ -1,537 +1,268 @@
-const path = require('path');
-const z = require('zod');
+const axios = require('axios');
+const { z } = require('zod');
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 
-const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
+const SERVER_INFO = { name: 'testrail-mcp', version: '2.0.0' };
 
-const SERVER_INFO = { name: 'testrail-mcp', version: '0.1.0' };
-
-const sessionConfig = {
+let config = {
     baseUrl: process.env.TESTRAIL_BASE_URL,
-    auth: (process.env.TESTRAIL_USERNAME && process.env.TESTRAIL_API_KEY) ? {
-        username: process.env.TESTRAIL_USERNAME,
-        api_key: process.env.TESTRAIL_API_KEY,
-        type: 'apikey'
-    } : undefined,
-    projectId: process.env.TESTRAIL_PROJECT_ID ? Number(process.env.TESTRAIL_PROJECT_ID) : undefined,
-    suiteId: process.env.TESTRAIL_SUITE_ID ? Number(process.env.TESTRAIL_SUITE_ID) : undefined,
-    runDefaults: undefined
+    username: process.env.TESTRAIL_USERNAME,
+    apiKey: process.env.TESTRAIL_API_KEY,
+    projectId: process.env.TESTRAIL_PROJECT_ID ? Number(process.env.TESTRAIL_PROJECT_ID) : undefined
 };
 
-class TRLError extends Error {
-    constructor(message, { code = 500, details } = {}) {
-        super(message);
-        this.code = code;
-        this.details = details;
-    }
+function normalizeError(err) {
+    const data = err.response?.data || {};
+    const msg = data.error || err.message || JSON.stringify(data);
+    return { isError: true, content: [{ type: 'text', text: `TestRail Error: ${msg}` }] };
 }
 
-function normalizeBaseUrl(baseUrl) {
-    const raw = String(baseUrl || '').trim().replace(/\/+$/, '');
-    if (!raw) return raw;
-    return raw
+function normalizeUrl(url) {
+    if (!url) return '';
+    return url.trim()
         .replace(/\/index\.php\?\/api\/v2$/i, '')
         .replace(/\/api\/v2$/i, '')
         .replace(/\/index\.php$/i, '')
         .replace(/\/+$/, '');
 }
 
-function requireConfigured() {
-    if (!sessionConfig.baseUrl || !sessionConfig.auth || !sessionConfig.projectId) {
-        throw new TRLError('TestRail is not configured. Call testrail_configure first.', { code: 400 });
-    }
-}
-
-function authHeaders() {
-    if (!sessionConfig.auth) return {};
-    const { username, api_key } = sessionConfig.auth;
-    const encoded = Buffer.from(`${username}:${api_key}`).toString('base64');
-    return { Authorization: `Basic ${encoded}` };
-}
-
-function errorResult(err, operation) {
-    const payload = {
-        error: {
-            message: err.message || 'TestRail error',
-            code: err.code || 500,
-            details: err.details,
-            operation
-        }
-    };
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify(payload) }] };
-}
-
-async function trlFetch(pathPart, { method = 'GET', body, query } = {}) {
-    const url = new URL(`${sessionConfig.baseUrl}/${pathPart}`);
-    if (query) {
-        Object.entries(query).forEach(([k, v]) => {
-            if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
-        });
-    }
-
-    const resp = await fetch(url.toString(), {
-        method,
-        headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders()
-        },
-        body: body ? JSON.stringify(body) : undefined
-    });
-
-    let data;
-    let rawText = '';
-    try {
-        rawText = await resp.text();
-        data = rawText ? JSON.parse(rawText) : {};
-    } catch (e) {
-        data = {};
-    }
-
-    if (!resp.ok) {
-        const details = (data && Object.keys(data).length > 0) ? data : { response: rawText?.slice(0, 500) };
-        details.requested_path = `${url.pathname}${url.search || ''}`;
-        throw new TRLError(data.error || `HTTP ${resp.status}`, { code: resp.status, details });
-    }
-    if (data.error) {
-        throw new TRLError(data.error, { code: resp.status, details: data });
-    }
-    return data;
-}
-
-async function validateConfig(args) {
-    const { base_url, auth, project_id } = args;
-    if (!base_url || !auth || !auth.username || !auth.api_key || !project_id) {
-        throw new TRLError('Missing required configuration fields', { code: 400 });
-    }
-    const normalizedBaseUrl = normalizeBaseUrl(base_url);
-    // Simple validation: fetch projects
-    const encoded = Buffer.from(`${auth.username}:${auth.api_key}`).toString('base64');
-    const resp = await fetch(`${normalizedBaseUrl}/index.php?/api/v2/get_projects`, {
-        headers: { Authorization: `Basic ${encoded}` }
-    });
-    if (!resp.ok) {
-        throw new TRLError('Authentication failed', { code: resp.status, details: await resp.text() });
-    }
-    const projects = await resp.json();
-    const found = (projects || []).find((p) => p.id === project_id);
-    if (!found) {
-        throw new TRLError('Project not found or inaccessible', { code: 404 });
-    }
-}
-
-async function main() {
+function createTestRailServer() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
-    const originalRegisterTool = server.registerTool.bind(server);
-    const permissiveInputSchema = z.object({}).passthrough();
-    server.registerTool = (name, config, handler) => {
-        const nextConfig = { ...(config || {}) };
-        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = permissiveInputSchema;
-        }
-        return originalRegisterTool(name, nextConfig, handler);
-    };
+    let api = null;
 
-    server.registerTool(
-        'testrail_health',
-        {
-            description: 'Health check for TestRail MCP server.',
-            inputSchema: { type: 'object', properties: {}, additionalProperties: false }
-        },
-        async () => {
-            try {
-                requireConfigured();
-                await trlFetch(`index.php?/api/v2/get_projects`);
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (e) {
-                return errorResult(e, 'testrail_health');
+    async function ensureConnected() {
+        if (!config.baseUrl || !config.username || !config.apiKey) {
+            // Re-read env for dynamic updates
+            config.baseUrl = process.env.TESTRAIL_BASE_URL;
+            config.username = process.env.TESTRAIL_USERNAME;
+            config.apiKey = process.env.TESTRAIL_API_KEY;
+            config.projectId = process.env.TESTRAIL_PROJECT_ID ? Number(process.env.TESTRAIL_PROJECT_ID) : undefined;
+
+            if (!config.baseUrl || !config.username || !config.apiKey) {
+                throw new Error("TestRail Not Configured. Set TESTRAIL_BASE_URL, TESTRAIL_USERNAME, and TESTRAIL_API_KEY.");
             }
+        }
+
+        if (!api) {
+            const normalizedBase = normalizeUrl(config.baseUrl);
+            const auth = Buffer.from(`${config.username}:${config.apiKey}`).toString('base64');
+            api = axios.create({
+                baseURL: `${normalizedBase}/index.php?/api/v2`,
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+        return api;
+    }
+
+    server.tool('testrail_health', {}, async () => {
+        try {
+            const client = await ensureConnected();
+            await client.get('get_projects');
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, url: normalizeUrl(config.baseUrl) }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('testrail_configure',
+        {
+            base_url: z.string(),
+            username: z.string(),
+            api_key: z.string(),
+            project_id: z.number().int().optional()
+        },
+        async (args) => {
+            config.baseUrl = args.base_url;
+            config.username = args.username;
+            config.apiKey = args.api_key;
+            if (args.project_id) config.projectId = args.project_id;
+            api = null; // Reset client
+            try {
+                const client = await ensureConnected();
+                await client.get('get_projects');
+                return { content: [{ type: 'text', text: "TestRail configured successfully." }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'testrail_configure',
+    server.tool('testrail_list_test_cases',
         {
-            description: 'Configure TestRail connection for this session.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    base_url: { type: 'string' },
-                    auth: {
-                        type: 'object',
-                        properties: {
-                            type: { type: 'string', enum: ['apikey'], default: 'apikey' },
-                            username: { type: 'string' },
-                            api_key: { type: 'string' }
-                        },
-                        required: ['username', 'api_key']
-                    },
-                    project_id: { type: 'number' },
-                    suite_id: { type: 'number' },
-                    run_defaults: { type: 'object' }
-                },
-                required: ['base_url', 'auth', 'project_id'],
-                additionalProperties: false
-            }
+            project_id: z.number().int().optional(),
+            suite_id: z.number().int().optional(),
+            section_id: z.number().int().optional(),
+            limit: z.number().int().optional().default(50)
         },
         async (args) => {
             try {
-                await validateConfig(args);
-                sessionConfig.baseUrl = normalizeBaseUrl(args.base_url);
-                sessionConfig.auth = args.auth;
-                sessionConfig.projectId = args.project_id;
-                sessionConfig.suiteId = args.suite_id;
-                sessionConfig.runDefaults = args.run_defaults;
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_configure');
-            }
-        }
-    );
+                const client = await ensureConnected();
+                const pid = args.project_id || config.projectId;
+                if (!pid) throw new Error("project_id is required (provide in tool or via environment)");
+                
+                const params = { limit: args.limit };
+                if (args.suite_id) params.suite_id = args.suite_id;
+                if (args.section_id) params.section_id = args.section_id;
 
-    server.registerTool(
-        'testrail_list_test_cases',
-        {
-            description: 'List TestRail test cases with optional suite/section filters.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    suite_id: { type: 'number' },
-                    section_id: { type: 'number' },
-                    limit: { type: 'number' },
-                    offset: { type: 'number' }
-                },
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const suiteId = args.suite_id || sessionConfig.suiteId;
-                const query = {};
-                if (args.section_id) query.section_id = args.section_id;
-                if (args.limit) query.limit = args.limit;
-                if (args.offset) query.offset = args.offset;
-                const pathPart = suiteId
-                    ? `index.php?/api/v2/get_cases/${sessionConfig.projectId}&suite_id=${suiteId}`
-                    : `index.php?/api/v2/get_cases/${sessionConfig.projectId}`;
-                const data = await trlFetch(pathPart, { query });
-                const cases = (data || []).map((c) => ({
+                const res = await client.get(`get_cases/${pid}`, { params });
+                const cases = (res.data.cases || res.data || []).map(c => ({
                     id: c.id,
                     title: c.title,
                     type_id: c.type_id,
-                    priority_id: c.priority_id,
-                    section_id: c.section_id,
-                    custom_automation_type: c.custom_automation_type
+                    priority_id: c.priority_id
                 }));
-                return { content: [{ type: 'text', text: JSON.stringify({ cases }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_list_test_cases');
-            }
+                return { content: [{ type: 'text', text: JSON.stringify({ cases }, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'testrail_get_test_case',
-        {
-            description: 'Get full details for a TestRail case.',
-            inputSchema: { type: 'object', properties: { case_id: { type: 'number' } }, required: ['case_id'], additionalProperties: false }
-        },
+    server.tool('testrail_get_test_case',
+        { case_id: z.number().int() },
         async (args) => {
             try {
-                requireConfigured();
-                const data = await trlFetch(`index.php?/api/v2/get_case/${args.case_id}`);
-                const result = {
-                    id: data.id,
-                    title: data.title,
-                    custom_preconds: data.custom_preconds,
-                    custom_steps: data.custom_steps,
-                    custom_expected: data.custom_expected,
-                    custom_automation_type: data.custom_automation_type,
-                    custom_fields: Object.fromEntries(Object.entries(data).filter(([k]) => k.startsWith('custom_')))
-                };
-                return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_get_test_case');
-            }
+                const client = await ensureConnected();
+                const res = await client.get(`get_case/${args.case_id}`);
+                return { content: [{ type: 'text', text: JSON.stringify(res.data, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'testrail_create_test_case',
+    server.tool('testrail_create_test_case',
         {
-            description: 'Create a new TestRail case.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    suite_id: { type: 'number' },
-                    section_id: { type: 'number' },
-                    title: { type: 'string' },
-                    custom_steps: { type: 'array', items: { type: 'string' } },
-                    custom_expected: { type: 'string' },
-                    fields: { type: 'object' }
-                },
-                required: ['section_id', 'title'],
-                additionalProperties: false
-            }
+            section_id: z.number().int(),
+            title: z.string(),
+            custom_steps: z.string().optional(),
+            custom_expected: z.string().optional(),
+            confirm: z.boolean().describe('Confirm mutation (safety gate)')
         },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set confirm:true to create this test case." }] };
             try {
-                requireConfigured();
-                const payload = {
+                const client = await ensureConnected();
+                const data = {
                     title: args.title,
-                    ...(args.custom_steps ? { custom_steps: args.custom_steps } : {}),
-                    ...(args.custom_expected ? { custom_expected: args.custom_expected } : {}),
-                    ...(args.fields || {})
+                    custom_steps: args.custom_steps,
+                    custom_expected: args.custom_expected
                 };
-                if (args.suite_id) payload.suite_id = args.suite_id;
-                const data = await trlFetch(`index.php?/api/v2/add_case/${args.section_id}`, {
-                    method: 'POST',
-                    body: payload
-                });
-                return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, url: data.url }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_create_test_case');
-            }
+                const res = await client.post(`add_case/${args.section_id}`, data);
+                return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, url: res.data.url }) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'testrail_create_test_run',
+    server.tool('testrail_create_test_run',
         {
-            description: 'Create a test run.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    name: { type: 'string' },
-                    case_ids: { type: 'array', items: { type: 'number' } },
-                    description: { type: 'string' },
-                    include_all: { type: 'boolean' },
-                    suite_id: { type: 'number' }
-                },
-                required: ['name'],
-                additionalProperties: false
-            }
+            project_id: z.number().int().optional(),
+            name: z.string(),
+            description: z.string().optional(),
+            suite_id: z.number().int().optional(),
+            include_all: z.boolean().optional().default(true),
+            case_ids: z.array(z.number().int()).optional(),
+            confirm: z.boolean().describe('Confirm mutation (safety gate)')
         },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set confirm:true to create this test run." }] };
             try {
-                requireConfigured();
-                const payload = {
+                const client = await ensureConnected();
+                const pid = args.project_id || config.projectId;
+                if (!pid) throw new Error("project_id is required");
+                
+                const data = {
                     name: args.name,
-                    include_all: args.include_all ?? false,
-                    ...(args.case_ids ? { case_ids: args.case_ids } : {}),
-                    ...(args.description ? { description: args.description } : {}),
-                    ...(args.suite_id ? { suite_id: args.suite_id } : {}),
-                    ...(sessionConfig.runDefaults || {})
+                    description: args.description,
+                    suite_id: args.suite_id,
+                    include_all: args.include_all,
+                    case_ids: args.case_ids
                 };
-                const data = await trlFetch(`index.php?/api/v2/add_run/${sessionConfig.projectId}`, {
-                    method: 'POST',
-                    body: payload
-                });
-                return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, url: data.url }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_create_test_run');
-            }
+                const res = await client.post(`add_run/${pid}`, data);
+                return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, url: res.data.url }) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'testrail_close_test_run',
+    server.tool('testrail_add_test_result',
         {
-            description: 'Close a test run.',
-            inputSchema: { type: 'object', properties: { run_id: { type: 'number' } }, required: ['run_id'], additionalProperties: false }
+            test_id: z.number().int(),
+            status: z.enum(['passed', 'blocked', 'untested', 'retest', 'failed']),
+            comment: z.string().optional(),
+            elapsed: z.string().optional(),
+            version: z.string().optional(),
+            defects: z.string().optional(),
+            confirm: z.boolean().describe('Confirm mutation (safety gate)')
         },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set confirm:true to add result." }] };
+            const statusMap = { passed: 1, blocked: 2, untested: 3, retest: 4, failed: 5 };
             try {
-                requireConfigured();
-                const data = await trlFetch(`index.php?/api/v2/close_run/${args.run_id}`, { method: 'POST' });
-                return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, is_completed: data.is_completed }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_close_test_run');
-            }
-        }
-    );
-
-    server.registerTool(
-        'testrail_add_test_result',
-        {
-            description: 'Add a test result to a test.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    test_id: { type: 'number' },
-                    status: { type: 'string', enum: ['passed', 'failed', 'blocked', 'retest'] },
-                    comment: { type: 'string' },
-                    elapsed: { type: 'string' },
-                    defects: { type: 'string' }
-                },
-                required: ['test_id', 'status'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const statusMap = { passed: 1, blocked: 2, untested: 3, retest: 4, failed: 5 };
-                const payload = {
+                const client = await ensureConnected();
+                const data = {
                     status_id: statusMap[args.status],
-                    ...(args.comment ? { comment: args.comment } : {}),
-                    ...(args.elapsed ? { elapsed: args.elapsed } : {}),
-                    ...(args.defects ? { defects: args.defects } : {})
+                    comment: args.comment,
+                    elapsed: args.elapsed,
+                    version: args.version,
+                    defects: args.defects
                 };
-                const data = await trlFetch(`index.php?/api/v2/add_result/${args.test_id}`, {
-                    method: 'POST',
-                    body: payload
-                });
-                return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, status_id: data.status_id }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_add_test_result');
-            }
+                const res = await client.post(`add_result/${args.test_id}`, data);
+                return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, status_id: res.data.status_id }) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'testrail_map_automated_results',
+    server.tool('testrail_close_test_run',
         {
-            description: 'Map automated test results to TestRail cases and post in batch.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    run_id: { type: 'number' },
-                    results: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            properties: {
-                                case_id: { type: 'number' },
-                                status: { type: 'string', enum: ['passed', 'failed', 'blocked', 'retest'] },
-                                comment: { type: 'string' }
-                            },
-                            required: ['case_id', 'status']
-                        }
-                    }
-                },
-                required: ['run_id', 'results'],
-                additionalProperties: false
-            }
+            run_id: z.number().int(),
+            confirm: z.boolean().describe('Confirm mutation (safety gate)')
         },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set confirm:true to close this run." }] };
             try {
-                requireConfigured();
-                const statusMap = { passed: 1, blocked: 2, retest: 4, failed: 5 };
+                const client = await ensureConnected();
+                const res = await client.post(`close_run/${args.run_id}`);
+                return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, is_completed: res.data.is_completed }) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    server.tool('testrail_map_automated_results',
+        {
+            run_id: z.number().int(),
+            results: z.array(z.object({
+                case_id: z.number().int(),
+                status: z.enum(['passed', 'blocked', 'untested', 'retest', 'failed']),
+                comment: z.string().optional()
+            })),
+            confirm: z.boolean().describe('Confirm mutation (safety gate)')
+        },
+        async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED: Set confirm:true to post batch results." }] };
+            const statusMap = { passed: 1, blocked: 2, untested: 3, retest: 4, failed: 5 };
+            try {
+                const client = await ensureConnected();
                 const payload = {
-                    results: args.results.map((r) => ({
+                    results: args.results.map(r => ({
                         case_id: r.case_id,
                         status_id: statusMap[r.status],
                         comment: r.comment
                     }))
                 };
-                const data = await trlFetch(`index.php?/api/v2/add_results_for_cases/${args.run_id}`, {
-                    method: 'POST',
-                    body: payload
-                });
-                return { content: [{ type: 'text', text: JSON.stringify({ count: (data || []).length }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_map_automated_results');
-            }
+                const res = await client.post(`add_results_for_cases/${args.run_id}`, payload);
+                return { content: [{ type: 'text', text: JSON.stringify({ count: res.data.length || 0 }) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'testrail_search_cases',
-        {
-            description: 'Search cases by title, section, priority, or custom fields (simple filter).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    suite_id: { type: 'number' },
-                    text: { type: 'string' },
-                    section_id: { type: 'number' },
-                    priority_id: { type: 'number' }
-                },
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const list = await server.tools['testrail_list_test_cases'].handler(args);
-                if (list.isError) return list;
-                const parsed = JSON.parse(list.content[0].text);
-                let cases = parsed.cases || [];
-                if (args.text) cases = cases.filter((c) => (c.title || '').toLowerCase().includes(args.text.toLowerCase()));
-                if (args.section_id) cases = cases.filter((c) => c.section_id === args.section_id);
-                if (args.priority_id) cases = cases.filter((c) => c.priority_id === args.priority_id);
-                return { content: [{ type: 'text', text: JSON.stringify({ cases }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_search_cases');
-            }
-        }
-    );
-
-    server.registerTool(
-        'testrail_search_runs',
-        {
-            description: 'Search runs by name/status creator/date (simple filter).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    name: { type: 'string' },
-                    is_completed: { type: 'boolean' }
-                },
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const data = await trlFetch(`index.php?/api/v2/get_runs/${sessionConfig.projectId}`);
-                let runs = data || [];
-                if (args.name) runs = runs.filter((r) => (r.name || '').toLowerCase().includes(args.name.toLowerCase()));
-                if (args.is_completed !== undefined) runs = runs.filter((r) => !!r.is_completed === !!args.is_completed);
-                return { content: [{ type: 'text', text: JSON.stringify({ runs }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_search_runs');
-            }
-        }
-    );
-
-    // Optional MVP placeholders for plans (phase 2)
-    server.registerTool(
-        'testrail_list_test_plans',
-        {
-            description: 'List test plans (optional MVP).',
-            inputSchema: { type: 'object', properties: {}, additionalProperties: false }
-        },
-        async () => {
-            try {
-                requireConfigured();
-                const data = await trlFetch(`index.php?/api/v2/get_plans/${sessionConfig.projectId}`);
-                return { content: [{ type: 'text', text: JSON.stringify({ plans: data || [] }) }] };
-            } catch (err) {
-                return errorResult(err, 'testrail_list_test_plans');
-            }
-        }
-    );
-
-    server.server.oninitialized = () => {
-        console.log('TestRail MCP server initialized.');
-    };
-
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.log('TestRail MCP server running on stdio.');
+    return server;
 }
 
 if (require.main === module) {
-    main().catch((err) => {
-        console.error('TestRail MCP server failed to start:', err);
+    const server = createTestRailServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('TestRail MCP server running on stdio');
+    }).catch(error => {
+        console.error('Server error:', error);
         process.exit(1);
     });
 }
 
-module.exports = {
-    main,
-    __test: {
-        normalizeBaseUrl
-    }
-};
+module.exports = { createTestRailServer };

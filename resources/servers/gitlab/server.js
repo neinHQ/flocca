@@ -1,12 +1,16 @@
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { z } = require('zod');
 const axios = require('axios');
-const readline = require('readline');
 
-// Config
-const GITLAB_TOKEN = process.env.GITLAB_TOKEN;
-let GITLAB_BASE_URL = process.env.GITLAB_BASE_URL || 'https://gitlab.com/api/v4';
+const SERVER_INFO = { name: 'gitlab-mcp', version: '2.0.0' };
 
-const PROXY_URL = process.env.FLOCCA_PROXY_URL;
-const USER_ID = process.env.FLOCCA_USER_ID;
+let config = {
+    token: process.env.GITLAB_TOKEN,
+    baseUrl: process.env.GITLAB_BASE_URL || 'https://gitlab.com/api/v4',
+    proxyUrl: process.env.FLOCCA_PROXY_URL,
+    userId: process.env.FLOCCA_USER_ID
+};
 
 function normalizeGitLabBaseUrl(url) {
     if (!url) return 'https://gitlab.com/api/v4';
@@ -15,128 +19,197 @@ function normalizeGitLabBaseUrl(url) {
     return `${trimmed}/api/v4`;
 }
 
-GITLAB_BASE_URL = normalizeGitLabBaseUrl(GITLAB_BASE_URL);
-
-if (!GITLAB_TOKEN && (!PROXY_URL || !USER_ID)) {
-    console.error("Error: GITLAB_TOKEN (or Proxy) is required.");
-    process.exit(1);
+function normalizeError(err) {
+    const msg = err.response ? `${err.response.status} - ${JSON.stringify(err.response.data)}` : (err.message || JSON.stringify(err));
+    return { isError: true, content: [{ type: 'text', text: `GitLab Error: ${msg}` }] };
 }
 
-const headers = {};
-if (GITLAB_TOKEN) headers['Private-Token'] = GITLAB_TOKEN;
+function createGitLabServer() {
+    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    let api = null;
 
-// PROXY MODE
-if (PROXY_URL && USER_ID) {
-    // PROXY_URL = http://localhost:3000/proxy/gitlab
-    // We want all requests (which are relative like /projects) to go to Proxy
-    // And Proxy needs to reconstruct full path.
-    // If we set baseURL to PROXY_URL + '/api/v4', then axios.get('/projects') calls PROXY + '/api/v4/projects'.
-    // Our Mock Backend takes path param.
-    // If Backend mimics real GitLab, it should accept /api/v4/projects.
-    // So yes:
-    GITLAB_BASE_URL = `${PROXY_URL}/api/v4`;
-    headers['X-Flocca-User-ID'] = USER_ID;
-    delete headers['Private-Token'];
-}
+    async function ensureConnected() {
+        if (!config.token && !(config.proxyUrl && config.userId)) {
+            // Re-check env vars
+            config.token = process.env.GITLAB_TOKEN;
+            config.baseUrl = process.env.GITLAB_BASE_URL || config.baseUrl;
+            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            config.userId = process.env.FLOCCA_USER_ID;
 
-const api = axios.create({
-    baseURL: GITLAB_BASE_URL,
-    headers: headers
-});
+            if (!config.token && !(config.proxyUrl && config.userId)) {
+                throw new Error("GitLab Not Configured. Provide GITLAB_TOKEN or FLOCCA_PROXY_URL.");
+            }
+        }
 
-// JSON-RPC Setup
-let sendCallback = (response) => {
-    process.stdout.write(JSON.stringify(response) + "\n");
-};
+        if (!api) {
+            let finalBaseUrl = normalizeGitLabBaseUrl(config.baseUrl);
+            const headers = {};
 
-function send(response) {
-    if (sendCallback) sendCallback(response);
-}
+            if (config.proxyUrl && config.userId) {
+                finalBaseUrl = `${config.proxyUrl.replace(/\/+$/, '')}/api/v4`;
+                headers['X-Flocca-User-ID'] = config.userId;
+            } else {
+                headers['Private-Token'] = config.token;
+            }
 
-// Tool Handlers
-async function handleToolCall(name, args) {
-    try {
-        switch (name) {
-            case 'gitlab_health':
-                const user = await api.get('/user');
-                return {
-                    content: [{ type: 'text', text: JSON.stringify({ ok: true, user: user.data.username }) }]
-                };
+            api = axios.create({
+                baseURL: finalBaseUrl,
+                headers: headers
+            });
+        }
+        return api;
+    }
 
-            case 'gitlab_list_projects':
+    server.tool('gitlab_health', {}, async () => {
+        try {
+            const client = await ensureConnected();
+            const res = await client.get('/user');
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, user: res.data.username, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('gitlab_configure',
+        {
+            token: z.string().describe('GitLab Personal Access Token'),
+            base_url: z.string().optional().describe('GitLab Base URL (e.g. https://gitlab.com)'),
+        },
+        async (args) => {
+            try {
+                config.token = args.token;
+                if (args.base_url) config.baseUrl = args.base_url;
+                api = null; // force re-init
+                const client = await ensureConnected();
+                await client.get('/user');
+                return { content: [{ type: 'text', text: "GitLab configuration updated and verified." }] };
+            } catch (e) {
+                config.token = undefined;
+                api = null;
+                return normalizeError(e);
+            }
+        }
+    );
+
+    server.tool('gitlab_list_projects',
+        {
+            search: z.string().optional().describe('Limit by search term'),
+            membership_only: z.boolean().optional().default(true).describe('Limit by projects that the current user is a member of')
+        },
+        async (args) => {
+            try {
+                const client = await ensureConnected();
                 const params = { simple: true, membership: args.membership_only };
                 if (args.search) params.search = args.search;
-                const projects = await api.get('/projects', { params });
+                const res = await client.get('/projects', { params });
                 return {
                     content: [{
                         type: 'text',
-                        text: JSON.stringify({
-                            projects: projects.data.map(p => ({
-                                id: p.id,
-                                name: p.name,
-                                path_with_namespace: p.path_with_namespace,
-                                web_url: p.web_url
-                            }))
-                        }, null, 2)
+                        text: JSON.stringify(res.data.map(p => ({
+                            id: p.id,
+                            name: p.name,
+                            path_with_namespace: p.path_with_namespace,
+                            web_url: p.web_url
+                        })), null, 2)
                     }]
                 };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
 
-            case 'gitlab_get_repository_tree':
-                const treeParams = {
-                    ref: args.ref,
-                    path: args.path || '',
-                    recursive: args.recursive || false
-                };
-                const tree = await api.get(`/projects/${args.project_id}/repository/tree`, { params: treeParams });
-                return {
-                    content: [{ type: 'text', text: JSON.stringify(tree.data, null, 2) }]
-                };
+    server.tool('gitlab_get_repository_tree',
+        {
+            project_id: z.union([z.string(), z.number()]).describe('Project ID or path'),
+            ref: z.string().describe('Branch, tag, or commit SHA'),
+            path: z.string().optional().default('').describe('Path in repository'),
+            recursive: z.boolean().optional().default(false).describe('Get recursive tree')
+        },
+        async (args) => {
+            try {
+                const client = await ensureConnected();
+                const treeParams = { ref: args.ref, path: args.path, recursive: args.recursive };
+                const res = await client.get(`/projects/${encodeURIComponent(args.project_id)}/repository/tree`, { params: treeParams });
+                return { content: [{ type: 'text', text: JSON.stringify(res.data, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
 
-            case 'gitlab_get_file':
-                // file_path must be URL encoded
+    server.tool('gitlab_get_file',
+        {
+            project_id: z.union([z.string(), z.number()]).describe('Project ID or path'),
+            ref: z.string().describe('Branch, tag, or commit SHA'),
+            file_path: z.string().describe('Full path to file')
+        },
+        async (args) => {
+            try {
+                const client = await ensureConnected();
                 const encodedPath = encodeURIComponent(args.file_path);
-                const file = await api.get(`/projects/${args.project_id}/repository/files/${encodedPath}`, {
+                const res = await client.get(`/projects/${encodeURIComponent(args.project_id)}/repository/files/${encodedPath}`, {
                     params: { ref: args.ref }
                 });
-                const content = Buffer.from(file.data.content, 'base64').toString('utf-8');
-                return {
-                    content: [{ type: 'text', text: content }]
-                };
+                const content = Buffer.from(res.data.content, 'base64').toString('utf-8');
+                return { content: [{ type: 'text', text: content }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
 
-            case 'gitlab_create_branch':
-                const branch = await api.post(`/projects/${args.project_id}/repository/branches`, null, {
+    server.tool('gitlab_create_branch',
+        {
+            project_id: z.union([z.string(), z.number()]).describe('Project ID or path'),
+            branch_name: z.string().describe('Name of new branch'),
+            ref: z.string().describe('Source branch/sha'),
+            confirm: z.boolean().describe('Safety gate')
+        },
+        async (args) => {
+            try {
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Create branch "${args.branch_name}" from "${args.ref}"? Set confirm: true to proceed.` }] };
+                const client = await ensureConnected();
+                const res = await client.post(`/projects/${encodeURIComponent(args.project_id)}/repository/branches`, null, {
                     params: { branch: args.branch_name, ref: args.ref }
                 });
-                return {
-                    content: [{ type: 'text', text: `Branch created: ${branch.data.name}` }]
-                };
+                return { content: [{ type: 'text', text: `Branch created: ${res.data.name}` }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
 
-            case 'gitlab_create_merge_request':
-                const mr = await api.post(`/projects/${args.project_id}/merge_requests`, {
+    server.tool('gitlab_create_merge_request',
+        {
+            project_id: z.union([z.string(), z.number()]).describe('Project ID or path'),
+            source_branch: z.string().describe('Source branch'),
+            target_branch: z.string().describe('Target branch'),
+            title: z.string().describe('MR title'),
+            description: z.string().optional().describe('MR description'),
+            confirm: z.boolean().describe('Safety gate')
+        },
+        async (args) => {
+            try {
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Create Merge Request "${args.title}" from "${args.source_branch}" to "${args.target_branch}"? Set confirm: true to proceed.` }] };
+                const client = await ensureConnected();
+                const res = await client.post(`/projects/${encodeURIComponent(args.project_id)}/merge_requests`, {
                     source_branch: args.source_branch,
                     target_branch: args.target_branch,
                     title: args.title,
                     description: args.description
                 });
-                return {
-                    content: [{
-                        type: 'text',
-                        text: JSON.stringify({
-                            id: mr.data.id,
-                            iid: mr.data.iid,
-                            web_url: mr.data.web_url
-                        }, null, 2)
-                    }]
-                };
+                return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, iid: res.data.iid, web_url: res.data.web_url }, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
 
-            case 'gitlab_list_merge_requests':
-                const mrParams = { state: args.state || 'opened', scope: 'all' };
-                if (args.author_id) mrParams.author_id = args.author_id;
-                const mrs = await api.get(`/projects/${args.project_id}/merge_requests`, { params: mrParams });
+    server.tool('gitlab_list_merge_requests',
+        {
+            project_id: z.union([z.string(), z.number()]).describe('Project ID or path'),
+            state: z.enum(['opened', 'closed', 'merged', 'all']).optional().default('opened'),
+            author_id: z.number().optional().describe('Filter by author ID')
+        },
+        async (args) => {
+            try {
+                const client = await ensureConnected();
+                const params = { state: args.state, scope: 'all' };
+                if (args.author_id) params.author_id = args.author_id;
+                const res = await client.get(`/projects/${encodeURIComponent(args.project_id)}/merge_requests`, { params });
                 return {
                     content: [{
                         type: 'text',
-                        text: JSON.stringify(mrs.data.map(m => ({
+                        text: JSON.stringify(res.data.map(m => ({
                             iid: m.iid,
                             title: m.title,
                             web_url: m.web_url,
@@ -145,197 +218,54 @@ async function handleToolCall(name, args) {
                         })), null, 2)
                     }]
                 };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
 
-            case 'gitlab_trigger_pipeline':
-                const pipeline = await api.post(`/projects/${args.project_id}/pipeline`, null, {
+    server.tool('gitlab_trigger_pipeline',
+        {
+            project_id: z.union([z.string(), z.number()]).describe('Project ID or path'),
+            ref: z.string().describe('Ref to trigger pipeline for'),
+            confirm: z.boolean().describe('Safety gate')
+        },
+        async (args) => {
+            try {
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Trigger pipeline on ref "${args.ref}" for project ${args.project_id}? Set confirm: true to proceed.` }] };
+                const client = await ensureConnected();
+                const res = await client.post(`/projects/${encodeURIComponent(args.project_id)}/pipeline`, null, {
                     params: { ref: args.ref }
                 });
-                return {
-                    content: [{
-                        type: 'text',
-                        text: JSON.stringify({
-                            id: pipeline.data.id,
-                            status: pipeline.data.status,
-                            web_url: pipeline.data.web_url
-                        }, null, 2)
-                    }]
-                };
-
-            case 'gitlab_get_pipeline_status':
-                const pStatus = await api.get(`/projects/${args.project_id}/pipelines/${args.pipeline_id}`);
-                return {
-                    content: [{
-                        type: 'text',
-                        text: JSON.stringify({
-                            id: pStatus.data.id,
-                            status: pStatus.data.status,
-                            web_url: pStatus.data.web_url
-                        }, null, 2)
-                    }]
-                };
-
-            default:
-                throw new Error(`Unknown tool: ${name}`);
+                return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, status: res.data.status, web_url: res.data.web_url }, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
         }
-    } catch (error) {
-        const msg = error.response ? `${error.response.status} - ${JSON.stringify(error.response.data)}` : error.message;
-        return {
-            isError: true,
-            content: [{ type: 'text', text: `GitLab API Error: ${msg}` }]
-        };
-    }
+    );
+
+    server.tool('gitlab_get_pipeline_status',
+        {
+            project_id: z.union([z.string(), z.number()]).describe('Project ID or path'),
+            pipeline_id: z.number().describe('Pipeline ID')
+        },
+        async (args) => {
+            try {
+                const client = await ensureConnected();
+                const res = await client.get(`/projects/${encodeURIComponent(args.project_id)}/pipelines/${args.pipeline_id}`);
+                return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, status: res.data.status, web_url: res.data.web_url }, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    return server;
 }
 
-// Request Handler
-async function handleRequest(request) {
-    if (request.method === 'initialize') {
-        send({
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {
-                protocolVersion: "2024-11-05",
-                capabilities: { tools: {} },
-                serverInfo: { name: "gitlab-mcp", version: "1.0.0" }
-            }
-        });
-    } else if (request.method === 'tools/list') {
-        send({
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {
-                tools: [
-                    {
-                        name: "gitlab_health",
-                        description: "Check connection health",
-                        inputSchema: { type: "object", properties: {} }
-                    },
-                    {
-                        name: "gitlab_list_projects",
-                        description: "List accessible projects",
-                        inputSchema: {
-                            type: "object",
-                            properties: {
-                                search: { type: "string" },
-                                membership_only: { type: "boolean" }
-                            }
-                        }
-                    },
-                    {
-                        name: "gitlab_get_repository_tree",
-                        description: "List files/directories",
-                        inputSchema: {
-                            type: "object",
-                            properties: {
-                                project_id: { type: "integer" },
-                                ref: { type: "string" },
-                                path: { type: "string" }
-                            },
-                            required: ["project_id", "ref"]
-                        }
-                    },
-                    {
-                        name: "gitlab_get_file",
-                        description: "Get raw file content",
-                        inputSchema: {
-                            type: "object",
-                            properties: {
-                                project_id: { type: "integer" },
-                                ref: { type: "string" },
-                                file_path: { type: "string" }
-                            },
-                            required: ["project_id", "ref", "file_path"]
-                        }
-                    },
-                    {
-                        name: "gitlab_create_branch",
-                        description: "Create a new branch",
-                        inputSchema: {
-                            type: "object",
-                            properties: {
-                                project_id: { type: "integer" },
-                                branch_name: { type: "string" },
-                                ref: { type: "string" }
-                            },
-                            required: ["project_id", "branch_name", "ref"]
-                        }
-                    },
-                    {
-                        name: "gitlab_create_merge_request",
-                        description: "Create a Merge Request",
-                        inputSchema: {
-                            type: "object",
-                            properties: {
-                                project_id: { type: "integer" },
-                                source_branch: { type: "string" },
-                                target_branch: { type: "string" },
-                                title: { type: "string" },
-                                description: { type: "string" }
-                            },
-                            required: ["project_id", "source_branch", "target_branch", "title"]
-                        }
-                    },
-                    {
-                        name: "gitlab_list_merge_requests",
-                        description: "List Merge Requests",
-                        inputSchema: {
-                            type: "object",
-                            properties: {
-                                project_id: { type: "integer" },
-                                state: { type: "string", enum: ["opened", "closed", "merged", "all"] },
-                                author_id: { type: "integer" }
-                            },
-                            required: ["project_id"]
-                        }
-                    },
-                    {
-                        name: "gitlab_trigger_pipeline",
-                        description: "Trigger a CI pipeline",
-                        inputSchema: {
-                            type: "object",
-                            properties: {
-                                project_id: { type: "integer" },
-                                ref: { type: "string" }
-                            },
-                            required: ["project_id", "ref"]
-                        }
-                    },
-                    {
-                        name: "gitlab_get_pipeline_status",
-                        description: "Get status of a pipeline",
-                        inputSchema: {
-                            type: "object",
-                            properties: {
-                                project_id: { type: "integer" },
-                                pipeline_id: { type: "integer" }
-                            },
-                            required: ["project_id", "pipeline_id"]
-                        }
-                    }
-                ]
-            }
-        });
-    } else if (request.method === 'tools/call') {
-        const result = await handleToolCall(request.params.name, request.params.arguments);
-        send({
-            jsonrpc: "2.0",
-            id: request.id,
-            result: result
-        });
-    }
-}
-
-// Stdio Loop
 if (require.main === module) {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        terminal: false
-    });
-
-    rl.on('line', (line) => {
-        try {
-            const request = JSON.parse(line);
-            handleRequest(request);
-        } catch (e) { }
+    const server = createGitLabServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('GitLab MCP server running on stdio');
+    }).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
     });
 }
+
+module.exports = { createGitLabServer };

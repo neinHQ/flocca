@@ -1,499 +1,127 @@
 const path = require('path');
 const z = require('zod');
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 
-const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
+const SERVER_INFO = { name: 'zephyr-mcp', version: '2.0.0' };
 
-const SERVER_INFO = { name: 'zephyr-mcp', version: '0.1.0' };
-
-const sessionConfig = {
-    site_url: process.env.ZEPHYR_SITE_URL || undefined,
-    token: process.env.ZEPHYR_TOKEN || undefined,
-    jira_project_key: process.env.ZEPHYR_JIRA_PROJECT_KEY || undefined,
-    zephyr_project_key: undefined,
-    default_folder_id: undefined,
-    read_only: false,
-    identity: undefined
-};
-
-const GUARDRAILS = {
-    max_batch_results: 500,
-    max_attachment_size_bytes: 5 * 1024 * 1024 // 5MB
-};
-
-function normalizeSiteUrl(siteUrl) {
-    const raw = String(siteUrl || '').trim().replace(/\/+$/, '');
-    if (!raw) return raw;
-    return raw
-        .replace(/\/rest\/atm\/1\.0$/i, '')
-        .replace(/\/rest\/atm$/i, '')
-        .replace(/\/rest\/api\/3$/i, '')
-        .replace(/\/rest\/api$/i, '')
-        .replace(/\/+$/, '');
-}
-
-function normalizeError(message, code = 'ZEPHYR_ERROR', details, http_status) {
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details, http_status } }) }] };
-}
-
-function requireConfigured() {
-    if (!sessionConfig.site_url || !sessionConfig.token || !sessionConfig.jira_project_key) {
-        throw { message: 'Zephyr not configured. Call zephyr_configure first.', code: 'AUTH_FAILED' };
-    }
-}
-
-function baseUrl(pathPart) {
-    return `${sessionConfig.site_url.replace(/\/+$/, '')}${pathPart.startsWith('/') ? '' : '/'}${pathPart}`;
-}
-
-function requireNonEmptyString(value, fieldName) {
-    if (typeof value !== 'string' || !value.trim()) {
-        throw { message: `Missing required argument: ${fieldName}`, code: 'INVALID_REQUEST', details: { required: [fieldName] }, http_status: 400 };
-    }
-}
-
-function requireNonEmptyArray(value, fieldName) {
-    if (!Array.isArray(value) || value.length === 0) {
-        throw { message: `Missing required argument: ${fieldName}`, code: 'INVALID_REQUEST', details: { required: [fieldName] }, http_status: 400 };
-    }
-}
-
-function requireAtLeastOneField(args, fields) {
-    const hasAny = fields.some((field) => args?.[field] !== undefined && args?.[field] !== null);
-    if (!hasAny) {
-        throw {
-            message: `At least one updatable field is required: ${fields.join(', ')}`,
-            code: 'INVALID_REQUEST',
-            details: { any_of: fields },
-            http_status: 400
-        };
-    }
-}
-
-function testCaseSearchPaths() {
-    return ['/rest/atm/1.0/testcase/search', '/rest/atm/1.0/testcases/search'];
-}
-
-function testCasePaths(key) {
-    return [`/rest/atm/1.0/testcase/${key}`, `/rest/atm/1.0/testcases/${key}`];
-}
-
-function testCaseCreatePaths() {
-    return ['/rest/atm/1.0/testcase', '/rest/atm/1.0/testcases'];
-}
-
-function testRunCreatePaths() {
-    return ['/rest/atm/1.0/testrun', '/rest/atm/1.0/testruns'];
-}
-
-function testRunCaseAddPaths(cycleKey) {
-    return [`/rest/atm/1.0/testrun/${cycleKey}/testcase`, `/rest/atm/1.0/testruns/${cycleKey}/testcases`];
-}
-
-function testRunSearchPaths() {
-    return ['/rest/atm/1.0/testrun/search', '/rest/atm/1.0/testruns/search'];
-}
-
-function testExecutionFolderPaths() {
-    return ['/rest/atm/1.0/folder/testrun', '/rest/atm/1.0/folders/testrun'];
-}
-
-function testExecutionListPaths() {
-    return ['/rest/atm/1.0/testrun/testexecution', '/rest/atm/1.0/testruns/testexecutions'];
-}
-
-function testExecutionUpdatePaths(executionId) {
-    return [`/rest/atm/1.0/testexecution/${executionId}`, `/rest/atm/1.0/testexecutions/${executionId}`];
-}
-
-function testExecutionAttachmentPaths(executionId) {
-    return [`/rest/atm/1.0/testexecution/${executionId}/attachment`, `/rest/atm/1.0/testexecutions/${executionId}/attachments`];
-}
-
-function automationExecutionPaths() {
-    return ['/rest/atm/1.0/automation/execution', '/rest/atm/1.0/automation/executions'];
-}
-
-function testExecutionIssueLinksPaths(executionId) {
-    return [`/rest/atm/1.0/testexecution/${executionId}/issueLinks`, `/rest/atm/1.0/testexecutions/${executionId}/issueLinks`];
-}
-
-function testCaseIssueLinksPaths(testCaseKey) {
-    return [`/rest/atm/1.0/testcase/${testCaseKey}/issueLinks`, `/rest/atm/1.0/testcases/${testCaseKey}/issueLinks`];
-}
-
-async function zephyrFetch(pathPart, { method = 'GET', query, body, rawBody, headers, operation } = {}) {
-    const url = new URL(baseUrl(pathPart));
-    if (query) Object.entries(query).forEach(([k, v]) => { if (v !== undefined && v !== null) url.searchParams.set(k, v); });
-    let responseText = '';
-    const hasJsonBody = body !== undefined;
-    const hasRawBody = rawBody !== undefined;
-    const defaultHeaders = hasJsonBody ? { 'Content-Type': 'application/json' } : {};
-    const resp = await fetch(url.toString(), {
-        method,
-        headers: {
-            ...defaultHeaders,
-            'Authorization': `Bearer ${sessionConfig.token}`,
-            ...(headers || {})
-        },
-        body: hasRawBody ? rawBody : (hasJsonBody ? JSON.stringify(body) : undefined)
-    });
-    let data = {};
-    try {
-        responseText = await resp.text();
-        data = responseText ? JSON.parse(responseText) : {};
-    } catch (_) {
-        data = {};
-    }
-    if (!resp.ok || data.error || data.errors) {
-        const detail = data.error || data.errors || data || {};
-        if (!detail.requested_path) {
-            detail.requested_path = `${url.pathname}${url.search || ''}`;
-        }
-        if (operation) {
-            detail.operation = operation;
-        }
-        if ((!detail || Object.keys(detail).length <= 2) && responseText) {
-            detail.response_excerpt = responseText.slice(0, 500);
-        }
-        const message = detail.message || resp.statusText || 'Zephyr request failed';
-        let code = 'ZEPHYR_ERROR';
-        if (resp.status === 401 || resp.status === 403) code = 'PERMISSION_DENIED';
-        if (resp.status === 404) code = 'NOT_FOUND';
-        if (resp.status === 429) code = 'RATE_LIMITED';
-        throw { message, code, details: detail, http_status: resp.status };
-    }
-    return data;
-}
-
-async function zephyrFetchWithFallback(pathParts, options = {}) {
-    let lastErr;
-    const attemptedPaths = [];
-    for (const pathPart of pathParts) {
-        try {
-            attemptedPaths.push(pathPart);
-            return await zephyrFetch(pathPart, options);
-        } catch (err) {
-            lastErr = err;
-            if (!err.details) err.details = {};
-            err.details.attempted_paths = attemptedPaths.slice();
-            if (err?.http_status === 404 || err?.code === 'NOT_FOUND') {
-                continue;
-            }
-            throw err;
-        }
-    }
-    throw lastErr;
-}
-
-async function jiraFetch(pathPart) {
-    const resp = await fetch(baseUrl(pathPart), {
-        headers: { 'Authorization': `Bearer ${sessionConfig.token}` }
-    });
-    let data = {};
-    try { data = await resp.json(); } catch (_) { data = {}; }
-    if (!resp.ok) {
-        throw { message: data.errorMessages?.[0] || resp.statusText, code: 'AUTH_FAILED', details: data, http_status: resp.status };
-    }
-    return data;
-}
-
-async function validateConfig(args) {
-    const site = normalizeSiteUrl(args.site_url);
-    const token = args.auth?.access_token;
-    const projectKey = args.jira?.project_key;
-    if (!site || !token || !projectKey) throw { message: 'Missing required config fields', code: 'INVALID_REQUEST' };
-
-    sessionConfig.site_url = site;
-    sessionConfig.token = token;
-    sessionConfig.jira_project_key = projectKey;
-    sessionConfig.zephyr_project_key = args.zephyr?.default_test_project_key || projectKey;
-    sessionConfig.default_folder_id = args.zephyr?.default_folder_id;
-    sessionConfig.read_only = !!args.read_only;
-
-    // Jira identity
-    const me = await jiraFetch('/rest/api/3/myself');
-    sessionConfig.identity = me.accountId ? `account:${me.accountId}` : (me.emailAddress || 'unknown');
-
-    // Zephyr Scale capability check
-    // Attempt to list test projects to confirm Scale availability
-    try {
-        await zephyrFetch('/rest/atm/1.0/testproject');
-    } catch (err) {
-        throw { message: 'Zephyr Scale not available or token lacks permission', code: 'UNSUPPORTED_PRODUCT', details: err.details, http_status: err.http_status };
-    }
-}
-
-function ensureWritable() {
-    if (sessionConfig.read_only) throw { message: 'Read-only mode enabled', code: 'READ_ONLY_MODE' };
-}
-
-async function main() {
-    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
-    const originalRegisterTool = server.registerTool.bind(server);
-
-    function schemaToZod(schema) {
-        if (!schema) return z.object({}).passthrough();
-        if (schema.type === 'object') {
-            const shape = {};
-            if (schema.properties) {
-                for (const [key, val] of Object.entries(schema.properties)) {
-                    let field = schemaToZod(val);
-                    if (val.description) field = field.describe(val.description);
-                    if (schema.required && !schema.required.includes(key)) field = field.optional();
-                    shape[key] = field;
-                }
-            }
-            let obj = z.object(shape);
-            if (schema.additionalProperties === false) obj = obj.strict();
-            else if (schema.additionalProperties) obj = obj.catchall(schemaToZod(schema.additionalProperties));
-            return obj;
-        }
-        if (schema.type === 'string') return schema.enum ? z.enum(schema.enum) : z.string();
-        if (schema.type === 'number') return z.number();
-        if (schema.type === 'boolean') return z.boolean();
-        if (schema.type === 'array') return z.array(schema.items ? schemaToZod(schema.items) : z.any());
-        return z.any();
-    }
-
-    server.registerTool = (name, config, handler) => {
-        const nextConfig = { ...(config || {}) };
-        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = schemaToZod(nextConfig.inputSchema);
-        }
-        return originalRegisterTool(name, nextConfig, handler);
+function createZephyrServer() {
+    const sessionConfig = {
+        site_url: process.env.ZEPHYR_SITE_URL || undefined,
+        token: process.env.ZEPHYR_TOKEN || undefined,
+        jira_project_key: process.env.ZEPHYR_JIRA_PROJECT_KEY || undefined,
+        zephyr_project_key: undefined,
+        identity: undefined,
+        read_only: false
     };
 
-    server.registerTool(
-        'zephyr_health',
-        { description: 'Health check for Zephyr MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
+    function normalizeSiteUrl(siteUrl) {
+        const raw = String(siteUrl || '').trim().replace(/\/+$/, '');
+        if (!raw) return raw;
+        return raw.replace(/\/rest\/atm\/1\.0$/i, '').replace(/\/rest\/api\/3$/i, '').replace(/\/+$/, '');
+    }
+
+    function normalizeError(message, code = 'ZEPHYR_ERROR', details, http_status) {
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details, http_status } }) }] };
+    }
+
+    async function ensureConnected() {
+        if (!sessionConfig.site_url || !sessionConfig.token) {
+            sessionConfig.site_url = normalizeSiteUrl(process.env.ZEPHYR_SITE_URL);
+            sessionConfig.token = process.env.ZEPHYR_TOKEN;
+            sessionConfig.jira_project_key = process.env.ZEPHYR_JIRA_PROJECT_KEY;
+        }
+        if (!sessionConfig.identity && sessionConfig.token) {
             try {
-                requireConfigured();
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, product: 'zephyr_scale', cloud: true, project_key: sessionConfig.zephyr_project_key, identity: sessionConfig.identity }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
+                const url = `${sessionConfig.site_url.replace(/\/+$/, '')}/rest/api/3/myself`;
+                const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${sessionConfig.token}` } });
+                const me = await resp.json();
+                sessionConfig.identity = me.accountId || me.emailAddress || 'unknown';
+                sessionConfig.zephyr_project_key = sessionConfig.jira_project_key;
+            } catch (e) { sessionConfig.identity = 'auth_user'; }
+        }
+    }
+
+    async function zephyrFetch(pathPart, { method = 'GET', query, body, rawBody } = {}) {
+        await ensureConnected();
+        const url = new URL(`${sessionConfig.site_url.replace(/\/+$/, '')}${pathPart.startsWith('/') ? '' : '/'}${pathPart}`);
+        if (query) Object.entries(query).forEach(([k, v]) => { if (v !== undefined) url.searchParams.set(k, v); });
+        const resp = await fetch(url.toString(), {
+            method,
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionConfig.token}` },
+            body: rawBody || (body ? JSON.stringify(body) : undefined)
+        });
+        if (!resp.ok) {
+            const text = await resp.text();
+            throw { message: text || resp.statusText, http_status: resp.status };
+        }
+        return resp.status === 204 ? {} : await resp.json();
+    }
+
+    async function zephyrFetchWithFallback(pathParts, options = {}) {
+        let lastErr;
+        for (const pathPart of pathParts) {
+            try { return await zephyrFetch(pathPart, options); } catch (err) {
+                lastErr = err;
+                if (err.http_status === 404) continue;
+                throw err;
             }
         }
-    );
+        throw lastErr;
+    }
 
-    server.registerTool(
-        'zephyr_configure',
+    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+
+    server.tool('zephyr_health', {}, async () => {
+        try { await ensureConnected(); return { content: [{ type: 'text', text: JSON.stringify({ ok: true, identity: sessionConfig.identity }) }] }; }
+        catch (e) { return normalizeError(e.message); }
+    });
+
+    server.tool('zephyr_get_context', {}, async () => {
+        try {
+            const projects = await zephyrFetch('/rest/atm/1.0/testproject');
+            return { content: [{ type: 'text', text: JSON.stringify({ projects }) }] };
+        } catch (e) { return normalizeError(e.message); }
+    });
+
+    server.tool('zephyr_list_folders', { project_key: z.string().optional() }, async (args) => {
+        try {
+            const proj = args.project_key || sessionConfig.zephyr_project_key;
+            const data = await zephyrFetch('/rest/atm/1.0/folder/testcase', { query: { projectKey: proj } });
+            return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+        } catch (e) { return normalizeError(e.message); }
+    });
+
+    server.tool('zephyr_search_test_cases', { query: z.string(), project_key: z.string().optional() }, async (args) => {
+        try {
+            const proj = args.project_key || sessionConfig.zephyr_project_key;
+            const data = await zephyrFetchWithFallback(['/rest/atm/1.0/testcase/search'], { method: 'POST', body: { projectKey: proj, query: args.query } });
+            return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+        } catch (e) { return normalizeError(e.message); }
+    });
+
+    server.tool('zephyr_get_test_case', { key: z.string() }, async (args) => {
+        try {
+            const data = await zephyrFetchWithFallback([`/rest/atm/1.0/testcase/${args.key}`]);
+            return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+        } catch (e) { return normalizeError(e.message); }
+    });
+
+    server.tool('zephyr_create_test_case',
         {
-            description: 'Configure Zephyr Scale cloud session.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    deployment: { type: 'string', enum: ['cloud'] },
-                    site_url: { type: 'string' },
-                    auth: { type: 'object', properties: { type: { type: 'string', enum: ['atlassian_oauth'] }, access_token: { type: 'string' } }, required: ['type', 'access_token'] },
-                    jira: { type: 'object', properties: { project_key: { type: 'string' } }, required: ['project_key'] },
-                    zephyr: {
-                        type: 'object',
-                        properties: {
-                            default_test_project_key: { type: 'string' },
-                            default_folder_id: { type: 'string' }
-                        }
-                    },
-                    read_only: { type: 'boolean' }
-                },
-                required: ['deployment', 'site_url', 'auth', 'jira'],
-                additionalProperties: false
-            }
+            title: z.string(),
+            objective: z.string().optional(),
+            precondition: z.string().optional(),
+            steps: z.array(z.object({ action: z.string(), data: z.string().optional(), expected: z.string().optional() })).optional(),
+            labels: z.array(z.string()).optional(),
+            folder_id: z.string().optional(),
+            project_key: z.string().optional(),
+            links: z.object({ jira_issue_keys: z.array(z.string()) }).optional(),
+            confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED" }] };
             try {
-                await validateConfig(args);
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, identity: sessionConfig.identity, product: 'zephyr_scale' }) }] };
-            } catch (err) {
-                // reset on failure
-                sessionConfig.site_url = undefined;
-                sessionConfig.token = undefined;
-                sessionConfig.jira_project_key = undefined;
-                sessionConfig.zephyr_project_key = undefined;
-                sessionConfig.default_folder_id = undefined;
-                sessionConfig.read_only = false;
-                sessionConfig.identity = undefined;
-                return normalizeError(err.message, err.code || 'AUTH_FAILED', err.details, err.http_status);
-            }
-        }
-    );
-
-    // Discovery
-    server.registerTool(
-        'zephyr_get_context',
-        { description: 'Return Zephyr/Jira context.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const projects = await zephyrFetch('/rest/atm/1.0/testproject', { operation: 'get_context' });
-                const test_projects = (projects.values || projects) || [];
-                return { content: [{ type: 'text', text: JSON.stringify({ jira_project_key: sessionConfig.jira_project_key, zephyr_product: 'zephyr_scale', test_projects }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_list_folders',
-        { description: 'List Zephyr folders (test case folders).', inputSchema: { type: 'object', properties: { project_key: { type: 'string' } }, additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const proj = args.project_key || sessionConfig.zephyr_project_key;
-                const data = await zephyrFetch('/rest/atm/1.0/folder/testcase', { query: { projectKey: proj, maxResults: 500 }, operation: 'list_folders' });
-                return { content: [{ type: 'text', text: JSON.stringify({ folders: data.values || data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_list_test_cycles',
-        {
-            description: 'Search for existing test cycles (runs) allowing for reuse.',
-            inputSchema: { type: 'object', properties: { project_key: { type: 'string' }, query: { type: 'string', description: 'Search term for cycle name' }, folder_id: { type: 'string' } }, additionalProperties: false }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const proj = args.project_key || sessionConfig.zephyr_project_key;
-                const query = (typeof args?.query === 'string' && args.query.trim()) ? args.query.trim() : '*';
-                const data = await zephyrFetchWithFallback(testRunSearchPaths(), {
-                    method: 'POST',
-                    body: { projectKey: proj, query, folderId: args.folder_id, maxResults: 50 },
-                    operation: 'list_test_cycles'
-                });
-                return { content: [{ type: 'text', text: JSON.stringify({ cycles: data.values || [] }) }] };
-            } catch (err) {
-                if (err.http_status === 404 || err.http_status === 405) {
-                   try {
-                       const proj = args.project_key || sessionConfig.zephyr_project_key;
-                       const fallbackData = await zephyrFetchWithFallback(testRunCreatePaths(), { query: { projectKey: proj, maxResults: 50 }, operation: 'list_test_cycles_fallback' });
-                       return { content: [{ type: 'text', text: JSON.stringify({ cycles: fallbackData.values || fallbackData }) }] };
-                   } catch(innerErr) {
-                       return normalizeError(innerErr.message, innerErr.code, innerErr.details, innerErr.http_status);
-                   }
-                }
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_list_execution_folders',
-        { description: 'List execution (test run) folders.', inputSchema: { type: 'object', properties: { project_key: { type: 'string' } }, additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const proj = args.project_key || sessionConfig.zephyr_project_key;
-                const data = await zephyrFetchWithFallback(testExecutionFolderPaths(), { query: { projectKey: proj, maxResults: 500 }, operation: 'list_execution_folders' });
-                return { content: [{ type: 'text', text: JSON.stringify({ folders: data.values || data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    // Test cases
-    server.registerTool(
-        'zephyr_search_test_cases',
-        {
-            description: 'Search Zephyr test cases.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    query: { type: 'string' },
-                    folder_id: { type: 'string' },
-                    project_key: { type: 'string' },
-                    limit: { type: 'number' }
-                },
-                required: ['query'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const proj = args.project_key || sessionConfig.zephyr_project_key;
-                const query = (typeof args?.query === 'string' && args.query.trim()) ? args.query.trim() : '*';
-                const data = await zephyrFetchWithFallback(testCaseSearchPaths(), {
-                    method: 'POST',
-                    body: {
-                        projectKey: proj,
-                        query,
-                        folderId: args.folder_id,
-                        maxResults: args.limit || 50
-                    },
-                    operation: 'search_test_cases'
-                });
-                return { content: [{ type: 'text', text: JSON.stringify({ results: data.values || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_get_test_case',
-        { description: 'Get a test case by key.', inputSchema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                requireNonEmptyString(args?.key, 'key');
-                const data = await zephyrFetchWithFallback(testCasePaths(args.key), { operation: 'get_test_case' });
-                return { content: [{ type: 'text', text: JSON.stringify(data) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_get_test_steps',
-        { description: 'Get test steps for a specific test case.', inputSchema: { type: 'object', properties: { test_case_key: { type: 'string' } }, required: ['test_case_key'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                requireNonEmptyString(args?.test_case_key, 'test_case_key');
-                const data = await zephyrFetchWithFallback(testCasePaths(args.test_case_key), { operation: 'get_test_steps' });
-                return { content: [{ type: 'text', text: JSON.stringify({ steps: data.testScript?.steps || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_create_test_case',
-        {
-            description: 'Create a test case.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    title: { type: 'string' },
-                    objective: { type: 'string' },
-                    precondition: { type: 'string' },
-                    steps: {
-                        type: 'array',
-                        items: { type: 'object', properties: { action: { type: 'string' }, data: { type: 'string' }, expected: { type: 'string' } } }
-                    },
-                    labels: { type: 'array', items: { type: 'string' } },
-                    folder_id: { type: 'string' },
-                    links: { type: 'object', properties: { jira_issue_keys: { type: 'array', items: { type: 'string' } } } },
-                    project_key: { type: 'string' }
-                },
-                required: ['title'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireNonEmptyString(args?.title, 'title');
-                ensureWritable();
-                requireConfigured();
                 const proj = args.project_key || sessionConfig.zephyr_project_key;
                 const payload = {
                     projectKey: proj,
@@ -502,451 +130,48 @@ async function main() {
                     precondition: args.precondition,
                     labels: args.labels,
                     folderId: args.folder_id || sessionConfig.default_folder_id,
-                    testScript: args.steps ? { type: 'STEP_BY_STEP', steps: args.steps.map((s, i) => ({ index: i + 1, action: s.action, data: s.data, expectedResult: s.expected })) } : undefined,
-                    links: args.links?.jira_issue_keys ? { issues: args.links.jira_issue_keys } : undefined
+                    testScript: args.steps ? { type: 'STEP_BY_STEP', steps: args.steps.map((s, i) => ({ index: i + 1, action: s.action, data: s.data, expectedResult: s.expected })) } : undefined
                 };
-                const data = await zephyrFetchWithFallback(testCaseCreatePaths(), { method: 'POST', body: payload, operation: 'create_test_case' });
-                return { content: [{ type: 'text', text: JSON.stringify({ key: data.key, self: data.self }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+                const data = await zephyrFetchWithFallback(['/rest/atm/1.0/testcase', '/rest/atm/1.0/testcases'], { method: 'POST', body: payload });
+                return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+            } catch (e) { return normalizeError(e.message); }
         }
     );
 
-    server.registerTool(
-        'zephyr_update_test_case',
+    server.tool('zephyr_update_execution_status',
         {
-            description: 'Update a test case (partial allowed).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    key: { type: 'string' },
-                    title: { type: 'string' },
-                    objective: { type: 'string' },
-                    precondition: { type: 'string' },
-                    steps: { type: 'array', items: { type: 'object' } },
-                    labels: { type: 'array', items: { type: 'string' } },
-                    folder_id: { type: 'string' },
-                    links: { type: 'object', properties: { jira_issue_keys: { type: 'array', items: { type: 'string' } } } }
-                },
-                required: ['key'],
-                additionalProperties: false
-            }
+            execution_id: z.string(),
+            status: z.enum(['PASS', 'FAIL', 'BLOCKED', 'UNEXECUTED', 'IN_PROGRESS']),
+            comment: z.string().optional(),
+            evidence: z.object({
+                attachments: z.array(z.object({ name: z.string(), content_type: z.string(), data_base64: z.string() }))
+            }).optional(),
+            confirm: z.boolean()
         },
         async (args) => {
+            if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED" }] };
             try {
-                requireNonEmptyString(args?.key, 'key');
-                requireAtLeastOneField(args, ['title', 'objective', 'precondition', 'steps', 'labels', 'folder_id', 'links']);
-                ensureWritable();
-                requireConfigured();
-                const payload = {};
-                if (args.title) payload.name = args.title;
-                if (args.objective) payload.objective = args.objective;
-                if (args.precondition) payload.precondition = args.precondition;
-                if (args.labels) payload.labels = args.labels;
-                if (args.folder_id) payload.folderId = args.folder_id;
-                if (args.steps) payload.testScript = { type: 'STEP_BY_STEP', steps: args.steps.map((s, i) => ({ index: i + 1, action: s.action, data: s.data, expectedResult: s.expected })) };
-                if (args.links?.jira_issue_keys) payload.links = { issues: args.links.jira_issue_keys };
-                const data = await zephyrFetchWithFallback(
-                    testCasePaths(args.key),
-                    { method: 'PUT', body: payload, operation: 'update_test_case' }
-                );
-                return { content: [{ type: 'text', text: JSON.stringify({ key: data.key, self: data.self }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    // Cycles (Zephyr Scale uses test runs)
-    server.registerTool(
-        'zephyr_create_test_cycle',
-        {
-            description: 'Create a test cycle (test run).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    name: { type: 'string' },
-                    project_key: { type: 'string' },
-                    folder_id: { type: 'string' }
-                },
-                required: ['name'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireNonEmptyString(args?.name, 'name');
-                ensureWritable();
-                requireConfigured();
-                const proj = args.project_key || sessionConfig.zephyr_project_key;
-                const payload = { name: args.name, projectKey: proj, folderId: args.folder_id };
-                const data = await zephyrFetchWithFallback(testRunCreatePaths(), { method: 'POST', body: payload, operation: 'create_test_cycle' });
-                return { content: [{ type: 'text', text: JSON.stringify({ key: data.key, self: data.self }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_add_tests_to_cycle',
-        {
-            description: 'Add test cases to a cycle (test run).',
-            inputSchema: {
-                type: 'object',
-                properties: { cycle_key: { type: 'string' }, test_case_keys: { type: 'array', items: { type: 'string' } } },
-                required: ['cycle_key', 'test_case_keys'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireNonEmptyString(args?.cycle_key, 'cycle_key');
-                requireNonEmptyArray(args?.test_case_keys, 'test_case_keys');
-                ensureWritable();
-                requireConfigured();
-                const body = { additions: args.test_case_keys.map((k) => ({ testCaseKey: k })) };
-                const data = await zephyrFetchWithFallback(
-                    testRunCaseAddPaths(args.cycle_key),
-                    { method: 'POST', body, operation: 'add_tests_to_cycle' }
-                );
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, added: args.test_case_keys.length, result: data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_list_test_executions',
-        { description: 'List test executions for a cycle.', inputSchema: { type: 'object', properties: { cycle_key: { type: 'string' } }, required: ['cycle_key'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                requireNonEmptyString(args?.cycle_key, 'cycle_key');
-                const data = await zephyrFetchWithFallback(
-                    testExecutionListPaths(),
-                    { query: { testRunKey: args.cycle_key, maxResults: 200 }, operation: 'list_test_executions' }
-                );
-                return { content: [{ type: 'text', text: JSON.stringify({ executions: data.values || [] }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_update_execution_status',
-        {
-            description: 'Update execution status with optional comment and attachments.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    execution_id: { type: 'string' },
-                    status: { type: 'string', enum: ['PASS', 'FAIL', 'BLOCKED', 'UNEXECUTED', 'IN_PROGRESS'] },
-                    comment: { type: 'string' },
-                    evidence: {
-                        type: 'object',
-                        properties: {
-                            attachments: {
-                                type: 'array',
-                                items: { type: 'object', properties: { name: { type: 'string' }, content_type: { type: 'string' }, data_base64: { type: 'string' } }, required: ['name', 'content_type', 'data_base64'] }
-                            }
-                        }
-                    }
-                },
-                required: ['execution_id', 'status'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireNonEmptyString(args?.execution_id, 'execution_id');
-                requireNonEmptyString(args?.status, 'status');
-                ensureWritable();
-                requireConfigured();
                 const payload = { status: args.status, comment: args.comment };
-                const data = await zephyrFetchWithFallback(
-                    testExecutionUpdatePaths(args.execution_id),
-                    { method: 'PUT', body: payload, operation: 'update_execution_status' }
-                );
-
-                // attachments (limited)
-                if (args.evidence?.attachments) {
-                    for (const att of args.evidence.attachments) {
-                        const size = Buffer.byteLength(att.data_base64 || '', 'base64');
-                        if (size > GUARDRAILS.max_attachment_size_bytes) {
-                            return normalizeError('Attachment too large', 'ATTACHMENT_TOO_LARGE', { name: att.name, max: GUARDRAILS.max_attachment_size_bytes });
-                        }
-                        await zephyrFetchWithFallback(
-                            testExecutionAttachmentPaths(args.execution_id),
-                            {
-                                method: 'POST',
-                                headers: { 'Content-Type': att.content_type },
-                                rawBody: Buffer.from(att.data_base64, 'base64'),
-                                operation: 'attach_execution_evidence'
-                            }
-                        );
-                    }
-                }
-                return { content: [{ type: 'text', text: JSON.stringify({ execution: data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+                const data = await zephyrFetchWithFallback([`/rest/atm/1.0/testexecution/${args.execution_id}`], { method: 'PUT', body: payload });
+                return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+            } catch (e) { return normalizeError(e.message); }
         }
     );
 
-    // Standalone Connectivity and Discovery
-    server.registerTool(
-        'zephyr_list_test_plans',
-        { description: 'List test plans for a project.', inputSchema: { type: 'object', properties: { project_key: { type: 'string' } }, additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const proj = args.project_key || sessionConfig.zephyr_project_key;
-                const pathParts = ['/rest/atm/1.0/testplan', '/rest/atm/1.0/testplans'];
-                const data = await zephyrFetchWithFallback(pathParts, { query: { projectKey: proj, maxResults: 50 }, operation: 'list_test_plans' });
-                return { content: [{ type: 'text', text: JSON.stringify({ test_plans: data.values || data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
+    // Metadata
+    server.tool('zephyr_list_priorities', {}, async () => {
+        try {
+            const data = await zephyrFetch('/rest/atm/1.0/testcase/priority');
+            return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+        } catch (e) { return normalizeError(e.message); }
+    });
 
-    server.registerTool(
-        'zephyr_list_environments',
-        { description: 'List valid test environments. These ids/names can be supplied to test runs.', inputSchema: { type: 'object', properties: { project_key: { type: 'string' } }, additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const proj = args.project_key || sessionConfig.zephyr_project_key;
-                const pathParts = ['/rest/atm/1.0/environment', '/rest/atm/1.0/environments'];
-                const data = await zephyrFetchWithFallback(pathParts, { query: { projectKey: proj, maxResults: 50 }, operation: 'list_environments' });
-                return { content: [{ type: 'text', text: JSON.stringify({ environments: data.values || data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_list_priorities',
-        { description: 'List test case priorities.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const pathParts = ['/rest/atm/1.0/testcase/priority', '/rest/atm/1.0/testcases/priority'];
-                const data = await zephyrFetchWithFallback(pathParts, { operation: 'list_priorities' });
-                return { content: [{ type: 'text', text: JSON.stringify({ priorities: data.values || data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_list_statuses',
-        { description: 'List execution statuses.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const pathParts = ['/rest/atm/1.0/testrun/status', '/rest/atm/1.0/testruns/status'];
-                const data = await zephyrFetchWithFallback(pathParts, { operation: 'list_statuses' });
-                return { content: [{ type: 'text', text: JSON.stringify({ statuses: data.values || data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_list_custom_fields',
-        { description: 'List custom fields configured.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const pathParts = ['/rest/atm/1.0/customfield', '/rest/atm/1.0/customfields'];
-                const data = await zephyrFetchWithFallback(pathParts, { operation: 'list_custom_fields' });
-                return { content: [{ type: 'text', text: JSON.stringify({ custom_fields: data.values || data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_attach_evidence',
-        {
-            description: 'Attach evidence (base64) to execution.',
-            inputSchema: { type: 'object', properties: { execution_id: { type: 'string' }, name: { type: 'string' }, content_type: { type: 'string' }, data_base64: { type: 'string' } }, required: ['execution_id', 'name', 'content_type', 'data_base64'], additionalProperties: false }
-        },
-        async (args) => {
-            try {
-                requireNonEmptyString(args.execution_id, 'execution_id');
-                ensureWritable();
-                requireConfigured();
-                const size = Buffer.byteLength(args.data_base64 || '', 'base64');
-                if (size > GUARDRAILS.max_attachment_size_bytes) {
-                    return normalizeError('Attachment too large', 'ATTACHMENT_TOO_LARGE', { name: args.name, max: GUARDRAILS.max_attachment_size_bytes });
-                }
-                await zephyrFetchWithFallback(
-                    testExecutionAttachmentPaths(args.execution_id),
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': args.content_type },
-                        rawBody: Buffer.from(args.data_base64, 'base64'),
-                        operation: 'attach_evidence'
-                    }
-                );
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_link_defect',
-        { description: 'Link a defect to an execution.', inputSchema: { type: 'object', properties: { execution_id: { type: 'string' }, defect_key: { type: 'string' } }, required: ['execution_id', 'defect_key'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireNonEmptyString(args.execution_id, 'execution_id');
-                ensureWritable();
-                requireConfigured();
-                const data = await zephyrFetchWithFallback(
-                    testExecutionIssueLinksPaths(args.execution_id),
-                    { method: 'POST', body: [args.defect_key], operation: 'link_defect' }
-                );
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_link_requirement',
-        { description: 'Link a Jira story/requirement to a test case.', inputSchema: { type: 'object', properties: { test_case_key: { type: 'string' }, requirement_key: { type: 'string' } }, required: ['test_case_key', 'requirement_key'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireNonEmptyString(args.test_case_key, 'test_case_key');
-                ensureWritable();
-                requireConfigured();
-                const data = await zephyrFetchWithFallback(
-                    testCaseIssueLinksPaths(args.test_case_key),
-                    { method: 'POST', body: [args.requirement_key], operation: 'link_requirement' }
-                );
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'zephyr_publish_automation_results',
-        {
-            description: 'Publish automation results (batch).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    cycle: { type: 'object', properties: { name: { type: 'string' }, create_if_missing: { type: 'boolean' } } },
-                    results: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            properties: {
-                                external_test_id: { type: 'string' },
-                                status: { type: 'string' },
-                                duration_ms: { type: 'number' },
-                                artifacts: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, content_type: { type: 'string' }, data_base64: { type: 'string' } } } },
-                                comment: { type: 'string' }
-                            },
-                            required: ['external_test_id', 'status']
-                        }
-                    },
-                    mapping: { type: 'object', properties: { strategy: { type: 'string' }, field: { type: 'string' } } }
-                },
-                required: ['results'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                ensureWritable();
-                requireConfigured();
-                requireNonEmptyArray(args?.results, 'results');
-                if ((args.results || []).length > GUARDRAILS.max_batch_results) {
-                    return normalizeError('Batch too large', 'INVALID_REQUEST', { max: GUARDRAILS.max_batch_results });
-                }
-
-                // Ensure cycle
-                let cycleKey;
-                if (args.cycle?.name) {
-                    if (args.cycle.create_if_missing) {
-                        const created = await zephyrFetchWithFallback(
-                            testRunCreatePaths(),
-                            { method: 'POST', body: { name: args.cycle.name, projectKey: sessionConfig.zephyr_project_key }, operation: 'create_cycle_for_automation' }
-                        );
-                        cycleKey = created.key;
-                    }
-                }
-
-                // Map and send results using testexecution import
-                const executions = args.results.map((r) => ({
-                    testCaseKey: r.external_test_id,
-                    statusName: r.status,
-                    comment: r.comment,
-                    actualEndDate: new Date().toISOString(),
-                    executionTime: r.duration_ms
-                }));
-
-                const payload = { testCycleKey: cycleKey, executions };
-                const data = await zephyrFetchWithFallback(
-                    automationExecutionPaths(),
-                    { method: 'POST', body: payload, operation: 'publish_automation_results' }
-                );
-
-                return { content: [{ type: 'text', text: JSON.stringify({ summary: data }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.server.oninitialized = () => {
-        console.log('Zephyr MCP server initialized.');
-    };
-
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.log('Zephyr MCP server running on stdio.');
+    return server;
 }
 
 if (require.main === module) {
-    main().catch((err) => {
-        console.error('Zephyr MCP server failed to start:', err);
-        process.exit(1);
-    });
+    const serverInstance = createZephyrServer();
+    const transport = new StdioServerTransport();
+    serverInstance.connect(transport);
 }
-
-module.exports = {
-    main,
-    __test: {
-        normalizeSiteUrl,
-        testCaseSearchPaths,
-        testCasePaths,
-        testCaseCreatePaths,
-        testRunCreatePaths,
-        testRunCaseAddPaths,
-        testRunSearchPaths,
-        testExecutionFolderPaths,
-        testExecutionListPaths,
-        testExecutionUpdatePaths,
-        testExecutionAttachmentPaths,
-        testExecutionIssueLinksPaths,
-        testCaseIssueLinksPaths,
-        automationExecutionPaths
-    }
-};
+module.exports = { createZephyrServer };

@@ -1,8 +1,9 @@
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { z } = require('zod');
 const { Octokit } = require("@octokit/rest");
-const { McpServer } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
 
-const SERVER_INFO = { name: 'github-actions-mcp', version: '1.0.0' };
+const SERVER_INFO = { name: 'github-actions-mcp', version: '2.0.0' };
 
 let config = {
     token: process.env.GITHUB_TOKEN,
@@ -14,16 +15,8 @@ let config = {
 function normalizeGitHubApiUrl(url) {
     if (!url) return undefined;
     const trimmed = url.replace(/\/+$/, '');
-    if (/\/api\/v3$/i.test(trimmed)) return trimmed;
+    if (/\/api\/v3$/i.test(trimmed) || trimmed.includes('api.github.com')) return trimmed;
     return `${trimmed}/api/v3`;
-}
-
-function getKit() {
-    if (!config.token) throw new Error("GitHub Actions not configured.");
-    return new Octokit({
-        auth: config.token,
-        baseUrl: normalizeGitHubApiUrl(config.apiUrl)
-    });
 }
 
 function normalizeError(err) {
@@ -31,82 +24,103 @@ function normalizeError(err) {
     return { isError: true, content: [{ type: 'text', text: `GitHub Error: ${msg}` }] };
 }
 
-function createToolAliases(name) {
-    const alias = name
-        .replace(/\./g, '_')
-        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-        .toLowerCase();
-    return alias !== name ? [alias] : [];
-}
-
-function registerToolWithAliases(server, name, config, handler) {
-    const aliases = createToolAliases(name);
-    if (aliases.length === 0) {
-        server.registerTool(name, config, handler);
-        return;
-    }
-    for (const alias of aliases) {
-        server.registerTool(alias, config, handler);
-    }
-}
-
-async function main() {
+function createGitHubActionsServer() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    let kit = null;
 
-    registerToolWithAliases(server, 'github_actions.health',
-        { description: 'Health check for GitHub Actions', inputSchema: { type: 'object', properties: {} } },
-        async () => {
-            try {
-                await getKit().repos.get({ owner: config.owner, repo: config.repo });
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (e) { return normalizeError(e); }
+    async function ensureConnected() {
+        if (!config.token) {
+            // Re-check env vars
+            config.token = process.env.GITHUB_TOKEN;
+            config.owner = process.env.GITHUB_OWNER;
+            config.repo = process.env.GITHUB_REPO;
+            config.apiUrl = process.env.GITHUB_API_URL;
+            
+            if (!config.token) {
+                throw new Error("GitHub Actions not configured. Provide GITHUB_TOKEN or call github_actions_configure.");
+            }
         }
-    );
+        if (!kit) {
+            kit = new Octokit({
+                auth: config.token,
+                baseUrl: normalizeGitHubApiUrl(config.apiUrl)
+            });
+        }
+        return kit;
+    }
 
-    registerToolWithAliases(server, 'github_actions.configure',
-        { description: 'Configure GHA', inputSchema: { type: 'object', properties: { token: { type: 'string' }, owner: { type: 'string' }, repo: { type: 'string' }, api_url: { type: 'string' } }, required: ['token', 'owner', 'repo'] } },
+    server.tool('github_actions_health', {}, async () => {
+        try {
+            const k = await ensureConnected();
+            if (!config.owner || !config.repo) throw new Error("Owner and Repo must be configured for health check.");
+            await k.repos.get({ owner: config.owner, repo: config.repo });
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, owner: config.owner, repo: config.repo }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('github_actions_configure',
+        {
+            token: z.string().describe('GitHub PAT'),
+            owner: z.string().describe('Repository owner'),
+            repo: z.string().describe('Repository name'),
+            api_url: z.string().optional().describe('GitHub API URL (for GHES)')
+        },
         async (args) => {
-            config.token = args.token;
-            config.owner = args.owner;
-            config.repo = args.repo;
-            config.apiUrl = args.api_url;
             try {
-                await getKit().repos.get({ owner: config.owner, repo: config.repo });
+                config.token = args.token;
+                config.owner = args.owner;
+                config.repo = args.repo;
+                config.apiUrl = args.api_url;
+                kit = null; // force re-init
+                const k = await ensureConnected();
+                await k.repos.get({ owner: config.owner, repo: config.repo });
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: 'authenticated' }) }] };
-            } catch (e) { return normalizeError(e); }
+            } catch (e) {
+                config.token = undefined;
+                kit = null;
+                return normalizeError(e);
+            }
         }
     );
 
-    registerToolWithAliases(server, 'github_actions.listWorkflows',
-        { description: 'List Workflows', inputSchema: { type: 'object', properties: {} } },
-        async () => {
-            try {
-                const res = await getKit().actions.listRepoWorkflows({ owner: config.owner, repo: config.repo });
-                return { content: [{ type: 'text', text: JSON.stringify(res.data.workflows) }] };
-            } catch (e) { return normalizeError(e); }
-        }
-    );
+    server.tool('github_actions_list_workflows', {}, async () => {
+        try {
+            const k = await ensureConnected();
+            const res = await k.actions.listRepoWorkflows({ owner: config.owner, repo: config.repo });
+            return { content: [{ type: 'text', text: JSON.stringify(res.data.workflows, null, 2) }] };
+        } catch (e) { return normalizeError(e); }
+    });
 
-    registerToolWithAliases(server, 'github_actions.listRuns',
-        { description: 'List Runs', inputSchema: { type: 'object', properties: { workflow_id: { type: 'string' } } } },
+    server.tool('github_actions_list_runs',
+        { workflow_id: z.string().optional().describe('Filter by workflow ID (optional)') },
         async (args) => {
             try {
+                const k = await ensureConnected();
                 let res;
                 if (args.workflow_id) {
-                    res = await getKit().actions.listWorkflowRuns({ owner: config.owner, repo: config.repo, workflow_id: args.workflow_id });
+                    res = await k.actions.listWorkflowRuns({ owner: config.owner, repo: config.repo, workflow_id: args.workflow_id });
                 } else {
-                    res = await getKit().actions.listWorkflowRunsForRepo({ owner: config.owner, repo: config.repo });
+                    res = await k.actions.listWorkflowRunsForRepo({ owner: config.owner, repo: config.repo });
                 }
-                return { content: [{ type: 'text', text: JSON.stringify(res.data.workflow_runs) }] };
+                return { content: [{ type: 'text', text: JSON.stringify(res.data.workflow_runs, null, 2) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
-    registerToolWithAliases(server, 'github_actions.dispatchWorkflow',
-        { description: 'Dispatch Workflow', inputSchema: { type: 'object', properties: { workflow_id: { type: 'string' }, ref: { type: 'string' }, inputs: { type: 'object' } }, required: ['workflow_id', 'ref'] } },
+    server.tool('github_actions_dispatch_workflow',
+        {
+            workflow_id: z.string().describe('Workflow ID or filename'),
+            ref: z.string().describe('Git ref (branch, tag, sha)'),
+            inputs: z.object({}).catchall(z.any()).optional().describe('Workflow inputs'),
+            confirm: z.boolean().describe('Safety gate')
+        },
         async (args) => {
             try {
-                await getKit().actions.createWorkflowDispatch({
+                if (!args.confirm) {
+                    return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Are you sure you want to dispatch workflow ${args.workflow_id} on ref ${args.ref}? Set confirm: true to proceed.` }] };
+                }
+                const k = await ensureConnected();
+                await k.actions.createWorkflowDispatch({
                     owner: config.owner,
                     repo: config.repo,
                     workflow_id: args.workflow_id,
@@ -118,35 +132,33 @@ async function main() {
         }
     );
 
-    registerToolWithAliases(server, 'github_actions.getRunLogs',
-        { description: 'Get Logs URL', inputSchema: { type: 'object', properties: { run_id: { type: 'string' } }, required: ['run_id'] } },
+    server.tool('github_actions_get_run_logs',
+        { run_id: z.string().describe('Run ID') },
         async (args) => {
             try {
-                const res = await getKit().actions.downloadWorkflowRunLogs({
+                const k = await ensureConnected();
+                const res = await k.actions.downloadWorkflowRunLogs({
                     owner: config.owner,
                     repo: config.repo,
                     run_id: Number(args.run_id)
                 });
-                // This redirects to a URL usually, or returns zip buffer?
-                // Octokit download usually returns redirected url if valid? 
-                // Actually downloadWorkflowRunLogs returns info or 302 location.
                 return { content: [{ type: 'text', text: JSON.stringify({ url: res.url || 'Log download initiated' }) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
+    return server;
 }
-
 
 if (require.main === module) {
-    main().catch(console.error);
+    const server = createGitHubActionsServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('GitHub Actions MCP server running on stdio');
+    }).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
 }
 
-module.exports = {
-    main,
-    __test: {
-        normalizeGitHubApiUrl
-    }
-};
+module.exports = { createGitHubActionsServer };

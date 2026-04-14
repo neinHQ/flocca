@@ -1,458 +1,275 @@
-const path = require('path');
-const z = require('zod');
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { z } = require('zod');
+const { Client } = require('@elastic/elasticsearch');
 
-const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
+const SERVER_INFO = { name: 'elastic-mcp-observability', version: '2.0.0' };
 
-const SERVER_INFO = { name: 'elastic-mcp', version: '0.1.0' };
-
-const sessionConfig = {
-    url: process.env.ELASTIC_URL,
-    auth: process.env.ELASTIC_API_KEY
-        ? { type: 'api_key', api_key: process.env.ELASTIC_API_KEY }
-        : (process.env.ELASTIC_USERNAME && process.env.ELASTIC_PASSWORD
-            ? { type: 'basic', username: process.env.ELASTIC_USERNAME, password: process.env.ELASTIC_PASSWORD }
-            : undefined),
-    default_indices: process.env.ELASTIC_INDICES ? process.env.ELASTIC_INDICES.split(',') : undefined,
-    maxSize: 1000,
-    maxSimpleRangeMinutes: 24 * 60 // 24h guardrail for simplified tools
-};
-
-function normalizeError(message, code = 'ELASTICSEARCH_ERROR', http_status, details) {
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, http_status, details } }) }] };
+function normalizeError(err) {
+    const msg = err.message || err.meta?.body?.error?.reason || JSON.stringify(err);
+    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.meta?.statusCode || 'ELASTIC_ERROR' }) }] };
 }
 
-function requireConfigured() {
-    if (!sessionConfig.url) throw new Error('Elasticsearch is not configured. Call elastic_configure first.');
-}
+function createElasticServer() {
+    let client = null;
 
-function authHeaders() {
-    if (!sessionConfig.auth) return {};
-    const { type } = sessionConfig.auth;
-    if (type === 'basic') {
-        const { username, password } = sessionConfig.auth;
-        const encoded = Buffer.from(`${username}:${password}`).toString('base64');
-        return { Authorization: `Basic ${encoded}` };
+    async function ensureConnected() {
+        if (!client) {
+            const node = process.env.ELASTIC_URL || process.env.ELASTIC_NODE;
+            if (node) {
+                const config = { node };
+                if (process.env.ELASTIC_API_KEY) {
+                    config.auth = { apiKey: process.env.ELASTIC_API_KEY };
+                } else if (process.env.ELASTIC_USERNAME && process.env.ELASTIC_PASSWORD) {
+                    config.auth = { username: process.env.ELASTIC_USERNAME, password: process.env.ELASTIC_PASSWORD };
+                }
+                client = new Client(config);
+            } else {
+                throw new Error('Elasticsearch not connected. Provide environment variables or call elastic_configure first.');
+            }
+        }
+        return client;
     }
-    if (type === 'bearer') {
-        return { Authorization: `Bearer ${sessionConfig.auth.token}` };
-    }
-    if (type === 'api_key') {
-        return { Authorization: `ApiKey ${sessionConfig.auth.api_key}` };
-    }
-    return {};
-}
 
-async function esFetch(pathPart, { method = 'GET', body, query } = {}) {
-    const url = new URL(`${sessionConfig.url.replace(/\/+$/, '')}/${pathPart.replace(/^\/+/, '')}`);
-    if (query) {
-        Object.entries(query).forEach(([k, v]) => {
-            if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
-        });
-    }
-    const resp = await fetch(url.toString(), {
-        method,
-        headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders()
-        },
-        body: body ? JSON.stringify(body) : undefined
+    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+
+    // --- Core ---
+
+    server.tool('elastic_health', {}, async () => {
+        try {
+            const c = await ensureConnected();
+            const res = await c.cluster.health();
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: res.status, clusterName: res.cluster_name }) }] };
+        } catch (e) { return normalizeError(e); }
     });
 
-    let data;
-    try {
-        data = await resp.json();
-    } catch (e) {
-        data = {};
-    }
-
-    if (!resp.ok || data.error) {
-        const err = data.error || {};
-        const message = err.reason || err.type || resp.statusText || 'Elasticsearch request failed';
-        const details = typeof err === 'string' ? err : JSON.stringify(err);
-        throw { message, http_status: resp.status, details };
-    }
-    return data;
-}
-
-function enforceGuardrails({ size, time_range }) {
-    if (size && size > sessionConfig.maxSize) {
-        throw { message: 'QueryTooBroad: size exceeds limit', code: 'QUERY_TOO_BROAD', http_status: 400 };
-    }
-    if (time_range) {
-        // basic check: if explicit from/to are not relative, skip; we only hard-guard relative minutes for simplified tools.
-        // This is a light guardrail.
-    }
-}
-
-function parseHits(data) {
-    const hits = (data.hits?.hits || []).map((h) => ({
-        index: h._index,
-        id: h._id,
-        score: h._score,
-        timestamp: h._source?.['@timestamp'],
-        source: h._source
-    }));
-    const total = typeof data.hits?.total === 'object' ? data.hits.total.value : data.hits?.total || hits.length;
-    return { hits, total };
-}
-
-async function main() {
-    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
-    const originalRegisterTool = server.registerTool.bind(server);
-    const permissiveInputSchema = z.object({}).passthrough();
-    server.registerTool = (name, config, handler) => {
-        const nextConfig = { ...(config || {}) };
-        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = permissiveInputSchema;
-        }
-        return originalRegisterTool(name, nextConfig, handler);
-    };
-
-    server.registerTool(
-        'elastic_health',
-        { description: 'Health check for Elastic/OpenSearch MCP server.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
+    server.tool('elastic_configure',
+        {
+            url: z.string().describe('Elasticsearch URL'),
+            api_key: z.string().optional().describe('API Key'),
+            username: z.string().optional().describe('Basic Auth Username'),
+            password: z.string().optional().describe('Basic Auth Password'),
+            default_indices: z.array(z.string()).optional().describe('Default indices for search')
+        },
+        async (args) => {
             try {
-                requireConfigured();
-                await esFetch('_cluster/health');
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (err) {
-                return normalizeError(err.message || 'Health check failed', 'CONNECTION_FAILED', err.http_status, err.details);
+                const config = { node: args.url };
+                if (args.api_key) config.auth = { apiKey: args.api_key };
+                else if (args.username && args.password) config.auth = { username: args.username, password: args.password };
+                
+                const newClient = new Client(config);
+                await newClient.ping();
+                client = newClient;
+                return { content: [{ type: 'text', text: `Successfully configured and connected to ${args.url}.` }] };
+            } catch (e) {
+                return normalizeError(e);
             }
         }
     );
 
-    server.registerTool(
-        'elastic_configure',
-        {
-            description: 'Configure Elasticsearch/OpenSearch connection for this session.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    url: { type: 'string' },
-                    auth: {
-                        type: 'object',
-                        properties: {
-                            type: { type: 'string', enum: ['basic', 'bearer', 'api_key'] },
-                            username: { type: 'string' },
-                            password: { type: 'string' },
-                            token: { type: 'string' },
-                            api_key: { type: 'string' }
-                        }
-                    },
-                    default_indices: { type: 'array', items: { type: 'string' } }
-                },
-                required: ['url'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            sessionConfig.url = args.url;
-            sessionConfig.auth = args.auth;
-            sessionConfig.default_indices = args.default_indices;
-            try {
-                await esFetch('_cluster/health');
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (err) {
-                sessionConfig.url = undefined;
-                sessionConfig.auth = undefined;
-                sessionConfig.default_indices = undefined;
-                const code = err.http_status === 401 ? 'AUTH_FAILED' : 'CONNECTION_FAILED';
-                return normalizeError(err.message || 'Failed to connect', code, err.http_status, err.details);
-            }
-        }
-    );
+    // --- Introspection ---
 
-    server.registerTool(
-        'elastic_list_indices',
-        {
-            description: 'List indices (optionally filtered by pattern).',
-            inputSchema: { type: 'object', properties: { pattern: { type: 'string' } }, additionalProperties: false }
-        },
+    server.tool('elastic_list_indices',
+        { pattern: z.string().default('*').describe('Index pattern to list') },
         async (args) => {
             try {
-                requireConfigured();
-                const pattern = args.pattern || '*';
-                const data = await esFetch(`_cat/indices/${pattern}`, { query: { format: 'json' } });
-                const indices = (data || []).map((i) => ({
+                const c = await ensureConnected();
+                const res = await c.cat.indices({ index: args.pattern, format: 'json' });
+                const indices = res.map(i => ({
                     name: i.index,
-                    docs_count: Number(i['docs.count']),
-                    size_bytes: i['store.size']
+                    health: i.health,
+                    status: i.status,
+                    docs_count: parseInt(i['docs.count'] || '0', 10),
+                    store_size: i['store.size']
                 }));
                 return { content: [{ type: 'text', text: JSON.stringify({ indices }) }] };
-            } catch (err) {
-                return normalizeError(err.message, 'ELASTICSEARCH_ERROR', err.http_status, err.details);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'elastic_get_index_stats',
+    server.tool('elastic_get_mappings',
+        { index: z.string().describe('Index name to get mapping for') },
+        async (args) => {
+            try {
+                const c = await ensureConnected();
+                const res = await c.indices.getMapping({ index: args.index });
+                return { content: [{ type: 'text', text: JSON.stringify(res[args.index]?.mappings || res, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    // --- Observability & Logs ---
+
+    server.tool('elastic_search_logs',
         {
-            description: 'Get stats for indices.',
-            inputSchema: { type: 'object', properties: { indices: { type: 'array', items: { type: 'string' } } }, required: ['indices'], additionalProperties: false }
+            indices: z.array(z.string()).default(['*']).describe('Indices to search'),
+            query_string: z.string().describe('Query string (e.g. "level:ERROR AND service:auth")'),
+            from: z.string().optional().describe('ISO timestamp or relative (e.g. "now-1h")'),
+            to: z.string().optional().describe('ISO timestamp or relative (e.g. "now")'),
+            size: z.number().int().min(1).max(500).default(50).describe('Max results to return')
         },
         async (args) => {
             try {
-                requireConfigured();
-                const data = await esFetch(`${args.indices.join(',')}/_stats`);
-                const stats = Object.entries(data.indices || {}).map(([name, s]) => ({
-                    name,
-                    docs_count: s.total?.docs?.count,
-                    size_in_bytes: s.total?.store?.size_in_bytes,
-                    primary_shards: s.primaries,
-                    total_shards: s.total
+                const c = await ensureConnected();
+                const must = [{ query_string: { query: args.query_string } }];
+                const filter = [];
+                if (args.from || args.to) {
+                    filter.push({ range: { '@timestamp': { gte: args.from, lte: args.to } } });
+                }
+
+                const res = await c.search({
+                    index: (args.indices || ['*']).join(','),
+                    body: {
+                        query: { bool: { must, filter } },
+                        size: args.size,
+                        sort: [{ '@timestamp': { order: 'desc' } }]
+                    }
+                });
+
+                const hits = res.hits.hits.map(h => ({
+                    _index: h._index,
+                    _id: h._id,
+                    timestamp: h._source?.['@timestamp'],
+                    source: h._source
                 }));
-                return { content: [{ type: 'text', text: JSON.stringify({ stats }) }] };
-            } catch (err) {
-                return normalizeError(err.message, 'ELASTICSEARCH_ERROR', err.http_status, err.details);
-            }
+
+                return { content: [{ type: 'text', text: JSON.stringify({ total: res.hits.total?.value || res.hits.total, count: hits.length, hits }, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'elastic_get_mappings',
+    server.tool('elastic_get_log_context',
         {
-            description: 'Get field mappings for an index.',
-            inputSchema: {
-                type: 'object',
-                properties: { index: { type: 'string' }, path_prefix: { type: 'string', description: 'Optional path/prefix to limit response' } },
-                required: ['index'],
-                additionalProperties: false
-            }
+            index: z.string().describe('Index name'),
+            id: z.string().describe('Document ID'),
+            before: z.number().int().default(10).describe('Number of logs before'),
+            after: z.number().int().default(10).describe('Number of logs after')
         },
         async (args) => {
             try {
-                requireConfigured();
-                const data = await esFetch(`${args.index}/_mapping`);
-                let mappings = data[args.index]?.mappings || data;
-                if (args.path_prefix && mappings?.properties) {
-                    const prefix = args.path_prefix;
-                    mappings = Object.fromEntries(Object.entries(mappings.properties).filter(([k]) => k.startsWith(prefix)));
-                }
-                return { content: [{ type: 'text', text: JSON.stringify({ mappings }) }] };
-            } catch (err) {
-                return normalizeError(err.message, 'ELASTICSEARCH_ERROR', err.http_status, err.details);
-            }
-        }
-    );
+                const c = await ensureConnected();
+                const target = await c.get({ index: args.index, id: args.id });
+                const ts = target._source?.['@timestamp'];
+                if (!ts) throw new Error('Document does not have a @timestamp field');
 
-    server.registerTool(
-        'elastic_search_logs',
-        {
-            description: 'Search logs with query_string and optional time_range.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    indices: { type: 'array', items: { type: 'string' } },
-                    query_string: { type: 'string' },
-                    time_range: {
-                        type: 'object',
-                        properties: { from: { type: 'string' }, to: { type: 'string' } }
-                    },
-                    size: { type: 'number' }
-                },
-                required: ['query_string'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const indices = args.indices?.length ? args.indices.join(',') : (sessionConfig.default_indices || ['*']).join(',');
-                const size = Math.min(args.size || 100, sessionConfig.maxSize);
-                const body = {
-                    query: {
-                        bool: {
-                            must: [{ query_string: { query: args.query_string } }],
-                            filter: []
+                const [beforeRes, afterRes] = await Promise.all([
+                    c.search({
+                        index: args.index,
+                        body: {
+                            query: { range: { '@timestamp': { lt: ts } } },
+                            sort: [{ '@timestamp': { order: 'desc' } }],
+                            size: args.before
                         }
-                    },
-                    size
-                };
-                if (args.time_range?.from || args.time_range?.to) {
-                    body.query.bool.filter.push({ range: { '@timestamp': { gte: args.time_range.from, lte: args.time_range.to } } });
-                }
-                const data = await esFetch(`${indices}/_search`, { method: 'POST', body });
-                const parsed = parseHits(data);
-                return { content: [{ type: 'text', text: JSON.stringify(parsed) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code || 'ELASTICSEARCH_ERROR', err.http_status, err.details);
-            }
-        }
-    );
-
-    server.registerTool(
-        'elastic_search_structured',
-        {
-            description: 'Run a structured JSON search query.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    indices: { type: 'array', items: { type: 'string' } },
-                    body: { type: 'object' }
-                },
-                required: ['body'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const indices = args.indices?.length ? args.indices.join(',') : (sessionConfig.default_indices || ['*']).join(',');
-                const data = await esFetch(`${indices}/_search`, { method: 'POST', body: args.body });
-                const parsed = parseHits(data);
-                return { content: [{ type: 'text', text: JSON.stringify({ ...parsed, aggregations: data.aggregations }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code || 'ELASTICSEARCH_ERROR', err.http_status, err.details);
-            }
-        }
-    );
-
-    server.registerTool(
-        'elastic_aggregate',
-        {
-            description: 'Run aggregation-only queries.',
-            inputSchema: {
-                type: 'object',
-                properties: { indices: { type: 'array', items: { type: 'string' } }, body: { type: 'object' } },
-                required: ['body'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const indices = args.indices?.length ? args.indices.join(',') : (sessionConfig.default_indices || ['*']).join(',');
-                const data = await esFetch(`${indices}/_search`, { method: 'POST', body: args.body });
-                return { content: [{ type: 'text', text: JSON.stringify({ aggregations: data.aggregations }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code || 'ELASTICSEARCH_ERROR', err.http_status, err.details);
-            }
-        }
-    );
-
-    server.registerTool(
-        'elastic_find_recent_errors',
-        {
-            description: 'Fetch recent error-level logs for a service.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    service: { type: 'string' },
-                    time_range: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } } },
-                    size: { type: 'number' }
-                },
-                required: ['service'],
-                additionalProperties: false
-            }
-        },
-        async (args) => {
-            try {
-                requireConfigured();
-                const indices = (sessionConfig.default_indices || ['*']).join(',');
-                const size = Math.min(args.size || 50, sessionConfig.maxSize);
-                const body = {
-                    query: {
-                        bool: {
-                            must: [{ term: { 'service.keyword': args.service } }],
-                            filter: [{ term: { 'level.keyword': 'ERROR' } }]
+                    }),
+                    c.search({
+                        index: args.index,
+                        body: {
+                            query: { range: { '@timestamp': { gt: ts } } },
+                            sort: [{ '@timestamp': { order: 'asc' } }],
+                            size: args.after
                         }
-                    },
-                    sort: [{ '@timestamp': { order: 'desc' } }],
-                    size
-                };
-                if (args.time_range?.from || args.time_range?.to) {
-                    body.query.bool.filter.push({ range: { '@timestamp': { gte: args.time_range.from, lte: args.time_range.to } } });
-                }
-                const data = await esFetch(`${indices}/_search`, { method: 'POST', body });
-                const parsed = parseHits(data);
-                return { content: [{ type: 'text', text: JSON.stringify(parsed) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code || 'ELASTICSEARCH_ERROR', err.http_status, err.details);
-            }
+                    })
+                ]);
+
+                const before = beforeRes.hits.hits.map(h => h._source).reverse();
+                const after = afterRes.hits.hits.map(h => h._source);
+
+                return { content: [{ type: 'text', text: JSON.stringify({ before, target: target._source, after }, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'elastic_get_log_context',
+    server.tool('elastic_find_recent_errors',
         {
-            description: 'Fetch a log document and surrounding context.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    index: { type: 'string' },
-                    id: { type: 'string' },
-                    before: { type: 'number', default: 20 },
-                    after: { type: 'number', default: 20 }
-                },
-                required: ['index', 'id'],
-                additionalProperties: false
-            }
+            service: z.string().optional().describe('Specific service name to filter by'),
+            lookback: z.string().default('1h').describe('Lookback duration (e.g. 1h, 15m)'),
+            size: z.number().int().default(10)
         },
         async (args) => {
             try {
-                requireConfigured();
-                const doc = await esFetch(`${args.index}/_doc/${args.id}`);
-                const ts = doc._source?.['@timestamp'];
-                if (!ts) {
-                    return normalizeError('Timestamp not found on document', 'ELASTICSEARCH_ERROR', 400);
-                }
-                const windowRange = {
-                    gte: `now-1d`,
-                    lte: `now`
-                };
-                const beforeSize = Math.min(args.before || 20, sessionConfig.maxSize);
-                const afterSize = Math.min(args.after || 20, sessionConfig.maxSize);
+                const c = await ensureConnected();
+                const must = [];
+                if (args.service) must.push({ term: { 'service.name': args.service } });
+                
+                const filter = [
+                    { range: { '@timestamp': { gte: `now-${args.lookback}` } } },
+                    { terms: { 'log.level': ['error', 'ERROR', 'critical', 'CRITICAL', 'fatal', 'FATAL'] } }
+                ];
 
-                const baseQuery = {
-                    bool: {
-                        filter: [{ range: { '@timestamp': windowRange } }]
-                    }
-                };
-
-                const dataBefore = await esFetch(`${args.index}/_search`, {
-                    method: 'POST',
+                const res = await c.search({
+                    index: '*',
                     body: {
-                        query: baseQuery,
+                        query: { bool: { must, filter } },
                         sort: [{ '@timestamp': { order: 'desc' } }],
-                        size: beforeSize,
-                        search_after: [ts]
-                    }
-                });
-                const dataAfter = await esFetch(`${args.index}/_search`, {
-                    method: 'POST',
-                    body: {
-                        query: baseQuery,
-                        sort: [{ '@timestamp': { order: 'asc' } }],
-                        size: afterSize,
-                        search_after: [ts]
+                        size: args.size
                     }
                 });
 
-                const context = {
-                    target: doc._source,
-                    before: parseHits(dataBefore).hits,
-                    after: parseHits(dataAfter).hits
-                };
-                return { content: [{ type: 'text', text: JSON.stringify(context) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code || 'ELASTICSEARCH_ERROR', err.http_status, err.details);
-            }
+                const hits = res.hits.hits.map(h => ({
+                    timestamp: h._source?.['@timestamp'],
+                    service: h._source?.service?.name || h._source?.service,
+                    message: h._source?.message || h._source?.log?.message,
+                    level: h._source?.log?.level || h._source?.level
+                }));
+
+                return { content: [{ type: 'text', text: JSON.stringify({ count: hits.length, errors: hits }, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.server.oninitialized = () => {
-        console.log('Elastic MCP server initialized.');
-    };
+    // --- Advanced ---
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.log('Elastic MCP server running on stdio.');
+    server.tool('elastic_search_structured',
+        {
+            indices: z.array(z.string()).default(['*']),
+            body: z.object({}).catchall(z.any()).describe('Full Elasticsearch Search DSL body')
+        },
+        async (args) => {
+            try {
+                const c = await ensureConnected();
+                const res = await c.search({
+                    index: (args.indices || ['*']).join(','),
+                    body: args.body
+                });
+                return { content: [{ type: 'text', text: JSON.stringify(res, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    server.tool('elastic_aggregate',
+        {
+            indices: z.array(z.string()).default(['*']),
+            aggs: z.object({}).catchall(z.any()).describe('Elasticsearch Aggregations DSL'),
+            query: z.object({}).catchall(z.any()).optional().describe('Elasticsearch Query DSL')
+        },
+        async (args) => {
+            try {
+                const c = await ensureConnected();
+                const res = await c.search({
+                    index: (args.indices || ['*']).join(','),
+                    body: {
+                        query: args.query || { match_all: {} },
+                        aggs: args.aggs,
+                        size: 0 // Aggregations only
+                    }
+                });
+                return { content: [{ type: 'text', text: JSON.stringify(res.aggregations, null, 2) }] };
+            } catch (e) { return normalizeError(e); }
+        }
+    );
+
+    return server;
 }
 
-main().catch((err) => {
-    console.error('Elastic MCP server failed to start:', err);
-    process.exit(1);
-});
+if (require.main === module) {
+    const server = createElasticServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('Elastic Observability MCP server running on stdio');
+    }).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
+}
+
+module.exports = { createElasticServer };

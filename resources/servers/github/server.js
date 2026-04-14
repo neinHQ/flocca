@@ -1,9 +1,12 @@
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { z } = require('zod');
 const { Octokit } = require("@octokit/rest");
-const z = require('zod');
-const { McpServer } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
+const { exec } = require('child_process');
+const util = require('util');
+const execAsync = util.promisify(exec);
 
-const SERVER_INFO = { name: 'github-mcp', version: '1.0.0' };
+const SERVER_INFO = { name: 'github-mcp', version: '2.0.0' };
 
 let config = {
     token: process.env.GITHUB_PERSONAL_ACCESS_TOKEN || process.env.GITHUB_TOKEN,
@@ -11,61 +14,68 @@ let config = {
     userId: process.env.FLOCCA_USER_ID
 };
 
-function getKit() {
-    if (config.proxyUrl && config.userId) {
-        return new Octokit({
-            baseUrl: config.proxyUrl, // e.g. http://localhost:3000/proxy/github
-            userAgent: 'flocca-vscode',
-            request: {
-                fetch: (url, opts) => {
-                    opts.headers = opts.headers || {};
-                    opts.headers['X-Flocca-User-ID'] = config.userId;
-                    return fetch(url, opts);
-                }
-            }
-        });
-    }
-
-    if (!config.token) throw new Error("GitHub Not Configured. token missing.");
-    return new Octokit({ auth: config.token });
-}
-
 function normalizeError(err) {
     const msg = err.message || JSON.stringify(err);
     return { isError: true, content: [{ type: 'text', text: `GitHub Error: ${msg}` }] };
 }
 
-async function main() {
+function createGitHubServer() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    let kit = null;
 
-    server.registerTool('github_health',
-        {
-            description: 'Health check for GitHub authentication',
-            inputSchema: z.object({})
-        },
-        async () => {
-            try {
-                await getKit().rest.rateLimit.get();
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (e) { return normalizeError(e); }
+    async function ensureConnected() {
+        if (!config.token && !(config.proxyUrl && config.userId)) {
+            // Re-check env vars
+            config.token = process.env.GITHUB_PERSONAL_ACCESS_TOKEN || process.env.GITHUB_TOKEN;
+            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            config.userId = process.env.FLOCCA_USER_ID;
+
+            if (!config.token && !(config.proxyUrl && config.userId)) {
+                throw new Error("GitHub Not Configured. Provide GITHUB_TOKEN or FLOCCA_PROXY_URL.");
+            }
         }
-    );
 
-    server.registerTool('search_repositories',
+        if (!kit) {
+            if (config.proxyUrl && config.userId) {
+                kit = new Octokit({
+                    baseUrl: config.proxyUrl,
+                    userAgent: 'flocca-vscode',
+                    request: {
+                        fetch: (url, opts) => {
+                            opts.headers = opts.headers || {};
+                            opts.headers['X-Flocca-User-ID'] = config.userId;
+                            return fetch(url, opts);
+                        }
+                    }
+                });
+            } else {
+                kit = new Octokit({ auth: config.token });
+            }
+        }
+        return kit;
+    }
+
+    server.tool('github_health', {}, async () => {
+        try {
+            const k = await ensureConnected();
+            await k.rest.rateLimit.get();
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('search_repositories',
         {
-            description: 'Search GitHub Repositories',
-            inputSchema: z.object({
-                query: z.string(),
-                page: z.number().optional(),
-                per_page: z.number().optional()
-            })
+            query: z.string().describe('Search query (e.g. repo name or keywords)'),
+            page: z.number().optional().default(1),
+            per_page: z.number().optional().default(10)
         },
         async (args) => {
             try {
-                const res = await getKit().rest.search.repos({
+                const k = await ensureConnected();
+                const res = await k.rest.search.repos({
                     q: args.query,
-                    page: args.page || 1,
-                    per_page: args.per_page || 10
+                    page: args.page,
+                    per_page: args.per_page
                 });
                 const repos = res.data.items.map(r => ({
                     name: r.name,
@@ -80,19 +90,17 @@ async function main() {
         }
     );
 
-    server.registerTool('read_file',
+    server.tool('read_file',
         {
-            description: 'Read file content',
-            inputSchema: z.object({
-                owner: z.string(),
-                repo: z.string(),
-                path: z.string(),
-                ref: z.string().optional()
-            })
+            owner: z.string().describe('Repo owner'),
+            repo: z.string().describe('Repo name'),
+            path: z.string().describe('File path'),
+            ref: z.string().optional().describe('Git ref (branch, tag, sha)')
         },
         async (args) => {
             try {
-                const res = await getKit().rest.repos.getContent({
+                const k = await ensureConnected();
+                const res = await k.rest.repos.getContent({
                     owner: args.owner,
                     repo: args.repo,
                     path: args.path,
@@ -113,19 +121,19 @@ async function main() {
         }
     );
 
-    server.registerTool('create_issue',
+    server.tool('create_issue',
         {
-            description: 'Create an Issue',
-            inputSchema: z.object({
-                owner: z.string(),
-                repo: z.string(),
-                title: z.string(),
-                body: z.string().optional()
-            })
+            owner: z.string(),
+            repo: z.string(),
+            title: z.string(),
+            body: z.string().optional(),
+            confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
             try {
-                const res = await getKit().rest.issues.create({
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Are you sure you want to create issue "${args.title}" in ${args.owner}/${args.repo}? Set confirm: true to proceed.` }] };
+                const k = await ensureConnected();
+                const res = await k.rest.issues.create({
                     owner: args.owner,
                     repo: args.repo,
                     title: args.title,
@@ -136,17 +144,8 @@ async function main() {
         }
     );
 
-    const { exec } = require('child_process');
-    const util = require('util');
-    const execAsync = util.promisify(exec);
-
-    server.registerTool('git_add',
-        {
-            description: 'Stage files for commit (git add)',
-            inputSchema: z.object({
-                files: z.array(z.string()).describe('List of files to add, or ["."] for all')
-            })
-        },
+    server.tool('git_add',
+        { files: z.array(z.string()).describe('List of files to add, or ["."] for all') },
         async (args) => {
             try {
                 const files = args.files.join(' ');
@@ -156,15 +155,14 @@ async function main() {
         }
     );
 
-    server.registerTool('git_commit',
+    server.tool('git_commit',
         {
-            description: 'Commit staged changes (git commit)',
-            inputSchema: z.object({
-                message: z.string()
-            })
+            message: z.string(),
+            confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
             try {
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Commit message: "${args.message}". Set confirm: true to proceed.` }] };
                 const msg = args.message.replace(/"/g, '\\"');
                 await execAsync(`git commit -m "${msg}"`);
                 return { content: [{ type: 'text', text: `Committed with message: ${args.message}` }] };
@@ -172,16 +170,15 @@ async function main() {
         }
     );
 
-    server.registerTool('git_push',
+    server.tool('git_push',
         {
-            description: 'Push changes to remote (git push)',
-            inputSchema: z.object({
-                remote: z.string().optional().default('origin'),
-                branch: z.string().optional()
-            })
+            remote: z.string().optional().default('origin'),
+            branch: z.string().optional(),
+            confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
             try {
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Pushing to ${args.remote}. Set confirm: true to proceed.` }] };
                 const remote = args.remote || 'origin';
                 const branch = args.branch ? ` ${args.branch}` : '';
                 await execAsync(`git push ${remote}${branch}`);
@@ -190,21 +187,21 @@ async function main() {
         }
     );
 
-    server.registerTool('create_pull_request',
+    server.tool('create_pull_request',
         {
-            description: 'Create a Pull Request',
-            inputSchema: z.object({
-                owner: z.string(),
-                repo: z.string(),
-                title: z.string(),
-                head: z.string().describe('The name of the branch where your changes are implemented.'),
-                base: z.string().describe('The name of the branch you want the changes pulled into.'),
-                body: z.string().optional()
-            })
+            owner: z.string(),
+            repo: z.string(),
+            title: z.string(),
+            head: z.string().describe('Branch containing changes'),
+            base: z.string().describe('Branch to merge into'),
+            body: z.string().optional(),
+            confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
             try {
-                const res = await getKit().rest.pulls.create({
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Create Pull Request "${args.title}"? Set confirm: true to proceed.` }] };
+                const k = await ensureConnected();
+                const res = await k.rest.pulls.create({
                     owner: args.owner,
                     repo: args.repo,
                     title: args.title,
@@ -217,35 +214,41 @@ async function main() {
         }
     );
 
-    server.registerTool('merge_pull_request',
+    server.tool('merge_pull_request',
         {
-            description: 'Merge a Pull Request',
-            inputSchema: z.object({
-                owner: z.string(),
-                repo: z.string(),
-                pull_number: z.number(),
-                merge_method: z.enum(['merge', 'squash', 'rebase']).optional().default('merge')
-            })
+            owner: z.string(),
+            repo: z.string(),
+            pull_number: z.number(),
+            merge_method: z.enum(['merge', 'squash', 'rebase']).optional().default('merge'),
+            confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
             try {
-                const res = await getKit().rest.pulls.merge({
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Merge PR #${args.pull_number}? Set confirm: true to proceed.` }] };
+                const k = await ensureConnected();
+                const res = await k.rest.pulls.merge({
                     owner: args.owner,
                     repo: args.repo,
                     pull_number: args.pull_number,
-                    merge_method: args.merge_method || 'merge'
+                    merge_method: args.merge_method
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ merged: res.data.merged, message: res.data.message }) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
+    return server;
 }
 
 if (require.main === module) {
-    main().catch(console.error);
+    const server = createGitHubServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('GitHub MCP server running on stdio');
+    }).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
 }
 
-module.exports = { main };
+module.exports = { createGitHubServer };

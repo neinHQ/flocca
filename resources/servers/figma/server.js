@@ -1,60 +1,36 @@
-const path = require('path');
-const z = require('zod');
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { z } = require('zod');
 
-const { McpServer } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(path.join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
+const SERVER_INFO = { name: 'figma-mcp', version: '2.0.0' };
 
-const SERVER_INFO = { name: 'figma-mcp', version: '0.1.0' };
-
-const sessionConfig = {
+let sessionConfig = {
     token: process.env.FIGMA_TOKEN || process.env.FIGMA_ACCESS_TOKEN,
-    default_file_key: process.env.FIGMA_DEFAULT_FILE_KEY
+    default_file_key: process.env.FIGMA_DEFAULT_FILE_KEY,
+    proxy_url: process.env.FLOCCA_PROXY_URL,
+    user_id: process.env.FLOCCA_USER_ID
 };
 
-const cache = {
-    files: new Map(), // key -> { data, ts }
-    nodes: new Map()  // `${fileKey}:${ids}` -> { data, ts }
-};
-
-const TTL_MS = 5 * 60 * 1000;
-const PAYLOAD_LIMIT_NODES = 500;
-
-function normalizeError(message, code = 'FIGMA_ERROR', details, http_status) {
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details, http_status } }) }] };
+function normalizeError(err) {
+    const msg = err.message || JSON.stringify(err);
+    const code = err.code || 'FIGMA_ERROR';
+    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message: msg, code, status: err.http_status } }) }] };
 }
-
-function requireConfigured() {
-    if (process.env.FLOCCA_PROXY_URL && process.env.FLOCCA_USER_ID) return; // Proxy Mode doesn't need local token
-    if (!sessionConfig.token) {
-        throw { message: 'Figma not configured. Call figma_configure first.', code: 'AUTH_FAILED' };
-    }
-}
-
-function headers() {
-    return {
-        'X-Figma-Token': sessionConfig.token
-    };
-}
-
-// Proxy Configuration
-const PROXY_URL = process.env.FLOCCA_PROXY_URL;
-const USER_ID = process.env.FLOCCA_USER_ID;
 
 async function figmaFetch(url, { query, method = 'GET', body } = {}) {
     let targetUrl = url;
-    let reqHeaders = headers();
+    let reqHeaders = {};
 
-    // PROXY MODE
-    if (PROXY_URL && USER_ID) {
-        // url is like https://api.figma.com/v1/files/...
-        // we want PROXY_URL + /v1/files/...
-        // assuming PROXY_URL = http://localhost:3000/proxy/figma
+    if (sessionConfig.proxy_url && sessionConfig.user_id) {
         const path = url.replace('https://api.figma.com', '');
-        targetUrl = `${PROXY_URL}${path}`;
+        targetUrl = `${sessionConfig.proxy_url}${path}`;
         reqHeaders = {
             'Content-Type': 'application/json',
-            'X-Flocca-User-ID': USER_ID
+            'X-Flocca-User-ID': sessionConfig.user_id
         };
+    } else {
+        if (!sessionConfig.token) throw { message: 'Figma token not configured', code: 'AUTH_FAILED' };
+        reqHeaders = { 'X-Figma-Token': sessionConfig.token };
     }
 
     const u = new URL(targetUrl);
@@ -65,65 +41,20 @@ async function figmaFetch(url, { query, method = 'GET', body } = {}) {
         headers: reqHeaders,
         body: body ? JSON.stringify(body) : undefined
     });
+
     let data = {};
     try { data = await resp.json(); } catch (_) { data = {}; }
+
     if (!resp.ok || data.err) {
         let code = 'FIGMA_ERROR';
         if (resp.status === 401 || resp.status === 403) code = 'AUTH_FAILED';
         if (resp.status === 429) code = 'RATE_LIMITED';
-        throw { message: data.err || resp.statusText || 'Figma request failed', code, details: data, http_status: resp.status };
+        throw { message: data.err || resp.statusText || 'Figma request failed', code, http_status: resp.status };
     }
     return data;
 }
 
-function getCached(map, key) {
-    const hit = map.get(key);
-    if (hit && Date.now() - hit.ts < TTL_MS) return hit.data;
-    map.delete(key);
-    return undefined;
-}
-
-class FigmaRestBackend {
-    constructor(token) {
-        this.token = token;
-    }
-
-    async validateAuth() {
-        const data = await figmaFetch('https://api.figma.com/v1/me');
-        return { user: data.user, scopes: data.scopes };
-    }
-
-    async getFile(fileKey) {
-        const cacheKey = fileKey;
-        const cached = getCached(cache.files, cacheKey);
-        if (cached) return cached;
-        const data = await figmaFetch(`https://api.figma.com/v1/files/${fileKey}`, { query: { geometry: 'paths' } });
-        cache.files.set(cacheKey, { data, ts: Date.now() });
-        return data;
-    }
-
-    async getNodes(fileKey, nodeIds) {
-        const key = `${fileKey}:${nodeIds.sort().join(',')}`;
-        const cached = getCached(cache.nodes, key);
-        if (cached) return cached;
-        const data = await figmaFetch(`https://api.figma.com/v1/files/${fileKey}/nodes`, { query: { ids: nodeIds.join(',') } });
-        cache.nodes.set(key, { data, ts: Date.now() });
-        return data;
-    }
-
-    async exportNodes(fileKey, nodeIds, opts) {
-        const query = { ids: nodeIds.join(','), format: opts.format || 'png' };
-        if (opts.scale) query.scale = opts.scale;
-        if (opts.svg_include_id) query.svg_include_id = 'true';
-        const data = await figmaFetch(`https://api.figma.com/v1/images/${fileKey}`, { query });
-        return Object.entries(data.images || {}).map(([id, url]) => ({ id, url }));
-    }
-
-    async listVersions(fileKey) {
-        const data = await figmaFetch(`https://api.figma.com/v1/files/${fileKey}/versions`);
-        return data.versions || [];
-    }
-}
+// --- Extraction Logic ---
 
 function flattenNodes(node, acc = []) {
     if (!node) return acc;
@@ -146,9 +77,6 @@ function extractFrameSpec(frame) {
                 spec.components.push({ id: n.id, hint: 'validation_text', text: n.characters });
             }
         }
-        if (n.type === 'RECTANGLE' || n.type === 'ELLIPSE') return;
-        if (n.type === 'BOOLEAN_OPERATION') return;
-        if (n.type === 'TEXT' && n.style?.textCase === 'UPPER') return;
         if (n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'INSTANCE' || n.type === 'COMPONENT') {
             if (/button|cta|submit/i.test(n.name)) spec.buttons.push({ id: n.id, name: n.name });
             if (/toggle|switch|checkbox/i.test(n.name)) spec.toggles.push({ id: n.id, name: n.name });
@@ -161,12 +89,10 @@ function extractFrameSpec(frame) {
 function suggestScenarios(frameSpec) {
     const scenarios = [];
     if (frameSpec.inputs.some((i) => /email/i.test(i.name || ''))) {
-        scenarios.push('Email is required');
-        scenarios.push('Invalid email shows error');
+        scenarios.push('Email is required', 'Invalid email shows error');
     }
     if (frameSpec.buttons.length) {
-        scenarios.push('Submit disabled until valid');
-        scenarios.push('Loading prevents double submit');
+        scenarios.push('Submit disabled until valid', 'Loading prevents double submit');
     }
     scenarios.push('Keyboard navigation works');
     return scenarios;
@@ -182,288 +108,173 @@ function generateSelectors(frameSpec) {
     return selectors;
 }
 
-async function main() {
-    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
-    const originalRegisterTool = server.registerTool.bind(server);
-    const permissiveInputSchema = z.object({}).passthrough();
-    server.registerTool = (name, config, handler) => {
-        const nextConfig = { ...(config || {}) };
-        if (!nextConfig.inputSchema || typeof nextConfig.inputSchema.safeParseAsync !== 'function') {
-            nextConfig.inputSchema = permissiveInputSchema;
-        }
-        return originalRegisterTool(name, nextConfig, handler);
-    };
+// --- Server Definition ---
 
-    server.registerTool(
-        'figma_configure',
-        {
-            description: 'Configure Figma MCP session.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    auth: { type: 'object', properties: { type: { type: 'string', enum: ['pat'] }, token: { type: 'string' } }, required: ['type', 'token'] },
-                    defaults: { type: 'object', properties: { file_key: { type: 'string' } } }
-                },
-                required: ['auth'],
-                additionalProperties: false
+function createFigmaServer() {
+    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+
+    async function ensureConnected() {
+        if (!sessionConfig.token && !(sessionConfig.proxy_url && sessionConfig.user_id)) {
+            // Re-check environment variables in case they were set after module load
+            sessionConfig.token = process.env.FIGMA_TOKEN || process.env.FIGMA_ACCESS_TOKEN;
+            sessionConfig.proxy_url = process.env.FLOCCA_PROXY_URL;
+            sessionConfig.user_id = process.env.FLOCCA_USER_ID;
+            
+            if (!sessionConfig.token && !(sessionConfig.proxy_url && sessionConfig.user_id)) {
+                throw { message: 'Figma not configured. Provide FIGMA_TOKEN or call figma_configure.', code: 'AUTH_FAILED' };
             }
+        }
+    }
+
+    server.tool('figma_health', {}, async () => {
+        try {
+            await ensureConnected();
+            const data = await figmaFetch('https://api.figma.com/v1/me');
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, user: data.user }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('figma_configure',
+        {
+            token: z.string().describe('Figma Personal Access Token'),
+            default_file_key: z.string().optional().describe('Default file key to use')
         },
         async (args) => {
             try {
-                sessionConfig.token = args.auth.token;
-                sessionConfig.default_file_key = args.defaults?.file_key;
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const authCtx = await backend.validateAuth();
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, user: authCtx.user, scopes: authCtx.scopes }) }] };
-            } catch (err) {
+                sessionConfig.token = args.token;
+                sessionConfig.default_file_key = args.default_file_key;
+                const data = await figmaFetch('https://api.figma.com/v1/me');
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, user: data.user, message: "Successfully configured Figma." }) }] };
+            } catch (e) {
                 sessionConfig.token = undefined;
-                sessionConfig.default_file_key = undefined;
-                return normalizeError(err.message, err.code || 'AUTH_FAILED', err.details, err.http_status);
+                return normalizeError(e);
             }
         }
     );
 
-    server.registerTool(
-        'figma_health',
-        { description: 'Health check.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-        async () => {
-            try {
-                requireConfigured();
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const authCtx = await backend.validateAuth();
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, user: authCtx.user }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'figma_get_file_metadata',
-        { description: 'Get Figma file metadata.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' } }, additionalProperties: false } },
+    server.tool('figma_get_file_metadata',
+        { file_key: z.string().optional().describe('Figma file key') },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConnected();
                 const fileKey = args.file_key || sessionConfig.default_file_key;
                 if (!fileKey) throw { message: 'file_key required', code: 'INVALID_REQUEST' };
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const data = await backend.getFile(fileKey);
+                const data = await figmaFetch(`https://api.figma.com/v1/files/${fileKey}`);
                 const pages = (data.document?.children || []).map((p) => ({ id: p.id, name: p.name, type: p.type }));
                 return { content: [{ type: 'text', text: JSON.stringify({ name: data.name, lastModified: data.lastModified, pages, version: data.version }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'figma_list_pages',
-        { description: 'List pages in a file.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' } }, additionalProperties: false } },
+    server.tool('figma_find_frames',
+        {
+            file_key: z.string().optional(),
+            query: z.string().describe('Frame name or partial name to find'),
+            limit: z.number().default(50)
+        },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConnected();
                 const fileKey = args.file_key || sessionConfig.default_file_key;
                 if (!fileKey) throw { message: 'file_key required', code: 'INVALID_REQUEST' };
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const data = await backend.getFile(fileKey);
-                const pages = (data.document?.children || []).map((p) => ({ id: p.id, name: p.name, type: p.type }));
-                return { content: [{ type: 'text', text: JSON.stringify({ pages }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'figma_find_frames',
-        { description: 'Find frames by name.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const fileKey = args.file_key || sessionConfig.default_file_key;
-                if (!fileKey) throw { message: 'file_key required', code: 'INVALID_REQUEST' };
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const data = await backend.getFile(fileKey);
+                const data = await figmaFetch(`https://api.figma.com/v1/files/${fileKey}`);
                 const nodes = flattenNodes(data.document, []).filter(isFrame);
-                const matches = nodes.filter((n) => n.name && n.name.toLowerCase().includes(args.query.toLowerCase())).slice(0, args.limit || 50);
+                const matches = nodes.filter((n) => n.name && n.name.toLowerCase().includes(args.query.toLowerCase())).slice(0, args.limit);
                 return { content: [{ type: 'text', text: JSON.stringify({ frames: matches.map((m) => ({ id: m.id, name: m.name, type: m.type })) }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'figma_get_frame_spec',
-        { description: 'Return QA-friendly frame spec.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' } }, required: ['node_id'], additionalProperties: false } },
+    server.tool('figma_get_frame_spec',
+        {
+            file_key: z.string().optional(),
+            node_id: z.string().describe('Node ID of the frame/component')
+        },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConnected();
                 const fileKey = args.file_key || sessionConfig.default_file_key;
                 if (!fileKey) throw { message: 'file_key required', code: 'INVALID_REQUEST' };
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const data = await backend.getNodes(fileKey, [args.node_id]);
+                const data = await figmaFetch(`https://api.figma.com/v1/files/${fileKey}/nodes`, { query: { ids: args.node_id } });
                 const node = data.nodes?.[args.node_id]?.document;
                 if (!node) throw { message: 'Node not found', code: 'NOT_FOUND' };
                 if (!isFrame(node)) throw { message: 'Node is not a frame/component', code: 'INVALID_REQUEST' };
                 const spec = extractFrameSpec(node);
-                if (spec.inputs.length + spec.buttons.length + spec.toggles.length > PAYLOAD_LIMIT_NODES) {
-                    return normalizeError('Payload too large', 'INVALID_REQUEST', { max: PAYLOAD_LIMIT_NODES });
-                }
                 return { content: [{ type: 'text', text: JSON.stringify({ frame: spec }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'figma_get_component_variants',
-        { description: 'List component variants.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' } }, required: ['node_id'], additionalProperties: false } },
+    server.tool('figma_suggest_test_scenarios',
+        {
+            file_key: z.string().optional(),
+            node_id: z.string()
+        },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConnected();
                 const fileKey = args.file_key || sessionConfig.default_file_key;
                 if (!fileKey) throw { message: 'file_key required', code: 'INVALID_REQUEST' };
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const data = await backend.getNodes(fileKey, [args.node_id]);
-                const node = data.nodes?.[args.node_id]?.document;
-                if (!node || node.type !== 'COMPONENT_SET') throw { message: 'Not a component set', code: 'INVALID_REQUEST' };
-                const variants = (node.children || []).map((c) => ({ id: c.id, name: c.name, properties: c.componentProperties }));
-                return { content: [{ type: 'text', text: JSON.stringify({ variants }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'figma_extract_design_tokens',
-        { description: 'Extract color/typography tokens.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' } }, additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const fileKey = args.file_key || sessionConfig.default_file_key;
-                if (!fileKey) throw { message: 'file_key required', code: 'INVALID_REQUEST' };
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const data = await backend.getFile(fileKey);
-                const paints = data.styles ? Object.entries(data.styles).filter(([, v]) => v.styleType === 'FILL') : [];
-                const texts = data.styles ? Object.entries(data.styles).filter(([, v]) => v.styleType === 'TEXT') : [];
-                const colors = paints.map(([id, v]) => ({ id, name: v.name, type: v.styleType }));
-                const typography = texts.map(([id, v]) => ({ id, name: v.name, type: v.styleType }));
-                return { content: [{ type: 'text', text: JSON.stringify({ colors, typography }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'figma_suggest_test_scenarios',
-        { description: 'Suggest QA scenarios for a frame.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' } }, required: ['node_id'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const fileKey = args.file_key || sessionConfig.default_file_key;
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const data = await backend.getNodes(fileKey, [args.node_id]);
+                const data = await figmaFetch(`https://api.figma.com/v1/files/${fileKey}/nodes`, { query: { ids: args.node_id } });
                 const node = data.nodes?.[args.node_id]?.document;
                 if (!node) throw { message: 'Node not found', code: 'NOT_FOUND' };
                 const spec = extractFrameSpec(node);
                 const scenarios = suggestScenarios(spec);
                 return { content: [{ type: 'text', text: JSON.stringify({ scenarios }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'figma_generate_stable_selectors',
-        { description: 'Suggest selector strategies for Playwright.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' } }, required: ['node_id'], additionalProperties: false } },
+    server.tool('figma_export_frame_image',
+        {
+            file_key: z.string().optional(),
+            node_id: z.string(),
+            format: z.enum(['png', 'jpg', 'svg', 'pdf']).default('png'),
+            scale: z.number().default(1)
+        },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConnected();
                 const fileKey = args.file_key || sessionConfig.default_file_key;
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const data = await backend.getNodes(fileKey, [args.node_id]);
-                const node = data.nodes?.[args.node_id]?.document;
-                if (!node) throw { message: 'Node not found', code: 'NOT_FOUND' };
-                const spec = extractFrameSpec(node);
-                const selectors = generateSelectors(spec);
-                return { content: [{ type: 'text', text: JSON.stringify({ selectors }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+                if (!fileKey) throw { message: 'file_key required', code: 'INVALID_REQUEST' };
+                const data = await figmaFetch(`https://api.figma.com/v1/images/${fileKey}`, { 
+                    query: { ids: args.node_id, format: args.format, scale: args.scale } 
+                });
+                return { content: [{ type: 'text', text: JSON.stringify({ images: data.images }) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'figma_export_frame_image',
-        { description: 'Export a frame as image.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_id: { type: 'string' }, format: { type: 'string' }, scale: { type: 'number' } }, required: ['node_id'], additionalProperties: false } },
+    server.tool('figma_extract_design_tokens',
+        { file_key: z.string().optional() },
         async (args) => {
             try {
-                requireConfigured();
+                await ensureConnected();
                 const fileKey = args.file_key || sessionConfig.default_file_key;
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const imgs = await backend.exportNodes(fileKey, [args.node_id], { format: args.format, scale: args.scale });
-                return { content: [{ type: 'text', text: JSON.stringify({ images: imgs }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
+                if (!fileKey) throw { message: 'file_key required', code: 'INVALID_REQUEST' };
+                const data = await figmaFetch(`https://api.figma.com/v1/files/${fileKey}`);
+                const paints = data.styles ? Object.entries(data.styles).filter(([, v]) => v.styleType === 'FILL') : [];
+                const texts = data.styles ? Object.entries(data.styles).filter(([, v]) => v.styleType === 'TEXT') : [];
+                return { content: [{ type: 'text', text: JSON.stringify({ 
+                    colors: paints.map(([id, v]) => ({ id, name: v.name, type: v.styleType })),
+                    typography: texts.map(([id, v]) => ({ id, name: v.name, type: v.styleType }))
+                }) }] };
+            } catch (e) { return normalizeError(e); }
         }
     );
 
-    server.registerTool(
-        'figma_export_node_images_batch',
-        { description: 'Batch export node images.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, node_ids: { type: 'array', items: { type: 'string' } }, format: { type: 'string' }, scale: { type: 'number' } }, required: ['node_ids'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const fileKey = args.file_key || sessionConfig.default_file_key;
-                if (args.node_ids.length > PAYLOAD_LIMIT_NODES) return normalizeError('Too many nodes requested', 'INVALID_REQUEST', { max: PAYLOAD_LIMIT_NODES });
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const imgs = await backend.exportNodes(fileKey, args.node_ids, { format: args.format, scale: args.scale });
-                return { content: [{ type: 'text', text: JSON.stringify({ images: imgs }) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.registerTool(
-        'figma_diff_versions',
-        { description: 'Diff two versions for changed nodes.', inputSchema: { type: 'object', properties: { file_key: { type: 'string' }, from_version: { type: 'string' }, to_version: { type: 'string' } }, required: ['from_version', 'to_version'], additionalProperties: false } },
-        async (args) => {
-            try {
-                requireConfigured();
-                const fileKey = args.file_key || sessionConfig.default_file_key;
-                const backend = new FigmaRestBackend(sessionConfig.token);
-                const versions = await backend.listVersions(fileKey);
-                const fromMeta = versions.find((v) => v.id === args.from_version);
-                const toMeta = versions.find((v) => v.id === args.to_version);
-                const summary = { from: fromMeta, to: toMeta, changes: ['Changed frames or components not computed (placeholder)'] };
-                return { content: [{ type: 'text', text: JSON.stringify(summary) }] };
-            } catch (err) {
-                return normalizeError(err.message, err.code, err.details, err.http_status);
-            }
-        }
-    );
-
-    server.server.oninitialized = () => {
-        console.log('Figma MCP server initialized.');
-    };
-
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.log('Figma MCP server running on stdio.');
+    return server;
 }
 
 if (require.main === module) {
-    main().catch((err) => {
-        console.error('Figma MCP server failed to start:', err);
+    const server = createFigmaServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('Figma MCP server running on stdio');
+    }).catch((error) => {
+        console.error('Server error:', error);
         process.exit(1);
     });
 }
 
-module.exports = { main };
+module.exports = { createFigmaServer };

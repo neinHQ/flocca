@@ -1,33 +1,23 @@
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { z } = require('zod');
 const axios = require('axios');
-const { McpServer } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
 
-const SERVER_INFO = { name: 'sentry-mcp', version: '1.0.0' };
+const SERVER_INFO = { name: 'sentry-mcp', version: '2.0.0' };
 
 let config = {
     token: process.env.SENTRY_TOKEN,
-    baseUrl: process.env.FLOCCA_PROXY_URL || process.env.SENTRY_BASE_URL || 'https://sentry.io/api/0',
-    orgSlug: process.env.SENTRY_ORG_SLUG
+    baseUrl: process.env.SENTRY_BASE_URL || 'https://sentry.io/api/0',
+    orgSlug: process.env.SENTRY_ORG_SLUG,
+    proxyUrl: process.env.FLOCCA_PROXY_URL,
+    userId: process.env.FLOCCA_USER_ID
 };
 
 function normalizeBaseUrl(url) {
     const raw = String(url || '').trim().replace(/\/+$/, '');
-    if (!raw) return raw;
-    // Accept root host and normalize to API root.
+    if (!raw) return 'https://sentry.io/api/0';
     if (/\/api\/0$/i.test(raw)) return raw;
     return `${raw}/api/0`;
-}
-config.baseUrl = normalizeBaseUrl(config.baseUrl);
-
-function getHeaders() {
-    if (process.env.FLOCCA_PROXY_URL && process.env.FLOCCA_USER_ID) {
-        return {
-            'X-Flocca-User-ID': process.env.FLOCCA_USER_ID,
-            'Content-Type': 'application/json'
-        };
-    }
-    if (!config.token) throw new Error("Sentry Setup Required");
-    return { 'Authorization': `Bearer ${config.token}`, 'Content-Type': 'application/json' };
 }
 
 function normalizeError(err) {
@@ -35,99 +25,148 @@ function normalizeError(err) {
     return { isError: true, content: [{ type: 'text', text: `Sentry Error: ${msg}` }] };
 }
 
-function createToolAliases(name) {
-    const alias = name
-        .replace(/\./g, '_')
-        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-        .toLowerCase();
-    return alias !== name ? [alias] : [];
-}
-
-function registerToolWithAliases(server, name, config, handler) {
-    const aliases = createToolAliases(name);
-    if (aliases.length === 0) {
-        server.registerTool(name, config, handler);
-        return;
-    }
-    for (const alias of aliases) {
-        server.registerTool(alias, config, handler);
-    }
-}
-
-async function main() {
+function createSentryServer() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    let api = null;
 
-    registerToolWithAliases(server, 'sentry.health',
-        { description: 'Health check for Sentry', inputSchema: { type: 'object', properties: {} } },
-        async () => {
-            try {
-                if (!config.orgSlug) throw new Error("Missing SENTRY_ORG_SLUG config for health check");
-                await axios.get(`${config.baseUrl}/organizations/${config.orgSlug}/`, { headers: getHeaders() });
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (e) { return normalizeError(e); }
+    async function ensureConnected() {
+        if (!config.token && !(config.proxyUrl && config.userId)) {
+            // Re-check env vars
+            config.token = process.env.SENTRY_TOKEN;
+            config.orgSlug = process.env.SENTRY_ORG_SLUG;
+            config.baseUrl = process.env.SENTRY_BASE_URL || config.baseUrl;
+            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            config.userId = process.env.FLOCCA_USER_ID;
+
+            if (!config.token && !(config.proxyUrl && config.userId)) {
+                throw new Error("Sentry Not Configured. Provide SENTRY_TOKEN or FLOCCA_PROXY_URL.");
+            }
         }
-    );
 
-    registerToolWithAliases(server, 'sentry.configure',
-        { description: 'Configure Sentry', inputSchema: { type: 'object', properties: { token: { type: 'string' }, org_slug: { type: 'string' }, base_url: { type: 'string' } }, required: ['token', 'org_slug'] } },
+        if (!api) {
+            let finalBaseUrl = normalizeBaseUrl(config.baseUrl);
+            const headers = { 'Content-Type': 'application/json' };
+
+            if (config.proxyUrl && config.userId) {
+                finalBaseUrl = normalizeBaseUrl(config.proxyUrl);
+                headers['X-Flocca-User-ID'] = config.userId;
+            } else {
+                headers['Authorization'] = `Bearer ${config.token}`;
+            }
+
+            api = axios.create({
+                baseURL: finalBaseUrl,
+                headers: headers
+            });
+        }
+        return api;
+    }
+
+    server.tool('sentry_health', {}, async () => {
+        try {
+            if (!config.orgSlug) throw new Error("SENTRY_ORG_SLUG required for health check");
+            const client = await ensureConnected();
+            await client.get(`/organizations/${config.orgSlug}/`);
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, org: config.orgSlug, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('sentry_configure',
+        {
+            token: z.string().describe('Sentry Auth Token'),
+            org_slug: z.string().describe('Sentry Organization Slug'),
+            base_url: z.string().optional().describe('Sentry Base URL (e.g. https://sentry.io)')
+        },
         async (args) => {
-            config.token = args.token;
-            config.orgSlug = args.org_slug;
-            if (args.base_url) config.baseUrl = normalizeBaseUrl(args.base_url);
-
             try {
-                // Verify by getting org
-                await axios.get(`${config.baseUrl}/organizations/${config.orgSlug}/`, { headers: getHeaders() });
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (e) { return normalizeError(e); }
+                config.token = args.token;
+                config.orgSlug = args.org_slug;
+                if (args.base_url) config.baseUrl = args.base_url;
+                api = null; // force re-init
+                const client = await ensureConnected();
+                await client.get(`/organizations/${config.orgSlug}/`);
+                return { content: [{ type: 'text', text: "Sentry configuration updated and verified." }] };
+            } catch (e) {
+                config.token = undefined;
+                api = null;
+                return normalizeError(e);
+            }
         }
     );
 
-    registerToolWithAliases(server, 'sentry.listProjects',
-        { description: 'List Projects', inputSchema: { type: 'object', properties: {} } },
-        async () => {
-            try {
-                const res = await axios.get(`${config.baseUrl}/organizations/${config.orgSlug}/projects/`, { headers: getHeaders() });
-                return { content: [{ type: 'text', text: JSON.stringify(res.data.map(p => ({ slug: p.slug, name: p.name, platform: p.platform }))) }] };
-            } catch (e) { return normalizeError(e); }
-        }
-    );
+    server.tool('sentry_list_projects', {}, async () => {
+        try {
+            if (!config.orgSlug) throw new Error("SENTRY_ORG_SLUG required");
+            const client = await ensureConnected();
+            const res = await client.get(`/organizations/${config.orgSlug}/projects/`);
+            return {
+                content: [{
+                    type: 'text',
+                    text: JSON.stringify(res.data.map(p => ({
+                        slug: p.slug,
+                        name: p.name,
+                        platform: p.platform
+                    })), null, 2)
+                }]
+            };
+        } catch (e) { return normalizeError(e); }
+    });
 
-    registerToolWithAliases(server, 'sentry.listIssues',
-        { description: 'List Issues', inputSchema: { type: 'object', properties: { project_slug: { type: 'string' }, query: { type: 'string' } }, required: ['project_slug'] } },
+    server.tool('sentry_list_issues',
+        {
+            project_slug: z.string().describe('Filter issues by project slug'),
+            query: z.string().optional().default('is:unresolved').describe('Sentry search query'),
+            limit: z.number().optional().default(20).describe('Max issues to return')
+        },
         async (args) => {
             try {
-                const res = await axios.get(`${config.baseUrl}/projects/${config.orgSlug}/${args.project_slug}/issues/`, {
-                    headers: getHeaders(),
-                    params: { query: args.query || 'is:unresolved', limit: 20 }
+                if (!config.orgSlug) throw new Error("SENTRY_ORG_SLUG required");
+                const client = await ensureConnected();
+                const res = await client.get(`/projects/${config.orgSlug}/${args.project_slug}/issues/`, {
+                    params: { query: args.query, limit: args.limit }
                 });
-                return { content: [{ type: 'text', text: JSON.stringify(res.data.map(i => ({ id: i.id, title: i.title, count: i.count, userCount: i.userCount }))) }] };
+                return {
+                    content: [{
+                        type: 'text',
+                        text: JSON.stringify(res.data.map(i => ({
+                            id: i.id,
+                            title: i.title,
+                            count: i.count,
+                            userCount: i.userCount,
+                            status: i.status,
+                            level: i.level,
+                            lastSeen: i.lastSeen,
+                            permalink: i.permalink
+                        })), null, 2)
+                    }]
+                };
             } catch (e) { return normalizeError(e); }
         }
     );
 
-    registerToolWithAliases(server, 'sentry.getIssue',
-        { description: 'Get Issue Details', inputSchema: { type: 'object', properties: { issue_id: { type: 'string' } }, required: ['issue_id'] } },
+    server.tool('sentry_get_issue',
+        { issue_id: z.string().describe('The ID of the issue to retrieve') },
         async (args) => {
             try {
-                const res = await axios.get(`${config.baseUrl}/issues/${args.issue_id}/`, { headers: getHeaders() });
-                return { content: [{ type: 'text', text: JSON.stringify(res.data) }] };
+                const client = await ensureConnected();
+                const res = await client.get(`/issues/${args.issue_id}/`);
+                return { content: [{ type: 'text', text: JSON.stringify(res.data, null, 2) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
+    return server;
 }
-
 
 if (require.main === module) {
-    main().catch(console.error);
+    const server = createSentryServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('Sentry MCP server running on stdio');
+    }).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
 }
 
-module.exports = {
-    main,
-    __test: {
-        normalizeBaseUrl
-    }
-};
+module.exports = { createSentryServer };

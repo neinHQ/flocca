@@ -1,143 +1,134 @@
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { z } = require('zod');
 const { Client } = require("@notionhq/client");
-const { McpServer } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'));
-const { StdioServerTransport } = require(require('path').join(__dirname, '../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js'));
 
-const SERVER_INFO = { name: 'notion-mcp', version: '1.0.0' };
+const SERVER_INFO = { name: 'notion-mcp', version: '2.0.0' };
 
-let config = { token: process.env.NOTION_TOKEN };
-
-const PROXY = process.env.FLOCCA_PROXY_URL;
-const USER = process.env.FLOCCA_USER_ID;
-
-function getClient() {
-    if (!config.token && !(PROXY && USER)) throw new Error("Notion Not Configured. Config is missing.");
-
-    if (PROXY && USER) {
-        // Proxy Mode
-        return new Client({
-            baseUrl: PROXY,
-            auth: 'dummy', // SDK requires auth
-            fetch: async (url, init) => {
-                // Inject Header
-                init.headers = { ...(init.headers || {}), 'X-Flocca-User-ID': USER };
-                // remove auth header if present (Notion SDK adds it)
-                delete init.headers['Authorization'];
-                return fetch(url, init);
-            }
-        });
-    }
-    return new Client({ auth: config.token });
-}
+let config = {
+    token: process.env.NOTION_TOKEN,
+    proxyUrl: process.env.FLOCCA_PROXY_URL,
+    userId: process.env.FLOCCA_USER_ID
+};
 
 function normalizeError(err) {
     const msg = err.message || JSON.stringify(err);
     return { isError: true, content: [{ type: 'text', text: `Notion Error: ${msg}` }] };
 }
 
-function createToolAliases(name) {
-    const alias = name
-        .replace(/\./g, '_')
-        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-        .toLowerCase();
-    return alias !== name ? [alias] : [];
-}
-
-function registerToolWithAliases(server, name, config, handler) {
-    const aliases = createToolAliases(name);
-    if (aliases.length === 0) {
-        server.registerTool(name, config, handler);
-        return;
-    }
-    for (const alias of aliases) {
-        server.registerTool(alias, config, handler);
-    }
-}
-
-async function main() {
+function createNotionServer() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    let notionClient = null;
 
-    registerToolWithAliases(server, 'notion.health',
-        { description: 'Health check for Notion', inputSchema: { type: 'object', properties: {} } },
-        async () => {
-            try {
-                await getClient().users.me();
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-            } catch (e) { return normalizeError(e); }
+    async function ensureConnected() {
+        if (!config.token && !(config.proxyUrl && config.userId)) {
+            // Re-check env vars
+            config.token = process.env.NOTION_TOKEN;
+            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            config.userId = process.env.FLOCCA_USER_ID;
+
+            if (!config.token && !(config.proxyUrl && config.userId)) {
+                throw new Error("Notion Not Configured. Provide NOTION_TOKEN or FLOCCA_PROXY_URL.");
+            }
         }
-    );
 
-    registerToolWithAliases(server, 'notion.configure',
-        { description: 'Configure Notion', inputSchema: { type: 'object', properties: { token: { type: 'string' } }, required: ['token'] } },
+        if (!notionClient) {
+            if (config.proxyUrl && config.userId) {
+                notionClient = new Client({
+                    baseUrl: config.proxyUrl,
+                    auth: 'dummy',
+                    fetch: async (url, init) => {
+                        init.headers = { ...(init.headers || {}), 'X-Flocca-User-ID': config.userId };
+                        delete init.headers['Authorization'];
+                        return fetch(url, init);
+                    }
+                });
+            } else {
+                notionClient = new Client({ auth: config.token });
+            }
+        }
+        return notionClient;
+    }
+
+    server.tool('notion_health', {}, async () => {
+        try {
+            const client = await ensureConnected();
+            await client.users.me();
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+        } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('notion_configure',
+        { token: z.string().describe('Notion Integration Token') },
         async (args) => {
-            config.token = args.token;
             try {
-                await getClient().users.me();
+                config.token = args.token;
+                notionClient = null; // force re-init
+                const client = await ensureConnected();
+                await client.users.me();
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: 'authenticated' }) }] };
             } catch (e) {
                 config.token = undefined;
+                notionClient = null;
                 return normalizeError(e);
             }
         }
     );
 
-    registerToolWithAliases(server, 'notion.search',
-        { description: 'Search pages/databases', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
+    server.tool('notion_search',
+        { query: z.string().describe('Search term for pages or databases') },
         async (args) => {
             try {
-                const res = await getClient().search({ query: args.query, page_size: 20 });
-                return { content: [{ type: 'text', text: JSON.stringify(res.results) }] };
+                const client = await ensureConnected();
+                const res = await client.search({ query: args.query, page_size: 20 });
+                return { content: [{ type: 'text', text: JSON.stringify(res.results, null, 2) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
-    registerToolWithAliases(server, 'notion.listDatabases',
-        { description: 'List databases', inputSchema: { type: 'object', properties: {} } },
-        async () => {
-            try {
-                const res = await getClient().search({ filter: { value: 'database', property: 'object' } });
-                return { content: [{ type: 'text', text: JSON.stringify(res.results) }] };
-            } catch (e) { return normalizeError(e); }
-        }
-    );
+    server.tool('notion_list_databases', {}, async () => {
+        try {
+            const client = await ensureConnected();
+            const res = await client.search({ filter: { value: 'database', property: 'object' } });
+            return { content: [{ type: 'text', text: JSON.stringify(res.results, null, 2) }] };
+        } catch (e) { return normalizeError(e); }
+    });
 
-    registerToolWithAliases(server, 'notion.queryDatabase',
-        { description: 'Query Database', inputSchema: { type: 'object', properties: { database_id: { type: 'string' } }, required: ['database_id'] } },
+    server.tool('notion_query_database',
+        { database_id: z.string().describe('The ID of the database to query') },
         async (args) => {
             try {
-                const res = await getClient().databases.query({ database_id: args.database_id, page_size: 50 });
-                return { content: [{ type: 'text', text: JSON.stringify(res.results) }] };
+                const client = await ensureConnected();
+                const res = await client.databases.query({ database_id: args.database_id, page_size: 50 });
+                return { content: [{ type: 'text', text: JSON.stringify(res.results, null, 2) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
-    registerToolWithAliases(server, 'notion.getPage',
-        { description: 'Get Page', inputSchema: { type: 'object', properties: { page_id: { type: 'string' } }, required: ['page_id'] } },
+    server.tool('notion_get_page',
+        { page_id: z.string().describe('The ID of the page to retrieve') },
         async (args) => {
             try {
-                const page = await getClient().pages.retrieve({ page_id: args.page_id });
-                return { content: [{ type: 'text', text: JSON.stringify(page) }] };
+                const client = await ensureConnected();
+                const page = await client.pages.retrieve({ page_id: args.page_id });
+                return { content: [{ type: 'text', text: JSON.stringify(page, null, 2) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
-    registerToolWithAliases(server, 'notion.createPage',
+    server.tool('notion_create_page',
         {
-            description: 'Create Page',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    parent_id: { type: 'string' },
-                    title: { type: 'string' },
-                    body: { type: 'string' } // Simplified markdown-ish body or plain text
-                },
-                required: ['parent_id', 'title']
-            }
+            parent_id: z.string().describe('The ID of the parent page'),
+            title: z.string().describe('The title of the new page'),
+            body: z.string().optional().describe('Plain text content for the page body'),
+            confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
             try {
-                // Basic Create with just title and minimal blocks 
-                const res = await getClient().pages.create({
-                    parent: { page_id: args.parent_id }, // Assuming parent is page not DB for simplicity
+                if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Create page "${args.title}" under parent ${args.parent_id}? Set confirm: true to proceed.` }] };
+                const client = await ensureConnected();
+                const res = await client.pages.create({
+                    parent: { page_id: args.parent_id },
                     properties: {
                         title: [{ text: { content: args.title } }]
                     },
@@ -145,18 +136,23 @@ async function main() {
                         { object: 'block', type: 'paragraph', paragraph: { rich_text: [{ text: { content: args.body } }] } }
                     ] : []
                 });
-                return { content: [{ type: 'text', text: JSON.stringify(res) }] };
+                return { content: [{ type: 'text', text: JSON.stringify(res, null, 2) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
+    return server;
 }
-
 
 if (require.main === module) {
-    main().catch(console.error);
+    const server = createNotionServer();
+    const transport = new StdioServerTransport();
+    server.connect(transport).then(() => {
+        console.error('Notion MCP server running on stdio');
+    }).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
 }
 
-module.exports = { main };
+module.exports = { createNotionServer };

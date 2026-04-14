@@ -6,7 +6,7 @@ const { __test } = require('../server');
 describe('Confluence Phase 0', () => {
   beforeEach(() => {
     axios.mockReset();
-    __test.setConfig({ baseUrl: 'https://conf.example.com', deploymentMode: 'cloud' });
+    __test.setConfig({ baseUrl: 'https://conf.example.com', deploymentMode: 'cloud', token: 'test-token' });
   });
 
   test('normalizes base URL by removing /wiki and trailing slash', () => {

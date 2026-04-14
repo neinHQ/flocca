@@ -147,9 +147,9 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
     'docker': {
         title: 'Connect Docker',
         fields: [
-            { id: 'host', label: 'Docker Host (Optional)', placeholder: 'unix:///var/run/docker.sock', type: 'text' }
+            { id: 'host', label: 'Docker Host / Socket', placeholder: 'unix:///var/run/docker.sock or tcp://localhost:2375', type: 'text', infoText: 'Use unix:///path/to/socket for local Unix sockets or tcp://host:port for remote daemons.' }
         ],
-        links: []
+        links: [{ text: 'Docker Daemon Socket', url: 'https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-socket-option' }]
     },
     'postgres': {
         title: 'Connect PostgreSQL',
@@ -254,12 +254,19 @@ const PROVIDER_CONFIG: { [key: string]: ProviderConfig } = {
         ],
         links: []
     },
-    'observability': {
-        title: 'Connect Observability',
+    'prometheus': {
+        title: 'Connect Prometheus',
         fields: [
-            { id: 'prometheus_url', label: 'Prometheus URL', placeholder: 'http://prometheus:9090', type: 'text' },
-            { id: 'grafana_url', label: 'Grafana URL', placeholder: 'http://grafana:3000', type: 'text' },
-            { id: 'grafana_token', label: 'Grafana Token (Optional)', placeholder: 'ey...', type: 'password' }
+            { id: 'url', label: 'Prometheus URL', placeholder: 'http://localhost:9090', type: 'text' },
+            { id: 'token', label: 'Auth Token (Optional)', placeholder: 'Bearer token', type: 'password' }
+        ],
+        links: []
+    },
+    'grafana': {
+        title: 'Connect Grafana',
+        fields: [
+            { id: 'url', label: 'Grafana URL', placeholder: 'http://localhost:3000', type: 'text' },
+            { id: 'token', label: 'Auth Token (Optional)', placeholder: 'Service Account Token', type: 'password' }
         ],
         links: []
     },
