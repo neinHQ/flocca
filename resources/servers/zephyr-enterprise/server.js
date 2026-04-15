@@ -180,6 +180,7 @@ function createZephyrEnterpriseServer() {
             name: z.string(),
             description: z.string().optional(),
             folder_id: z.number().optional(),
+            steps: z.array(z.object({ step: z.string(), data: z.string().optional(), result: z.string().optional() })).optional(),
             confirm: z.boolean().describe('Safety gate')
         },
         async (args) => {
@@ -190,6 +191,19 @@ function createZephyrEnterpriseServer() {
                     ? { tcrCatalogTreeId: args.folder_id, testcase: { name: args.name, description: args.description } }
                     : { name: args.name, description: args.description, folderId: args.folder_id, projectId: sessionConfig.project_id };
                 const data = await zFetch(path, { method: 'POST', body });
+                
+                const testCaseId = (Array.isArray(data) && data[0]?.testcase?.id) || data.id || data.testcase?.id;
+
+                if (args.steps && args.steps.length > 0 && testCaseId) {
+                    const stepsRes = await Promise.all(args.steps.map(s => 
+                        zFetch(`public/rest/api/1.0/teststep/${testCaseId}`, { 
+                            method: 'POST', 
+                            body: { step: s.step, data: s.data || '', result: s.result || '' } 
+                        }).catch(e => ({ error: e.message }))
+                    ));
+                    return { content: [{ type: 'text', text: JSON.stringify({ testcase: data, steps: stepsRes }) }] };
+                }
+
                 return { content: [{ type: 'text', text: JSON.stringify(data) }] };
             } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
         }
@@ -295,6 +309,21 @@ function createZephyrEnterpriseServer() {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED" }] };
         try {
             const data = await zFetch(`public/rest/api/1.0/teststep/${args.test_step_id}`, { method: 'PUT', body: { step: args.step } });
+            return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+        } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
+    });
+
+    server.tool('zephyr_enterprise_add_test_step', { 
+        test_case_id: z.number(), 
+        step: z.string(), 
+        data: z.string().optional(),
+        result: z.string().optional(),
+        confirm: z.boolean() 
+    }, async (args) => {
+        if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED" }] };
+        try {
+            const body = { step: args.step, data: args.data || '', result: args.result || '' };
+            const data = await zFetch(`public/rest/api/1.0/teststep/${args.test_case_id}`, { method: 'POST', body });
             return { content: [{ type: 'text', text: JSON.stringify(data) }] };
         } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
     });
