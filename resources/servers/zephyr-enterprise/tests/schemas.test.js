@@ -21,6 +21,15 @@ describe('Zephyr Enterprise Schema Validation', () => {
             expect(schema.safeParse({ ...valid, confirm: undefined }).success).toBe(false);
         });
     });
+    describe('zephyr_enterprise_create_tcr_folder', () => {
+        it('should require name and confirm', () => {
+            const schema = getValidator('zephyr_enterprise_create_tcr_folder');
+            const valid = { name: 'Folder1', confirm: true };
+            expect(schema.safeParse(valid).success).toBe(true);
+            expect(schema.safeParse({ name: 'F', parent_id: 123, release_id: 456, confirm: true }).success).toBe(true);
+            expect(schema.safeParse({ ...valid, confirm: undefined }).success).toBe(false);
+        });
+    });
 
     describe('zephyr_enterprise_create_release', () => {
         it('should validate name and confirm', () => {

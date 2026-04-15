@@ -51,4 +51,22 @@ describe('Zephyr Enterprise Logic', () => {
             expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/public/rest/api/1.0/testcase'), expect.objectContaining({ method: 'POST' }));
         });
     });
+
+    describe('zephyr_enterprise_create_tcr_folder', () => {
+        it('should block if not confirmed', async () => {
+            const res = await callTool('zephyr_enterprise_create_tcr_folder', { name: 'Folder1', confirm: false });
+            expect(res.isError).toBe(true);
+            expect(res.content[0].text).toContain('CONFIRMATION_REQUIRED');
+        });
+
+        it('should create folder if confirmed (Public API)', async () => {
+            fetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) }); // detection
+            fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 777 }) });
+            
+            const res = await callTool('zephyr_enterprise_create_tcr_folder', { name: 'Folder1', confirm: true });
+            const data = JSON.parse(res.content[0].text);
+            expect(data.id).toBe(777);
+            expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/public/rest/api/1.0/folders'), expect.objectContaining({ method: 'POST' }));
+        });
+    });
 });

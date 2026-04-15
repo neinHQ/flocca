@@ -133,6 +133,30 @@ function createZephyrEnterpriseServer() {
         } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
     });
 
+    server.tool('zephyr_enterprise_create_tcr_folder', { 
+        name: z.string(), 
+        description: z.string().optional(), 
+        release_id: z.number().optional(), 
+        parent_id: z.number().optional(), 
+        confirm: z.boolean() 
+    }, async (args) => {
+        if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Create folder "${args.name}"? Set confirm: true to proceed.` }] };
+        try {
+            const rid = args.release_id || sessionConfig.release_id;
+            const parentId = args.parent_id || 0;
+            const path = sessionConfig.api_family === API_FAMILY.FLEX 
+                ? `flex/services/rest/latest/testcasetree?parentid=${parentId}`
+                : `public/rest/api/1.0/folders`;
+            
+            const payload = sessionConfig.api_family === API_FAMILY.FLEX
+                ? { name: args.name, description: args.description || '', type: parentId === 0 ? 'Phase' : 'Module', releaseId: rid }
+                : { name: args.name, description: args.description || '', projectId: sessionConfig.project_id, releaseId: rid, parentId: parentId };
+
+            const data = await zFetch(path, { method: 'POST', body: payload });
+            return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+        } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
+    });
+
     server.tool('zephyr_enterprise_search_test_cases', { query: z.string(), limit: z.number().optional() }, async (args) => {
         try {
             const path = sessionConfig.api_family === API_FAMILY.FLEX ? `flex/services/rest/latest/advancesearch?word=${args.query}&entitytype=testcase` : 'public/rest/api/1.0/testcases/search';
