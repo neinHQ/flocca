@@ -136,8 +136,9 @@
             </div>
 
             <!-- Summary Stats Row -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-16" id="summary-row">
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-16" id="summary-row">
                 <!-- Skeleton -->
+                <div class="skeleton h-28 rounded-2xl"></div>
                 <div class="skeleton h-28 rounded-2xl"></div>
                 <div class="skeleton h-28 rounded-2xl"></div>
                 <div class="skeleton h-28 rounded-2xl"></div>
@@ -313,6 +314,10 @@
                     <div class="text-4xl font-black text-primary mb-2" id="stat-events">0</div>
                     <div class="text-xs text-gray-400 font-bold uppercase tracking-widest">Total Connections</div>
                 </div>
+                <div class="bg-primary/10 rounded-2xl p-6 border border-primary/30 text-center fade-in fade-in-delay-1">
+                    <div class="text-4xl font-black text-primary mb-2" id="stat-all-time">0</div>
+                    <div class="text-xs text-gray-400 font-bold uppercase tracking-widest">All Time Connections</div>
+                </div>
                 <div class="bg-white/5 rounded-2xl p-6 border border-white/10 text-center fade-in fade-in-delay-1">
                     <div class="text-4xl font-black text-white mb-2" id="stat-mcps">0</div>
                     <div class="text-xs text-gray-400 font-bold uppercase tracking-widest">MCPs in Leaderboard</div>
@@ -324,6 +329,7 @@
             `;
             countUp(document.getElementById('stat-total'), data.totalUsers);
             countUp(document.getElementById('stat-events'), data.totalEvents);
+            countUp(document.getElementById('stat-all-time'), data.allTimeEvents);
             countUp(document.getElementById('stat-mcps'), data.leaderboard.length);
             if (data.leaderboard[0]) {
                 document.getElementById('stat-top').textContent = data.leaderboard[0].label;
@@ -392,7 +398,7 @@
             document.getElementById('leaderboard').innerHTML = Array(8).fill(
                 '<div class="skeleton h-24 rounded-2xl"></div>'
             ).join('');
-            document.getElementById('summary-row').innerHTML = Array(4).fill(
+            document.getElementById('summary-row').innerHTML = Array(5).fill(
                 '<div class="skeleton h-28 rounded-2xl"></div>'
             ).join('');
             document.getElementById('error-state').classList.add('hidden');
@@ -419,7 +425,7 @@
             } catch (err) {
                 console.error('Stats load error:', err);
                 document.getElementById('leaderboard').innerHTML = '';
-                document.getElementById('summary-row').innerHTML = Array(4).fill(
+                document.getElementById('summary-row').innerHTML = Array(5).fill(
                     '<div class="bg-white/5 rounded-2xl h-28 border border-white/10"></div>'
                 ).join('');
                 document.getElementById('error-state').classList.remove('hidden');
