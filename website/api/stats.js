@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   }
 
   const period = req.query.period === 'year' ? 'year' : 'month';
-  const intervalDays = period === 'year' ? 365 : 30;
+  const timeFilter = period === 'year' ? 'toStartOfYear(now())' : 'toStartOfMonth(now())';
 
   const POSTHOG_HOST = process.env.POSTHOG_HOST || 'https://app.posthog.com';
   const POSTHOG_PROJECT_ID = process.env.POSTHOG_PROJECT_ID;
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
               FROM events
               WHERE event = 'mcp_server_connect'
                 AND properties.source = 'user'
-                AND timestamp >= now() - interval ${intervalDays} day
+                AND timestamp >= ${timeFilter}
                 AND properties.server IS NOT NULL
                 AND properties.server != ''
               GROUP BY server
@@ -63,7 +63,7 @@ export default async function handler(req, res) {
               FROM events
               WHERE event = 'mcp_server_connect'
                 AND properties.source = 'user'
-                AND timestamp >= now() - interval ${intervalDays} day
+                AND timestamp >= ${timeFilter}
             `,
           },
         }),
