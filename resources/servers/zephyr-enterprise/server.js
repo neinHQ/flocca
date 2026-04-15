@@ -209,12 +209,32 @@ function createZephyrEnterpriseServer() {
         }
     );
 
-    server.tool('zephyr_enterprise_update_test_case', { id: z.number(), name: z.string().optional(), confirm: z.boolean() }, async (args) => {
+    server.tool('zephyr_enterprise_update_test_case', { 
+        id: z.number(), 
+        name: z.string().optional(), 
+        steps: z.array(z.object({ step: z.string(), data: z.string().optional(), result: z.string().optional() })).optional(),
+        confirm: z.boolean() 
+    }, async (args) => {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED" }] };
         try {
-            const path = sessionConfig.api_family === API_FAMILY.FLEX ? 'flex/services/rest/latest/testcase' : `public/rest/api/1.0/testcases/${args.id}`;
-            const body = sessionConfig.api_family === API_FAMILY.FLEX ? { testcase: { testcaseId: args.id, name: args.name } } : { name: args.name };
-            const data = await zFetch(path, { method: 'PUT', body });
+            let data = { id: args.id };
+
+            if (args.name) {
+                const path = sessionConfig.api_family === API_FAMILY.FLEX ? 'flex/services/rest/latest/testcase' : `public/rest/api/1.0/testcases/${args.id}`;
+                const body = sessionConfig.api_family === API_FAMILY.FLEX ? { testcase: { testcaseId: args.id, name: args.name } } : { name: args.name };
+                data = await zFetch(path, { method: 'PUT', body });
+            }
+
+            if (args.steps && args.steps.length > 0) {
+                const stepsRes = await Promise.all(args.steps.map(s => 
+                    zFetch(`public/rest/api/1.0/teststep/${args.id}`, { 
+                        method: 'POST', 
+                        body: { step: s.step, data: s.data || '', result: s.result || '' } 
+                    }).catch(e => ({ error: e.message }))
+                ));
+                return { content: [{ type: 'text', text: JSON.stringify({ testcase: data, added_steps: stepsRes }) }] };
+            }
+
             return { content: [{ type: 'text', text: JSON.stringify(data) }] };
         } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
     });

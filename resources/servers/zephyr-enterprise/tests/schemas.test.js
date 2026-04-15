@@ -21,6 +21,15 @@ describe('Zephyr Enterprise Schema Validation', () => {
             expect(schema.safeParse({ ...valid, confirm: undefined }).success).toBe(false);
         });
     });
+
+    describe('zephyr_enterprise_update_test_case', () => {
+        it('should validate id, name, steps, and confirm', () => {
+            const schema = getValidator('zephyr_enterprise_update_test_case');
+            expect(schema.safeParse({ id: 1, name: 'T2', confirm: true }).success).toBe(true);
+            expect(schema.safeParse({ id: 1, steps: [{ step: 'one' }], confirm: true }).success).toBe(true);
+            expect(schema.safeParse({ name: 'T2', confirm: true }).success).toBe(false); // id missing
+        });
+    });
     describe('zephyr_enterprise_create_tcr_folder', () => {
         it('should require name and confirm', () => {
             const schema = getValidator('zephyr_enterprise_create_tcr_folder');
