@@ -5,53 +5,41 @@ const axios = require('axios');
 
 const SERVER_INFO = { name: 'sentry-mcp', version: '2.0.0' };
 
-let config = {
-    token: process.env.SENTRY_TOKEN,
-    baseUrl: process.env.SENTRY_BASE_URL || 'https://sentry.io/api/0',
-    orgSlug: process.env.SENTRY_ORG_SLUG,
-    proxyUrl: process.env.FLOCCA_PROXY_URL,
-    userId: process.env.FLOCCA_USER_ID
-};
-
-function normalizeBaseUrl(url) {
-    const raw = String(url || '').trim().replace(/\/+$/, '');
-    if (!raw) return 'https://sentry.io/api/0';
-    if (/\/api\/0$/i.test(raw)) return raw;
-    return `${raw}/api/0`;
-}
-
-function normalizeError(err) {
-    const msg = err.response?.data?.detail || err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: `Sentry Error: ${msg}` }] };
-}
-
 function createSentryServer() {
+    let sessionConfig = {
+        token: process.env.SENTRY_TOKEN,
+        baseUrl: process.env.SENTRY_BASE_URL || 'https://sentry.io/api/0',
+        orgSlug: process.env.SENTRY_ORG_SLUG,
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let api = null;
 
     async function ensureConnected() {
-        if (!config.token && !(config.proxyUrl && config.userId)) {
+        if (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
             // Re-check env vars
-            config.token = process.env.SENTRY_TOKEN;
-            config.orgSlug = process.env.SENTRY_ORG_SLUG;
-            config.baseUrl = process.env.SENTRY_BASE_URL || config.baseUrl;
-            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
-            config.userId = process.env.FLOCCA_USER_ID;
+            sessionConfig.token = process.env.SENTRY_TOKEN || sessionConfig.token;
+            sessionConfig.orgSlug = process.env.SENTRY_ORG_SLUG || sessionConfig.orgSlug;
+            sessionConfig.baseUrl = process.env.SENTRY_BASE_URL || sessionConfig.baseUrl;
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL || sessionConfig.proxyUrl;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID || sessionConfig.userId;
 
-            if (!config.token && !(config.proxyUrl && config.userId)) {
+            if (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
                 throw new Error("Sentry Not Configured. Provide SENTRY_TOKEN or FLOCCA_PROXY_URL.");
             }
         }
 
         if (!api) {
-            let finalBaseUrl = normalizeBaseUrl(config.baseUrl);
+            let finalBaseUrl = normalizeBaseUrl(sessionConfig.baseUrl);
             const headers = { 'Content-Type': 'application/json' };
 
-            if (config.proxyUrl && config.userId) {
-                finalBaseUrl = normalizeBaseUrl(config.proxyUrl);
-                headers['X-Flocca-User-ID'] = config.userId;
+            if (sessionConfig.proxyUrl && sessionConfig.userId) {
+                finalBaseUrl = normalizeBaseUrl(sessionConfig.proxyUrl);
+                headers['X-Flocca-User-ID'] = sessionConfig.userId;
             } else {
-                headers['Authorization'] = `Bearer ${config.token}`;
+                headers['Authorization'] = `Bearer ${sessionConfig.token}`;
             }
 
             api = axios.create({
@@ -64,10 +52,10 @@ function createSentryServer() {
 
     server.tool('sentry_health', {}, async () => {
         try {
-            if (!config.orgSlug) throw new Error("SENTRY_ORG_SLUG required for health check");
+            if (!sessionConfig.orgSlug) throw new Error("SENTRY_ORG_SLUG required for health check");
             const client = await ensureConnected();
-            await client.get(`/organizations/${config.orgSlug}/`);
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, org: config.orgSlug, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+            await client.get(`/organizations/${sessionConfig.orgSlug}/`);
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, org: sessionConfig.orgSlug, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
@@ -79,15 +67,15 @@ function createSentryServer() {
         },
         async (args) => {
             try {
-                config.token = args.token;
-                config.orgSlug = args.org_slug;
-                if (args.base_url) config.baseUrl = args.base_url;
+                sessionConfig.token = args.token;
+                sessionConfig.orgSlug = args.org_slug;
+                if (args.base_url) sessionConfig.baseUrl = args.base_url;
                 api = null; // force re-init
                 const client = await ensureConnected();
-                await client.get(`/organizations/${config.orgSlug}/`);
+                await client.get(`/organizations/${sessionConfig.orgSlug}/`);
                 return { content: [{ type: 'text', text: "Sentry configuration updated and verified." }] };
             } catch (e) {
-                config.token = undefined;
+                sessionConfig.token = undefined;
                 api = null;
                 return normalizeError(e);
             }
@@ -96,9 +84,9 @@ function createSentryServer() {
 
     server.tool('sentry_list_projects', {}, async () => {
         try {
-            if (!config.orgSlug) throw new Error("SENTRY_ORG_SLUG required");
+            if (!sessionConfig.orgSlug) throw new Error("SENTRY_ORG_SLUG required");
             const client = await ensureConnected();
-            const res = await client.get(`/organizations/${config.orgSlug}/projects/`);
+            const res = await client.get(`/organizations/${sessionConfig.orgSlug}/projects/`);
             return {
                 content: [{
                     type: 'text',
@@ -120,9 +108,9 @@ function createSentryServer() {
         },
         async (args) => {
             try {
-                if (!config.orgSlug) throw new Error("SENTRY_ORG_SLUG required");
+                if (!sessionConfig.orgSlug) throw new Error("SENTRY_ORG_SLUG required");
                 const client = await ensureConnected();
-                const res = await client.get(`/projects/${config.orgSlug}/${args.project_slug}/issues/`, {
+                const res = await client.get(`/projects/${sessionConfig.orgSlug}/${args.project_slug}/issues/`, {
                     params: { query: args.query, limit: args.limit }
                 });
                 return {
@@ -154,6 +142,13 @@ function createSentryServer() {
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); api = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

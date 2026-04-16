@@ -6,20 +6,20 @@ const yaml = require('js-yaml');
 
 const SERVER_INFO = { name: 'kubernetes-mcp', version: '2.0.0' };
 
-let sessionConfig = {
-    apiServer: process.env.K8S_API_SERVER,
-    token: process.env.K8S_TOKEN,
-    caData: process.env.K8S_CA_DATA,
-    namespace: process.env.K8S_NAMESPACE || 'default',
-    kubeconfigPath: process.env.K8S_KUBECONFIG
-};
-
-function normalizeError(err) {
-    const msg = err.body ? `${err.body.code} - ${err.body.message}` : (err.message || JSON.stringify(err));
-    return { isError: true, content: [{ type: 'text', text: `Kubernetes Error: ${msg}` }] };
-}
-
 function createKubernetesServer() {
+    let sessionConfig = {
+        apiServer: process.env.K8S_API_SERVER,
+        token: process.env.K8S_TOKEN,
+        caData: process.env.K8S_CA_DATA,
+        namespace: process.env.K8S_NAMESPACE || 'default',
+        kubeconfigPath: process.env.K8S_KUBECONFIG
+    };
+
+    function normalizeError(err) {
+        const msg = err.body ? `${err.body.code} - ${err.body.message}` : (err.message || JSON.stringify(err));
+        return { isError: true, content: [{ type: 'text', text: `Kubernetes Error: ${msg}` }] };
+    }
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let kubeConfig = null;
 
@@ -276,6 +276,15 @@ function createKubernetesServer() {
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        getApis,
+        setConfig: (next) => { Object.assign(sessionConfig, next); kubeConfig = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

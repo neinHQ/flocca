@@ -5,24 +5,38 @@ const mysql = require('mysql2/promise');
 
 const SERVER_INFO = { name: 'mysql-mcp', version: '1.0.0' };
 
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.code || 'MYSQL_ERROR' }) }] };
-}
-
 function createMysqlServer() {
+    let sessionConfig = {
+        host: process.env.MYSQL_HOST,
+        port: parseInt(process.env.MYSQL_PORT || '3306', 10),
+        user: process.env.MYSQL_USER,
+        password: process.env.MYSQL_PASSWORD,
+        database: process.env.MYSQL_DATABASE
+    };
+
+    function normalizeError(err) {
+        const msg = err.message || JSON.stringify(err);
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.code || 'MYSQL_ERROR' }) }] };
+    }
+
     let connection = null;
 
     async function ensureConnected() {
         if (!connection) {
-            const host = process.env.MYSQL_HOST;
-            if (host) {
+            // Re-read env
+            sessionConfig.host = process.env.MYSQL_HOST || sessionConfig.host;
+            sessionConfig.port = parseInt(process.env.MYSQL_PORT || '3306', 10);
+            sessionConfig.user = process.env.MYSQL_USER || sessionConfig.user;
+            sessionConfig.password = process.env.MYSQL_PASSWORD || sessionConfig.password;
+            sessionConfig.database = process.env.MYSQL_DATABASE || sessionConfig.database;
+
+            if (sessionConfig.host) {
                 connection = await mysql.createConnection({
-                    host: host,
-                    port: parseInt(process.env.MYSQL_PORT || '3306', 10),
-                    user: process.env.MYSQL_USER,
-                    password: process.env.MYSQL_PASSWORD,
-                    database: process.env.MYSQL_DATABASE,
+                    host: sessionConfig.host,
+                    port: sessionConfig.port,
+                    user: sessionConfig.user,
+                    password: sessionConfig.password,
+                    database: sessionConfig.database,
                     multipleStatements: true
                 });
             } else {
@@ -47,12 +61,14 @@ function createMysqlServer() {
         async (args) => {
             try {
                 if (connection) await connection.end().catch(() => {});
+                sessionConfig = { ...args };
                 connection = await mysql.createConnection({
                     host: args.host,
                     port: args.port,
                     user: args.user,
                     password: args.password,
-                    database: args.database
+                    database: args.database,
+                    multipleStatements: true
                 });
                 return { content: [{ type: 'text', text: `Successfully connected to MySQL database '${args.database}'.` }] };
             } catch (e) {
@@ -133,19 +149,27 @@ function createMysqlServer() {
                 }
                 let finalQuery = args.text;
                 if (upper.startsWith('SELECT') && !upper.includes('LIMIT')) finalQuery += ' LIMIT 100';
-                const [rows, fields] = await c.query(finalQuery, args.params || []);
+                const [rows] = await c.query(finalQuery, args.params || []);
                 return { content: [{ type: 'text', text: JSON.stringify({ rowCount: Array.isArray(rows) ? rows.length : rows.affectedRows, rows: Array.isArray(rows) ? rows : [] }, null, 2) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); connection = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createMysqlServer();
+    const serverInstance = createMysqlServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('MySQL MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

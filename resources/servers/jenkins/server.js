@@ -5,38 +5,38 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 
 const SERVER_INFO = { name: 'jenkins-mcp', version: '1.0.0' };
 
-let config = {
-    url: process.env.JENKINS_URL,
-    user: process.env.JENKINS_USER,
-    token: process.env.JENKINS_TOKEN
-};
-
-function normalizeError(err) {
-    const data = err.response?.data || {};
-    const msg = data.message || err.message || JSON.stringify(data);
-    return { isError: true, content: [{ type: 'text', text: `Jenkins Error: ${msg}` }] };
-}
-
 function createJenkinsServer() {
+    let sessionConfig = {
+        url: process.env.JENKINS_URL,
+        user: process.env.JENKINS_USER,
+        token: process.env.JENKINS_TOKEN
+    };
+
+    function normalizeError(err) {
+        const data = err.response?.data || {};
+        const msg = data.message || err.message || JSON.stringify(data);
+        return { isError: true, content: [{ type: 'text', text: `Jenkins Error: ${msg}` }] };
+    }
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let api = null;
     let crumb = null;
 
     async function ensureConnected() {
-        if (!config.url || !config.user || !config.token) {
-            config.url = process.env.JENKINS_URL;
-            config.user = process.env.JENKINS_USER;
-            config.token = process.env.JENKINS_TOKEN;
+        if (!sessionConfig.url || !sessionConfig.user || !sessionConfig.token) {
+            sessionConfig.url = process.env.JENKINS_URL;
+            sessionConfig.user = process.env.JENKINS_USER;
+            sessionConfig.token = process.env.JENKINS_TOKEN;
 
-            if (!config.url || !config.user || !config.token) {
+            if (!sessionConfig.url || !sessionConfig.user || !sessionConfig.token) {
                 throw new Error("Jenkins Not Configured. Set JENKINS_URL, JENKINS_USER, and JENKINS_TOKEN.");
             }
         }
 
         if (!api) {
-            const auth = Buffer.from(`${config.user}:${config.token}`).toString('base64');
+            const auth = Buffer.from(`${sessionConfig.user}:${sessionConfig.token}`).toString('base64');
             api = axios.create({
-                baseURL: config.url.replace(/\/$/, ''),
+                baseURL: sessionConfig.url.replace(/\/$/, ''),
                 headers: {
                     'Authorization': `Basic ${auth}`,
                     'Accept': 'application/json'
@@ -136,13 +136,21 @@ function createJenkinsServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); api = null; crumb = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createJenkinsServer();
+    const serverInstance = createJenkinsServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('Jenkins MCP server running on stdio');
     }).catch(error => {
         console.error('Server error:', error);

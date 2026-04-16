@@ -8,59 +8,89 @@ const execAsync = util.promisify(exec);
 
 const SERVER_INFO = { name: 'github-mcp', version: '2.0.0' };
 
-let config = {
-    token: process.env.GITHUB_PERSONAL_ACCESS_TOKEN || process.env.GITHUB_TOKEN,
-    proxyUrl: process.env.FLOCCA_PROXY_URL,
-    userId: process.env.FLOCCA_USER_ID
-};
-
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: `GitHub Error: ${msg}` }] };
-}
-
 function createGitHubServer() {
+    let sessionConfig = {
+        token: process.env.GITHUB_PERSONAL_ACCESS_TOKEN || process.env.GITHUB_TOKEN,
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID,
+        baseUrl: process.env.GITHUB_API_URL || 'https://api.github.com'
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let kit = null;
 
-    async function ensureConnected() {
-        if (!config.token && !(config.proxyUrl && config.userId)) {
-            // Re-check env vars
-            config.token = process.env.GITHUB_PERSONAL_ACCESS_TOKEN || process.env.GITHUB_TOKEN;
-            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
-            config.userId = process.env.FLOCCA_USER_ID;
+    function getOctokitConfigs() {
+        const configs = [];
+        const { token, proxyUrl, userId, baseUrl } = sessionConfig;
 
-            if (!config.token && !(config.proxyUrl && config.userId)) {
+        // Candidate 1: Proxy (Highest Priority if configured)
+        if (proxyUrl && userId) {
+            configs.push({
+                baseUrl: proxyUrl.replace(/\/+$/, ''),
+                userAgent: 'flocca-vscode',
+                request: {
+                    fetch: (url, opts) => {
+                        opts.headers = opts.headers || {};
+                        opts.headers['X-Flocca-User-ID'] = userId;
+                        return fetch(url, opts);
+                    }
+                }
+            });
+        }
+
+        // Candidate 2: Direct with Token
+        if (token) {
+            configs.push({
+                auth: token,
+                baseUrl: baseUrl.replace(/\/+$/, ''),
+                userAgent: 'flocca-vscode'
+            });
+        }
+
+        return configs;
+    }
+
+    async function ensureConnected() {
+        const configs = getOctokitConfigs();
+        if (configs.length === 0) {
+            // Re-check env for late configuration
+            sessionConfig.token = process.env.GITHUB_PERSONAL_ACCESS_TOKEN || process.env.GITHUB_TOKEN;
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID;
+            const retryConfigs = getOctokitConfigs();
+            if (retryConfigs.length === 0) {
                 throw new Error("GitHub Not Configured. Provide GITHUB_TOKEN or FLOCCA_PROXY_URL.");
             }
+            return new Octokit(retryConfigs[0]);
         }
 
-        if (!kit) {
-            if (config.proxyUrl && config.userId) {
-                kit = new Octokit({
-                    baseUrl: config.proxyUrl,
-                    userAgent: 'flocca-vscode',
-                    request: {
-                        fetch: (url, opts) => {
-                            opts.headers = opts.headers || {};
-                            opts.headers['X-Flocca-User-ID'] = config.userId;
-                            return fetch(url, opts);
-                        }
-                    }
-                });
-            } else {
-                kit = new Octokit({ auth: config.token });
-            }
-        }
+        // Return first valid config for now, Octokit doesn't catch errors until request
+        if (!kit) kit = new Octokit(configs[0]);
         return kit;
     }
 
+    function normalizeError(err) {
+        const msg = err.message || JSON.stringify(err);
+        return { isError: true, content: [{ type: 'text', text: `GitHub Error: ${msg}` }] };
+    }
+
+    // --- TOOLS ---
     server.tool('github_health', {}, async () => {
         try {
             const k = await ensureConnected();
-            await k.rest.rateLimit.get();
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+            const { data } = await k.rest.rateLimit.get();
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, rateLimit: data.rate, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (e) { return normalizeError(e); }
+    });
+
+    server.tool('github_configure', {
+        token: z.string().optional(),
+        baseUrl: z.string().optional()
+    }, async (args) => {
+        if (args.token) sessionConfig.token = args.token;
+        if (args.baseUrl) sessionConfig.baseUrl = args.baseUrl;
+        kit = null; // Reset client
+        return { content: [{ type: 'text', text: "GitHub configured successfully" }] };
     });
 
     server.tool('search_repositories',
@@ -144,6 +174,7 @@ function createGitHubServer() {
         }
     );
 
+    // Git CLI Tools (remain unchanged in logic, but wrapped in factory)
     server.tool('git_add',
         { files: z.array(z.string()).describe('List of files to add, or ["."] for all') },
         async (args) => {
@@ -237,13 +268,21 @@ function createGitHubServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        getOctokitConfigs,
+        setConfig: (next) => { sessionConfig = { ...sessionConfig, ...next }; kit = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createGitHubServer();
+    const serverInstance = createGitHubServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('GitHub MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

@@ -27,9 +27,10 @@ function createZephyrServer() {
 
     async function ensureConnected() {
         if (!sessionConfig.site_url || !sessionConfig.token) {
-            sessionConfig.site_url = normalizeSiteUrl(process.env.ZEPHYR_SITE_URL);
-            sessionConfig.token = process.env.ZEPHYR_TOKEN;
-            sessionConfig.jira_project_key = process.env.ZEPHYR_JIRA_PROJECT_KEY;
+            // Re-read env for dynamic updates
+            sessionConfig.site_url = normalizeSiteUrl(process.env.ZEPHYR_SITE_URL || sessionConfig.site_url);
+            sessionConfig.token = process.env.ZEPHYR_TOKEN || sessionConfig.token;
+            sessionConfig.jira_project_key = process.env.ZEPHYR_JIRA_PROJECT_KEY || sessionConfig.jira_project_key;
         }
         if (!sessionConfig.identity && sessionConfig.token) {
             try {
@@ -165,6 +166,14 @@ function createZephyrServer() {
             return { content: [{ type: 'text', text: JSON.stringify(data) }] };
         } catch (e) { return normalizeError(e.message); }
     });
+
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        zephyrFetch,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

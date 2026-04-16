@@ -18,7 +18,7 @@ const z = require("zod");
 const SERVER_INFO = { name: "azure-mcp", version: "2.0.0" };
 
 function createAzureServer() {
-    let config = {
+    let sessionConfig = {
         tenantId: process.env.AZURE_TENANT_ID,
         subscriptionId: process.env.AZURE_SUBSCRIPTION_ID,
         token: process.env.AZURE_ACCESS_TOKEN
@@ -31,21 +31,33 @@ function createAzureServer() {
         }
     }
 
+    async function ensureConfigured() {
+        if (!sessionConfig.token || !sessionConfig.subscriptionId) {
+            // Re-read env for dynamic updates
+            sessionConfig.tenantId = process.env.AZURE_TENANT_ID;
+            sessionConfig.subscriptionId = process.env.AZURE_SUBSCRIPTION_ID;
+            sessionConfig.token = process.env.AZURE_ACCESS_TOKEN;
+
+            if (!sessionConfig.token || !sessionConfig.subscriptionId) {
+                throw new Error("Azure Not Configured. Provide Subscription ID and Access Token.");
+            }
+        }
+    }
+
     function getCreds() {
-        if (!config.token) throw new Error("Azure Not Configured. Call azure.configure.");
-        return new StaticTokenCredential(config.token);
+        return new StaticTokenCredential(sessionConfig.token);
     }
 
     // Clients
-    function getResourceClient() { return new ResourceManagementClient(getCreds(), config.subscriptionId); }
-    function getComputeClient() { return new ComputeManagementClient(getCreds(), config.subscriptionId); }
-    function getWebClient() { return new WebSiteManagementClient(getCreds(), config.subscriptionId); }
-    function getAksClient() { return new ContainerServiceClient(getCreds(), config.subscriptionId); }
+    function getResourceClient() { return new ResourceManagementClient(getCreds(), sessionConfig.subscriptionId); }
+    function getComputeClient() { return new ComputeManagementClient(getCreds(), sessionConfig.subscriptionId); }
+    function getWebClient() { return new WebSiteManagementClient(getCreds(), sessionConfig.subscriptionId); }
+    function getAksClient() { return new ContainerServiceClient(getCreds(), sessionConfig.subscriptionId); }
     function getMetricsClient() { return new MetricsQueryClient(getCreds()); }
     function getLogsClient() { return new LogsQueryClient(getCreds()); }
-    function getSqlClient() { return new SqlManagementClient(getCreds(), config.subscriptionId); }
-    function getCosmosClient() { return new CosmosDBManagementClient(getCreds(), config.subscriptionId); }
-    function getNetworkClient() { return new NetworkManagementClient(getCreds(), config.subscriptionId); }
+    function getSqlClient() { return new SqlManagementClient(getCreds(), sessionConfig.subscriptionId); }
+    function getCosmosClient() { return new CosmosDBManagementClient(getCreds(), sessionConfig.subscriptionId); }
+    function getNetworkClient() { return new NetworkManagementClient(getCreds(), sessionConfig.subscriptionId); }
     function getVaultClient(url) { return new SecretClient(url, getCreds()); }
     function getOpenAIClient(endpoint) { return new OpenAIClient(endpoint, getCreds()); }
     function getBlobClient(accountName) { return new BlobServiceClient(`https://${accountName}.blob.core.windows.net`, getCreds()); }
@@ -66,26 +78,27 @@ function createAzureServer() {
     // --- CORE ---
     registerTool("azure_health", ["azure.health"], {}, async () => {
         try {
+            await ensureConfigured();
             const client = getResourceClient();
             for await (const rg of client.resourceGroups.list()) { break; }
-            return { content: [{ type: "text", text: JSON.stringify({ ok: true, verified: true }) }] };
+            return { content: [{ type: "text", text: JSON.stringify({ ok: true, subscription: sessionConfig.subscriptionId, verified: true }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
     registerTool("azure_configure", ["azure.configure"], {
-        token: z.string(),
-        subscription_id: z.string(),
+        token: z.string().optional(),
+        subscription_id: z.string().optional(),
         tenant_id: z.string().optional()
     }, async (args) => {
-        config.token = args.token;
-        config.subscriptionId = args.subscription_id;
-        if (args.tenant_id) config.tenantId = args.tenant_id;
+        if (args.token) sessionConfig.token = args.token;
+        if (args.subscription_id) sessionConfig.subscriptionId = args.subscription_id;
+        if (args.tenant_id) sessionConfig.tenantId = args.tenant_id;
         try {
+            await ensureConfigured();
             const client = getResourceClient();
             for await (const rg of client.resourceGroups.list()) { break; }
-            return { content: [{ type: "text", text: JSON.stringify({ ok: true, subscription: config.subscriptionId, verified: true }) }] };
+            return { content: [{ type: "text", text: JSON.stringify({ ok: true, subscription: sessionConfig.subscriptionId, verified: true }) }] };
         } catch (e) {
-            config.token = undefined;
             return normalizeError(e);
         }
     });
@@ -338,22 +351,26 @@ function createAzureServer() {
     });
 
     // Final connector
-    return {
-        server,
-        __test: {
-            normalizeError,
-            setConfig: (next) => { config = { ...config, ...next }; },
-            getConfig: () => ({ ...config })
-        }
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConfigured,
+        getCreds,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
     };
+
+    return server;
 }
 
-const { server, __test } = createAzureServer();
-
 if (require.main === module) {
+    const serverInstance = createAzureServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).catch(console.error);
+    serverInstance.connect(transport).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
     console.error("Azure MCP Server running on stdio");
 }
 
-module.exports = { createAzureServer, __test };
+module.exports = { createAzureServer };

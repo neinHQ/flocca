@@ -7,76 +7,84 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 
 const SERVER_INFO = { name: 'docker-mcp', version: '1.1.0' };
 
-let sessionConfig = {
-    daemon: process.env.DOCKER_HOST
-        ? (process.env.DOCKER_HOST.startsWith('tcp://')
-            ? { type: 'tcp', host: process.env.DOCKER_HOST.replace('tcp://', '') }
-            : { type: 'local_socket', socket_path: process.env.DOCKER_HOST.replace('unix://', '') })
-        : { type: 'local_socket', socket_path: '/var/run/docker.sock' }
-};
-
-function normalizeError(message, code = 'DOCKER_ERROR', details = '') {
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details } }) }] };
-}
-
-function mapDockerError(stderr = '') {
-    const msg = stderr.trim() || 'Docker command failed';
-    if (stderr.includes('permission denied')) {
-        return normalizeError('Docker daemon access denied', 'PERMISSION_DENIED', 'Check socket permissions or add user to docker group.');
-    }
-    if (stderr.includes('Cannot connect to the Docker daemon')) {
-        return normalizeError('Cannot connect to Docker daemon', 'DAEMON_UNREACHABLE', 'Verify docker is running and the configured host/socket is reachable.');
-    }
-    if (stderr.includes('No such container')) {
-        return normalizeError('Container not found', 'CONTAINER_NOT_FOUND', 'Verify the container ID or name exists.');
-    }
-    if (stderr.includes('No such image')) {
-        return normalizeError('Image not found', 'IMAGE_MISSING', 'Try pulling the image first using docker_pull_image.');
-    }
-    return normalizeError(msg);
-}
-
-function buildDaemonArgs() {
-    if (!sessionConfig.daemon) return [];
-    if (sessionConfig.daemon.type === 'local_socket') {
-        return ['-H', `unix://${sessionConfig.daemon.socket_path}`];
-    }
-    if (sessionConfig.daemon.type === 'tcp') {
-        return ['-H', sessionConfig.daemon.host];
-    }
-    return [];
-}
-
-function runDocker(args, { input } = {}) {
-    return new Promise((resolve) => {
-        const fullArgs = [...buildDaemonArgs(), ...args];
-        const child = spawn('docker', fullArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
-        let stdout = '';
-        let stderr = '';
-        if (input) {
-            child.stdin.write(input);
-            child.stdin.end();
-        }
-        child.stdout.on('data', (d) => { stdout += d.toString(); });
-        child.stderr.on('data', (d) => { stderr += d.toString(); });
-        child.on('close', (code) => resolve({ code, stdout, stderr }));
-    });
-}
-
-async function validateDocker() {
-    const res = await runDocker(['version', '--format', '{{.Server.Version}}']);
-    if (res.code !== 0) throw new Error(res.stderr.trim() || 'Docker version check failed');
-    return res.stdout.trim();
-}
-
 function createDockerServer() {
+    let sessionConfig = {
+        daemon: process.env.DOCKER_HOST
+            ? (process.env.DOCKER_HOST.startsWith('tcp://')
+                ? { type: 'tcp', host: process.env.DOCKER_HOST.replace('tcp://', '') }
+                : { type: 'local_socket', socket_path: process.env.DOCKER_HOST.replace('unix://', '') })
+            : { type: 'local_socket', socket_path: '/var/run/docker.sock' }
+    };
+
+    function normalizeError(message, code = 'DOCKER_ERROR', details = '') {
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details } }) }] };
+    }
+
+    function mapDockerError(stderr = '') {
+        const msg = stderr.trim() || 'Docker command failed';
+        if (stderr.includes('permission denied')) {
+            return normalizeError('Docker daemon access denied', 'PERMISSION_DENIED', 'Check socket permissions or add user to docker group.');
+        }
+        if (stderr.includes('Cannot connect to the Docker daemon')) {
+            return normalizeError('Cannot connect to Docker daemon', 'DAEMON_UNREACHABLE', 'Verify docker is running and the configured host/socket is reachable.');
+        }
+        if (stderr.includes('No such container')) {
+            return normalizeError('Container not found', 'CONTAINER_NOT_FOUND', 'Verify the container ID or name exists.');
+        }
+        if (stderr.includes('No such image')) {
+            return normalizeError('Image not found', 'IMAGE_MISSING', 'Try pulling the image first using docker_pull_image.');
+        }
+        return normalizeError(msg);
+    }
+
+    function buildDaemonArgs() {
+        if (!sessionConfig.daemon) return [];
+        if (sessionConfig.daemon.type === 'local_socket') {
+            return ['-H', `unix://${sessionConfig.daemon.socket_path}`];
+        }
+        if (sessionConfig.daemon.type === 'tcp') {
+            return ['-H', sessionConfig.daemon.host];
+        }
+        return [];
+    }
+
+    function runDocker(args, { input } = {}) {
+        return new Promise((resolve) => {
+            const daemonArgs = buildDaemonArgs();
+            const fullArgs = [...daemonArgs, ...args];
+            const child = spawn('docker', fullArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+            let stdout = '';
+            let stderr = '';
+            if (input) {
+                child.stdin.write(input);
+                child.stdin.end();
+            }
+            child.stdout.on('data', (d) => { stdout += d.toString(); });
+            child.stderr.on('data', (d) => { stderr += d.toString(); });
+            child.on('close', (code) => resolve({ code, stdout, stderr }));
+        });
+    }
+
+    async function ensureConnected() {
+        if (!sessionConfig.daemon || (!sessionConfig.daemon.socket_path && !sessionConfig.daemon.host)) {
+            // Re-read env
+            sessionConfig.daemon = process.env.DOCKER_HOST
+                ? (process.env.DOCKER_HOST.startsWith('tcp://')
+                    ? { type: 'tcp', host: process.env.DOCKER_HOST.replace('tcp://', '') }
+                    : { type: 'local_socket', socket_path: process.env.DOCKER_HOST.replace('unix://', '') })
+                : { type: 'local_socket', socket_path: '/var/run/docker.sock' };
+        }
+        const res = await runDocker(['version', '--format', '{{.Server.Version}}']);
+        if (res.code !== 0) throw new Error(res.stderr.trim() || 'Docker version check failed');
+        return res.stdout.trim();
+    }
     const server = new McpServer(SERVER_INFO);
 
     // --- Core Tools ---
 
     server.tool('docker_health', {}, async () => {
         try {
-            const version = await validateDocker();
+            const version = await ensureConnected();
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, serverVersion: version }) }] };
         } catch (err) {
             return normalizeError('Failed to connect to Docker daemon', 'DAEMON_UNREACHABLE', err.message);
@@ -94,10 +102,9 @@ function createDockerServer() {
         async (args) => {
             sessionConfig.daemon = args.daemon;
             try {
-                const version = await validateDocker();
+                const version = await ensureConnected();
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, serverVersion: version }) }] };
             } catch (err) {
-                sessionConfig.daemon = undefined;
                 return normalizeError('Failed to connect to Docker daemon', 'DAEMON_UNREACHABLE', err.message);
             }
         }
@@ -378,14 +385,24 @@ function createDockerServer() {
         return { content: [{ type: 'text', text: JSON.stringify({ volumes }) }] };
     });
 
+    // Final connector
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        mapDockerError,
+        runDocker,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
-// Only start the server if this file is run directly
 if (require.main === module) {
-    const server = createDockerServer();
+    const serverInstance = createDockerServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('Docker MCP server running on stdio');
     }).catch((err) => {
         console.error('Docker MCP server failed to start:', err);
@@ -393,5 +410,4 @@ if (require.main === module) {
     });
 }
 
-// Export for testing
-module.exports = { createDockerServer, runDocker, mapDockerError, sessionConfig };
+module.exports = { createDockerServer };

@@ -8,51 +8,51 @@ const GUARDRAILS = {
     maxPoints: 5000
 };
 
-let config = {
-    url: process.env.PROMETHEUS_URL,
-    token: process.env.PROMETHEUS_TOKEN
-};
+function createPrometheusServer() {
+    let sessionConfig = {
+        url: process.env.PROMETHEUS_URL,
+        token: process.env.PROMETHEUS_TOKEN
+    };
 
-function normalizeError(message, details) {
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, details } }) }] };
-}
-
-function parseDurationSeconds(dur) {
-    if (!dur) return undefined;
-    const m = dur.match(/^(\d+)([smhdw])$/);
-    if (!m) return undefined;
-    const n = Number(m[1]);
-    const unit = m[2];
-    const map = { s: 1, m: 60, h: 3600, d: 86400, w: 604800 };
-    return n * map[unit];
-}
-
-function enforceRangeGuard(start, end, step) {
-    const s = Date.parse(start);
-    const e = Date.parse(end);
-    if (Number.isNaN(s) || Number.isNaN(e)) return;
-    const diff = (e - s) / 1000;
-    if (diff > GUARDRAILS.maxRangeSeconds) {
-        throw new Error('QueryTooBroad: time range exceeds limit (3h)');
+    function normalizeError(message, details) {
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, details } }) }] };
     }
-    if (step) {
-        const stepSeconds = parseDurationSeconds(step);
-        if (stepSeconds && diff / stepSeconds > GUARDRAILS.maxPoints) {
-            throw new Error('QueryTooBroad: too many points (limit 5000)');
+
+    function parseDurationSeconds(dur) {
+        if (!dur) return undefined;
+        const m = dur.match(/^(\d+)([smhdw])$/);
+        if (!m) return undefined;
+        const n = Number(m[1]);
+        const unit = m[2];
+        const map = { s: 1, m: 60, h: 3600, d: 86400, w: 604800 };
+        return n * map[unit];
+    }
+
+    function enforceRangeGuard(start, end, step) {
+        const s = Date.parse(start);
+        const e = Date.parse(end);
+        if (Number.isNaN(s) || Number.isNaN(e)) return;
+        const diff = (e - s) / 1000;
+        if (diff > GUARDRAILS.maxRangeSeconds) {
+            throw new Error('QueryTooBroad: time range exceeds limit (3h)');
+        }
+        if (step) {
+            const stepSeconds = parseDurationSeconds(step);
+            if (stepSeconds && diff / stepSeconds > GUARDRAILS.maxPoints) {
+                throw new Error('QueryTooBroad: too many points (limit 5000)');
+            }
         }
     }
-}
 
-function createPrometheusServer() {
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     async function ensureConnected() {
-        if (!config.url) {
-            config.url = process.env.PROMETHEUS_URL;
-            config.token = process.env.PROMETHEUS_TOKEN;
-            if (!config.url) throw new Error("Prometheus Not Configured. Provide PROMETHEUS_URL.");
+        if (!sessionConfig.url) {
+            sessionConfig.url = process.env.PROMETHEUS_URL;
+            sessionConfig.token = process.env.PROMETHEUS_TOKEN;
+            if (!sessionConfig.url) throw new Error("Prometheus Not Configured. Provide PROMETHEUS_URL.");
         }
-        return config;
+        return sessionConfig;
     }
 
     async function promFetch(pathPart, { method = 'GET', query, body } = {}) {
@@ -162,13 +162,23 @@ function createPrometheusServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        promFetch,
+        ensureConnected,
+        enforceRangeGuard,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createPrometheusServer();
+    const serverInstance = createPrometheusServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('Prometheus MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

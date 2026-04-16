@@ -7,37 +7,46 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const { z } = require('zod');
 
 // Configuration
-let config = {
-    projectRoot: process.env.CYPRESS_PROJECT_ROOT,
-    execPath: process.env.CYPRESS_EXEC_PATH || 'npx',
-    execArgs: process.env.CYPRESS_EXEC_ARGS ? JSON.parse(process.env.CYPRESS_EXEC_ARGS) : ['cypress'],
-    browser: process.env.CYPRESS_BROWSER || 'chrome',
-    env: process.env.CYPRESS_ENV ? JSON.parse(process.env.CYPRESS_ENV) : {}
-};
-
-function normalizeError(message, code = 'CYPRESS_ERROR', details = '') {
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details } }) }] };
-}
-
-function runCypress(args, cwd) {
-    return new Promise((resolve) => {
-        const cmd = config.execPath;
-        const cliArgs = [...(config.execArgs || []), ...args];
-        const env = { ...process.env, ...config.env };
-
-        let stdout = '';
-        let stderr = '';
-
-        const child = cp.spawn(cmd, cliArgs, { cwd, env, shell: true });
-        child.stdout.on('data', d => stdout += d.toString());
-        child.stderr.on('data', d => stderr += d.toString());
-        child.on('close', (code) => {
-            resolve({ code, stdout, stderr });
-        });
-    });
-}
-
 function createCypressServer() {
+    let sessionConfig = {
+        projectRoot: process.env.CYPRESS_PROJECT_ROOT,
+        execPath: process.env.CYPRESS_EXEC_PATH || 'npx',
+        execArgs: process.env.CYPRESS_EXEC_ARGS ? JSON.parse(process.env.CYPRESS_EXEC_ARGS) : ['cypress'],
+        browser: process.env.CYPRESS_BROWSER || 'chrome',
+        env: process.env.CYPRESS_ENV ? JSON.parse(process.env.CYPRESS_ENV) : {}
+    };
+
+    function normalizeError(message, code = 'CYPRESS_ERROR', details = '') {
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, code, details } }) }] };
+    }
+
+    function runCypress(args, cwd) {
+        return new Promise((resolve) => {
+            const cmd = sessionConfig.execPath;
+            const cliArgs = [...(sessionConfig.execArgs || []), ...args];
+            const env = { ...process.env, ...sessionConfig.env };
+
+            let stdout = '';
+            let stderr = '';
+
+            const child = cp.spawn(cmd, cliArgs, { cwd, env, shell: true });
+            child.stdout.on('data', d => stdout += d.toString());
+            child.stderr.on('data', d => stderr += d.toString());
+            child.on('close', (code) => {
+                resolve({ code, stdout, stderr });
+            });
+        });
+    }
+
+    function ensureConfigured() {
+        if (!sessionConfig.projectRoot) {
+            sessionConfig.projectRoot = process.env.CYPRESS_PROJECT_ROOT;
+            sessionConfig.execPath = process.env.CYPRESS_EXEC_PATH || sessionConfig.execPath;
+            sessionConfig.browser = process.env.CYPRESS_BROWSER || sessionConfig.browser;
+            // env and execArgs are more complex, keep as is unless explicitly set
+        }
+        return sessionConfig;
+    }
     const server = new McpServer({
         name: "cypress-mcp",
         version: "1.1.0"
@@ -48,10 +57,11 @@ function createCypressServer() {
     server.tool("cypress_health", 
         {}, 
         async () => {
-            const healthInfo = { ok: true, configured: !!config.projectRoot };
-            if (config.projectRoot) {
+            const conf = ensureConfigured();
+            const healthInfo = { ok: true, configured: !!conf.projectRoot };
+            if (conf.projectRoot) {
                 try {
-                    const verify = await runCypress(['verify'], config.projectRoot);
+                    const verify = await runCypress(['verify'], conf.projectRoot);
                     healthInfo.verified = verify.code === 0;
                     if (verify.code !== 0) healthInfo.details = verify.stderr;
                 } catch (e) {
@@ -71,15 +81,16 @@ function createCypressServer() {
             env: z.record(z.string(), z.any()).optional()
         },
         async (args) => {
-            if (args.project_root) config.projectRoot = args.project_root;
-            if (args.browser) config.browser = args.browser;
-            if (args.exec_path) config.execPath = args.exec_path;
-            if (args.env) config.env = args.env;
+            if (args.project_root) sessionConfig.projectRoot = args.project_root;
+            if (args.browser) sessionConfig.browser = args.browser;
+            if (args.exec_path) sessionConfig.execPath = args.exec_path;
+            if (args.env) sessionConfig.env = args.env;
 
-            if (config.projectRoot && !fs.existsSync(config.projectRoot)) {
+            const conf = sessionConfig;
+            if (conf.projectRoot && !fs.existsSync(conf.projectRoot)) {
                 return normalizeError('Project root does not exist', 'INVALID_CONFIG');
             }
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, config }) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, config: conf }) }] };
         }
     );
 
@@ -88,11 +99,12 @@ function createCypressServer() {
     server.tool("cypress_list_specs", 
         {}, 
         async () => {
-            if (!config.projectRoot) return normalizeError('Configure project_root first');
+            const conf = ensureConfigured();
+            if (!conf.projectRoot) return normalizeError('Configure project_root first');
             const patterns = ['**/*.cy.{js,ts,jsx,tsx}', '**/*.spec.{js,ts,jsx,tsx}'];
             const specs = [];
             for (const pattern of patterns) {
-                const found = glob.sync(pattern, { cwd: config.projectRoot, ignore: 'node_modules/**' });
+                const found = glob.sync(pattern, { cwd: conf.projectRoot, ignore: 'node_modules/**' });
                 specs.push(...found);
             }
             const uniqueSpecs = [...new Set(specs)].sort();
@@ -108,12 +120,13 @@ function createCypressServer() {
             record: z.boolean().optional()
         },
         async (args) => {
-            if (!config.projectRoot) return normalizeError('Configure project_root first');
-            const runArgs = ['run', '--spec', args.spec, '--browser', args.browser || config.browser, '--reporter', 'json'];
+            const conf = ensureConfigured();
+            if (!conf.projectRoot) return normalizeError('Configure project_root first');
+            const runArgs = ['run', '--spec', args.spec, '--browser', args.browser || conf.browser, '--reporter', 'json'];
             if (args.headed) runArgs.push('--headed');
             if (args.record) runArgs.push('--record');
 
-            const runRes = await runCypress(runArgs, config.projectRoot);
+            const runRes = await runCypress(runArgs, conf.projectRoot);
 
             let jsonResult = {};
             try {
@@ -146,9 +159,10 @@ function createCypressServer() {
     server.tool("cypress_list_browsers", 
         {}, 
         async () => {
-            if (!config.projectRoot) return normalizeError('Configure project_root first');
+            const conf = ensureConfigured();
+            if (!conf.projectRoot) return normalizeError('Configure project_root first');
             try {
-                const res = await runCypress(['info'], config.projectRoot);
+                const res = await runCypress(['info'], conf.projectRoot);
                 const browsersMatch = res.stdout.match(/Browsers:[\s\S]*?(?=\n\n|\n[A-Z])/i);
                 return { content: [{ type: 'text', text: browsersMatch ? browsersMatch[0] : res.stdout }] };
             } catch (e) {
@@ -160,8 +174,9 @@ function createCypressServer() {
     server.tool("cypress_verify", 
         {}, 
         async () => {
-            if (!config.projectRoot) return normalizeError('Configure project_root first');
-            const res = await runCypress(['verify'], config.projectRoot);
+            const conf = ensureConfigured();
+            if (!conf.projectRoot) return normalizeError('Configure project_root first');
+            const res = await runCypress(['verify'], conf.projectRoot);
             return { content: [{ type: 'text', text: res.stdout + res.stderr }] };
         }
     );
@@ -189,13 +204,22 @@ function createCypressServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        runCypress,
+        ensureConfigured,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createCypressServer();
+    const serverInstance = createCypressServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('Cypress MCP server running on stdio');
     }).catch((error) => {
         console.error("Server error:", error);
@@ -203,4 +227,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { createCypressServer, config };
+module.exports = { createCypressServer };

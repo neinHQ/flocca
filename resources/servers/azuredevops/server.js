@@ -6,10 +6,12 @@ const SERVER_INFO = { name: 'azuredevops-mcp', version: '2.0.0' };
 const API_VERSION = '7.1-preview.1';
 
 function createAzureDevOpsServer() {
-    const sessionConfig = {
+    let sessionConfig = {
         serviceUrl: process.env.AZURE_DEVOPS_ORG_URL,
         project: process.env.AZURE_DEVOPS_PROJECT,
-        token: process.env.AZURE_DEVOPS_TOKEN
+        token: process.env.AZURE_DEVOPS_TOKEN,
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
     };
 
     class AzureError extends Error {
@@ -23,7 +25,7 @@ function createAzureDevOpsServer() {
 
     function normalizeServiceUrl(serviceUrl, project) {
         const raw = String(serviceUrl || '').trim().replace(/\/+$/, '');
-        if (!raw) return raw;
+        if (!raw) return 'https://dev.azure.com';
         let normalized = raw
             .replace(/\/_apis(?:\/.*)?$/i, '')
             .replace(/\/_git(?:\/.*)?$/i, '');
@@ -34,16 +36,35 @@ function createAzureDevOpsServer() {
         return normalized.replace(/\/+$/, '');
     }
 
-    function requireConfigured() {
-        if (!sessionConfig.serviceUrl || !sessionConfig.project || !sessionConfig.token) {
-            throw new AzureError('Azure DevOps is not configured. Call azuredevops_configure first.', { status: 400 });
+    function getHeaderCandidates() {
+        const candidates = [];
+        const { token, userId, proxyUrl } = sessionConfig;
+
+        if (proxyUrl && userId) {
+            candidates.push({ 'X-Flocca-User-ID': userId });
         }
+
+        if (token) {
+            const auth = Buffer.from(`:${token}`).toString('base64');
+            candidates.push({ 'Authorization': `Basic ${auth}` });
+        }
+
+        return candidates;
     }
 
-    function authHeaders() {
-        const token = sessionConfig.token || '';
-        const auth = Buffer.from(`:${token}`).toString('base64');
-        return { Authorization: `Basic ${auth}` };
+    async function ensureConfigured() {
+        if (!sessionConfig.serviceUrl || !sessionConfig.project || getHeaderCandidates().length === 0) {
+            // Re-read env for late configuration
+            if (!sessionConfig.serviceUrl) sessionConfig.serviceUrl = process.env.AZURE_DEVOPS_ORG_URL;
+            if (!sessionConfig.project) sessionConfig.project = process.env.AZURE_DEVOPS_PROJECT;
+            if (!sessionConfig.token) sessionConfig.token = process.env.AZURE_DEVOPS_TOKEN;
+            if (!sessionConfig.proxyUrl) sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            if (!sessionConfig.userId) sessionConfig.userId = process.env.FLOCCA_USER_ID;
+
+            if (!sessionConfig.serviceUrl || !sessionConfig.project || getHeaderCandidates().length === 0) {
+                throw new AzureError('Azure DevOps is not configured. Provide AZURE_DEVOPS_ORG_URL, AZURE_DEVOPS_PROJECT, and AZURE_DEVOPS_TOKEN (or Proxy).', { status: 400 });
+            }
+        }
     }
 
     function unifyError(err) {
@@ -59,59 +80,87 @@ function createAzureDevOpsServer() {
     }
 
     async function adoFetch(url, options = {}, attempt = 1) {
-        const resp = await fetch(url, {
-            ...options,
-            headers: { Accept: 'application/json', ...(options.headers || {}) }
-        });
+        await ensureConfigured();
+        const headersList = getHeaderCandidates();
+        let lastError;
 
-        if (resp.status === 429 && attempt <= 3) {
-            const retryAfter = Number(resp.headers.get('retry-after')) || 1;
-            await new Promise((r) => setTimeout(r, retryAfter * 1000 * Math.pow(2, attempt - 1)));
-            return adoFetch(url, options, attempt + 1);
-        }
+        for (const headers of headersList) {
+            try {
+                let finalUrl = url;
+                if (sessionConfig.proxyUrl && sessionConfig.userId) {
+                    const urlObj = new URL(url);
+                    finalUrl = `${sessionConfig.proxyUrl.replace(/\/+$/, '')}${urlObj.pathname}${urlObj.search}`;
+                }
 
-        if (!resp.ok) {
-            let details;
-            try { details = await resp.text(); } catch (_) { details = ''; }
-            throw new AzureError(`Azure DevOps request failed (${resp.status})`, {
-                status: resp.status,
-                details: { response: details, requested_url: url, method: options.method || 'GET' }
-            });
+                const resp = await fetch(finalUrl, {
+                    ...options,
+                    headers: { 
+                        Accept: 'application/json', 
+                        'Content-Type': 'application/json',
+                        ...(options.headers || {}), 
+                        ...headers 
+                    }
+                });
+
+                if (resp.status === 429 && attempt <= 3) {
+                    const retryAfter = Number(resp.headers.get('retry-after')) || 1;
+                    await new Promise((r) => setTimeout(r, retryAfter * 1000 * Math.pow(2, attempt - 1)));
+                    return adoFetch(url, options, attempt + 1);
+                }
+
+                if (!resp.ok) {
+                    if (resp.status === 401 || resp.status === 404) continue;
+                    let details;
+                    try { details = await resp.text(); } catch (_) { details = ''; }
+                    throw new AzureError(`Azure DevOps request failed (${resp.status})`, {
+                        status: resp.status,
+                        details: { response: details, requested_url: finalUrl, method: options.method || 'GET' }
+                    });
+                }
+
+                const contentType = resp.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) return resp.json();
+                return resp.text();
+            } catch (e) {
+                lastError = e;
+                if (e instanceof AzureError) throw e;
+                continue;
+            }
         }
-        const contentType = resp.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) return resp.json();
-        return resp.text();
+        throw lastError || new AzureError('All authentication candidates failed');
     }
 
     function buildUrl(pathPart, query = {}) {
-        const url = new URL(`${sessionConfig.serviceUrl}/${sessionConfig.project}/${pathPart}`);
+        const base = normalizeServiceUrl(sessionConfig.serviceUrl, sessionConfig.project);
+        const url = new URL(`${base}/${sessionConfig.project}/_apis/${pathPart}`);
         url.search = new URLSearchParams({ 'api-version': API_VERSION, ...query }).toString();
         return url.toString();
     }
 
     function buildReleaseUrl(pathPart, query = {}) {
-        const base = sessionConfig.serviceUrl.replace('dev.azure.com', 'vsrm.dev.azure.com');
-        const url = new URL(`${base}/${sessionConfig.project}/${pathPart}`);
+        let base = normalizeServiceUrl(sessionConfig.serviceUrl, sessionConfig.project);
+        base = base.replace('dev.azure.com', 'vsrm.dev.azure.com');
+        const url = new URL(`${base}/${sessionConfig.project}/_apis/${pathPart}`);
         url.search = new URLSearchParams({ 'api-version': API_VERSION, ...query }).toString();
         return url.toString();
     }
 
     function buildOrgUrl(pathPart, query = {}) {
-        const url = new URL(`${sessionConfig.serviceUrl}/${pathPart}`);
+        const base = normalizeServiceUrl(sessionConfig.serviceUrl, sessionConfig.project);
+        const url = new URL(`${base}/_apis/${pathPart}`);
         url.search = new URLSearchParams({ 'api-version': API_VERSION, ...query }).toString();
         return url.toString();
     }
 
-    async function validateConfig({ service_url, project, token }) {
-        if (!service_url || !project || !token) {
-            throw new AzureError('Missing required configuration values', { status: 400 });
-        }
-        const normalizedUrl = normalizeServiceUrl(service_url, project);
-        const testUrl = `${normalizedUrl}/${project}/_apis/projects?api-version=${API_VERSION}`;
-        const resp = await fetch(testUrl, { headers: authHeaders() });
-        if (!resp.ok) {
-            throw new AzureError('Azure DevOps token validation failed', { status: resp.status, details: await resp.text() });
-        }
+    function buildGitUrl(pathPart, query = {}) {
+        const base = normalizeServiceUrl(sessionConfig.serviceUrl, sessionConfig.project);
+        const url = new URL(`${base}/${sessionConfig.project}/_apis/git/${pathPart}`);
+        url.search = new URLSearchParams({ 'api-version': API_VERSION, ...query }).toString();
+        return url.toString();
+    }
+
+    async function validateConfig() {
+        await adoFetch(buildOrgUrl('projects', { '$top': 1 }));
     }
 
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
@@ -119,31 +168,29 @@ function createAzureDevOpsServer() {
     // --- CORE ---
     server.tool('azuredevops_health', {}, async () => {
         try {
-            requireConfigured();
-            await validateConfig({ service_url: sessionConfig.serviceUrl, project: sessionConfig.project, token: sessionConfig.token });
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
+            await validateConfig();
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (err) { return unifyError(err); }
     });
 
     server.tool('azuredevops_configure', {
-        service_url: z.string(),
-        project: z.string(),
-        token: z.string()
+        service_url: z.string().optional(),
+        project: z.string().optional(),
+        token: z.string().optional()
     }, async (args) => {
+        if (args.service_url) sessionConfig.serviceUrl = args.service_url;
+        if (args.project) sessionConfig.project = args.project;
+        if (args.token) sessionConfig.token = args.token;
         try {
-            await validateConfig(args);
-            sessionConfig.serviceUrl = normalizeServiceUrl(args.service_url, args.project);
-            sessionConfig.project = args.project;
-            sessionConfig.token = args.token;
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
-        } catch (err) { return unifyError(err); }
+            await validateConfig();
+            return { content: [{ type: 'text', text: "Azure DevOps configuration updated." }] };
+        } catch (e) { return unifyError(e); }
     });
 
     // --- REPOS ---
     server.tool('azuredevops_list_repositories', {}, async () => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildUrl('_apis/git/repositories'), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl('_apis/git/repositories'));
             const repos = (data.value || []).map(r => ({ id: r.id, name: r.name, webUrl: r.webUrl, remoteUrl: r.remoteUrl }));
             return { content: [{ type: 'text', text: JSON.stringify({ repositories: repos }) }] };
         } catch (err) { return unifyError(err); }
@@ -156,10 +203,9 @@ function createAzureDevOpsServer() {
         version: z.string().optional()
     }, async (args) => {
         try {
-            requireConfigured();
             const query = { path: args.path || '/', recursionLevel: (args.recursionLevel || 'oneLevel').toLowerCase(), includeContent: false };
             if (args.version) query.versionDescriptor_version = args.version;
-            const data = await adoFetch(buildUrl(`_apis/git/repositories/${args.repository_id}/items`, query), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl(`_apis/git/repositories/${args.repository_id}/items`, query));
             return { content: [{ type: 'text', text: JSON.stringify({ items: data.value || [] }) }] };
         } catch (err) { return unifyError(err); }
     });
@@ -170,10 +216,9 @@ function createAzureDevOpsServer() {
         version: z.string().optional()
     }, async (args) => {
         try {
-            requireConfigured();
             const query = { path: args.path, includeContent: true };
             if (args.version) query.versionDescriptor_version = args.version;
-            const data = await adoFetch(buildUrl(`_apis/git/repositories/${args.repository_id}/items`, query), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl(`_apis/git/repositories/${args.repository_id}/items`, query));
             return { content: [{ type: 'text', text: JSON.stringify({ content: data.content || '' }) }] };
         } catch (err) { return unifyError(err); }
     });
@@ -187,15 +232,13 @@ function createAzureDevOpsServer() {
     }, async (args) => {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: 'CONFIRMATION_REQUIRED' }] };
         try {
-            requireConfigured();
             const refsUrl = buildUrl(`_apis/git/repositories/${args.repository_id}/refs`, { filter: `heads/${args.source_branch}` });
-            const refs = await adoFetch(refsUrl, { headers: authHeaders() });
+            const refs = await adoFetch(refsUrl);
             const baseRef = (refs.value || [])[0];
             if (!baseRef) throw new AzureError('Source branch not found', { status: 404 });
             const createUrl = buildUrl(`_apis/git/repositories/${args.repository_id}/refs`);
             await adoFetch(createUrl, {
                 method: 'POST',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify([{ name: `refs/heads/${args.new_branch}`, oldObjectId: '0000000000000000000000000000000000000000', newObjectId: baseRef.objectId }])
             });
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
@@ -212,11 +255,9 @@ function createAzureDevOpsServer() {
     }, async (args) => {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: 'CONFIRMATION_REQUIRED' }] };
         try {
-            requireConfigured();
             const url = buildUrl(`_apis/git/repositories/${args.repository_id}/pullrequests`);
             const pr = await adoFetch(url, {
                 method: 'POST',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sourceRefName: `refs/heads/${args.source_branch}`,
                     targetRefName: `refs/heads/${args.target_branch}`,
@@ -231,10 +272,8 @@ function createAzureDevOpsServer() {
     // --- WORK ITEMS ---
     server.tool('azuredevops_list_work_items', { wiql: z.string() }, async (args) => {
         try {
-            requireConfigured();
             const data = await adoFetch(buildOrgUrl('_apis/wit/wiql'), {
                 method: 'POST',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query: args.wiql })
             });
             return { content: [{ type: 'text', text: JSON.stringify({ ids: (data.workItems || []).map(w => w.id) }) }] };
@@ -243,8 +282,7 @@ function createAzureDevOpsServer() {
 
     server.tool('azuredevops_get_work_item', { id: z.number() }, async (args) => {
         try {
-            requireConfigured();
-            const item = await adoFetch(buildOrgUrl(`_apis/wit/workitems/${args.id}`), { headers: authHeaders() });
+            const item = await adoFetch(buildOrgUrl(`_apis/wit/workitems/${args.id}`));
             return { content: [{ type: 'text', text: JSON.stringify(item) }] };
         } catch (err) { return unifyError(err); }
     });
@@ -256,11 +294,10 @@ function createAzureDevOpsServer() {
     }, async (args) => {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: 'CONFIRMATION_REQUIRED' }] };
         try {
-            requireConfigured();
             const operations = Object.entries(args.fields || {}).map(([k, v]) => ({ op: 'add', path: `/fields/${k}`, value: v }));
             const updated = await adoFetch(buildOrgUrl(`_apis/wit/workitems/${args.id}`), {
                 method: 'PATCH',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json-patch+json' },
+                headers: { 'Content-Type': 'application/json-patch+json' },
                 body: JSON.stringify(operations)
             });
             return { content: [{ type: 'text', text: JSON.stringify(updated) }] };
@@ -276,7 +313,6 @@ function createAzureDevOpsServer() {
     }, async (args) => {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: 'CONFIRMATION_REQUIRED' }] };
         try {
-            requireConfigured();
             const operations = [
                 { op: 'add', path: '/fields/System.Title', value: args.title },
                 { op: 'add', path: '/fields/System.Description', value: args.description || '' }
@@ -284,7 +320,7 @@ function createAzureDevOpsServer() {
             if (args.assigned_to) operations.push({ op: 'add', path: '/fields/System.AssignedTo', value: args.assigned_to });
             const data = await adoFetch(buildUrl(`_apis/wit/workitems/$${args.type}`), {
                 method: 'POST',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json-patch+json' },
+                headers: { 'Content-Type': 'application/json-patch+json' },
                 body: JSON.stringify(operations)
             });
             return { content: [{ type: 'text', text: JSON.stringify(data) }] };
@@ -298,10 +334,8 @@ function createAzureDevOpsServer() {
     }, async (args) => {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: 'CONFIRMATION_REQUIRED' }] };
         try {
-            requireConfigured();
             const data = await adoFetch(buildOrgUrl(`_apis/wit/workitems/${args.id}/comments`), {
                 method: 'POST',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: args.text })
             });
             return { content: [{ type: 'text', text: JSON.stringify({ id: data.id, text: data.text }) }] };
@@ -316,10 +350,8 @@ function createAzureDevOpsServer() {
     }, async (args) => {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: 'CONFIRMATION_REQUIRED' }] };
         try {
-            requireConfigured();
             const data = await adoFetch(buildUrl(`_apis/pipelines/${args.pipeline_id}/runs`), {
                 method: 'POST',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ resources: { repositories: { self: { refName: `refs/heads/${args.branch}` } } } })
             });
             return { content: [{ type: 'text', text: JSON.stringify({ runId: data.id, state: data.state }) }] };
@@ -331,8 +363,7 @@ function createAzureDevOpsServer() {
         top: z.number().optional()
     }, async (args) => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildUrl(`_apis/pipelines/${args.pipeline_id}/runs`, { '$top': args.top }), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl(`_apis/pipelines/${args.pipeline_id}/runs`, { '$top': args.top }));
             return { content: [{ type: 'text', text: JSON.stringify({ runs: data.value || [] }) }] };
         } catch (err) { return unifyError(err); }
     });
@@ -342,8 +373,7 @@ function createAzureDevOpsServer() {
         run_id: z.number()
     }, async (args) => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildUrl(`_apis/pipelines/${args.pipeline_id}/runs/${args.run_id}`), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl(`_apis/pipelines/${args.pipeline_id}/runs/${args.run_id}`));
             return { content: [{ type: 'text', text: JSON.stringify({ state: data.state, result: data.result }) }] };
         } catch (err) { return unifyError(err); }
     });
@@ -351,16 +381,14 @@ function createAzureDevOpsServer() {
     // --- DISCOVERY ---
     server.tool('azuredevops_list_projects', { top: z.number().optional() }, async (args) => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildOrgUrl('_apis/projects', { '$top': args.top }), { headers: authHeaders() });
+            const data = await adoFetch(buildOrgUrl('_apis/projects', { '$top': args.top }));
             return { content: [{ type: 'text', text: JSON.stringify({ projects: data.value || [] }) }] };
         } catch (err) { return unifyError(err); }
     });
 
     server.tool('azuredevops_list_pipelines', { top: z.number().optional() }, async (args) => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildUrl('_apis/pipelines', { '$top': args.top }), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl('_apis/pipelines', { '$top': args.top }));
             return { content: [{ type: 'text', text: JSON.stringify({ pipelines: data.value || [] }) }] };
         } catch (err) { return unifyError(err); }
     });
@@ -368,8 +396,7 @@ function createAzureDevOpsServer() {
     // --- RELEASES ---
     server.tool('azuredevops_list_releases', { top: z.number().optional() }, async (args) => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildReleaseUrl('_apis/release/releases', { '$top': args.top }), { headers: authHeaders() });
+            const data = await adoFetch(buildReleaseUrl('_apis/release/releases', { '$top': args.top }));
             return { content: [{ type: 'text', text: JSON.stringify({ releases: data.value || [] }) }] };
         } catch (err) { return unifyError(err); }
     });
@@ -377,8 +404,7 @@ function createAzureDevOpsServer() {
     // --- TESTING ---
     server.tool('azuredevops_list_test_plans', { top: z.number().optional() }, async (args) => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildUrl('_apis/test/plans', { '$top': args.top }), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl('_apis/test/plans', { '$top': args.top }));
             return { content: [{ type: 'text', text: JSON.stringify({ plans: data.value || [] }) }] };
         } catch (err) { return unifyError(err); }
     });
@@ -388,24 +414,21 @@ function createAzureDevOpsServer() {
         top: z.number().optional()
     }, async (args) => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildUrl(`_apis/test/plans/${args.plan_id}/suites`, { '$top': args.top }), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl(`_apis/test/plans/${args.plan_id}/suites`, { '$top': args.top }));
             return { content: [{ type: 'text', text: JSON.stringify({ suites: data.value || [] }) }] };
         } catch (err) { return unifyError(err); }
     });
 
     server.tool('azuredevops_list_test_runs', { top: z.number().optional() }, async (args) => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildUrl('_apis/test/runs', { '$top': args.top }), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl('_apis/test/runs', { '$top': args.top }));
             return { content: [{ type: 'text', text: JSON.stringify({ runs: data.value || [] }) }] };
         } catch (err) { return unifyError(err); }
     });
 
     server.tool('azuredevops_get_test_run_results', { run_id: z.number() }, async (args) => {
         try {
-            requireConfigured();
-            const data = await adoFetch(buildUrl(`_apis/test/runs/${args.run_id}/results`), { headers: authHeaders() });
+            const data = await adoFetch(buildUrl(`_apis/test/runs/${args.run_id}/results`));
             return { content: [{ type: 'text', text: JSON.stringify({ results: data.value || [] }) }] };
         } catch (err) { return unifyError(err); }
     });
@@ -413,12 +436,11 @@ function createAzureDevOpsServer() {
     // --- OBSERVABILITY ---
     server.tool('azuredevops_get_build_logs', { build_id: z.number() }, async (args) => {
         try {
-            requireConfigured();
             const metaUrl = buildUrl(`_apis/build/builds/${args.build_id}/logs`);
-            const meta = await adoFetch(metaUrl, { headers: authHeaders() });
+            const meta = await adoFetch(metaUrl);
             const results = [];
             for (const log of (meta.value || []).slice(-3)) {
-                const content = await adoFetch(log.url, { headers: authHeaders() });
+                const content = await adoFetch(log.url);
                 results.push({ id: log.id, lineCount: log.lineCount, content: typeof content === 'string' ? content.substring(0, 5000) : content });
             }
             return { content: [{ type: 'text', text: JSON.stringify({ logs: results }) }] };
@@ -433,7 +455,6 @@ function createAzureDevOpsServer() {
         top: z.number().optional()
     }, async (args) => {
         try {
-            requireConfigured();
             let wiql = `SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.TeamProject] = '${sessionConfig.project}'`;
             if (args.state) wiql += ` AND [System.State] = '${args.state}'`;
             if (args.assigned_to) wiql += ` AND [System.AssignedTo] = '${args.assigned_to}'`;
@@ -441,7 +462,6 @@ function createAzureDevOpsServer() {
             wiql += ' ORDER BY [System.CreatedDate] DESC';
             const data = await adoFetch(buildOrgUrl('_apis/wit/wiql', { '$top': args.top }), {
                 method: 'POST',
-                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query: wiql })
             });
             const ids = (data.workItems || []).map(w => w.id);
@@ -449,22 +469,25 @@ function createAzureDevOpsServer() {
         } catch (err) { return unifyError(err); }
     });
 
-    return {
-        server,
-        __test: {
-            normalizeServiceUrl,
-            unifyError,
-            setConfig: (next) => { Object.assign(sessionConfig, next); },
-            getConfig: () => ({ ...sessionConfig })
-        }
+    server.__test = {
+        sessionConfig,
+        ensureConfigured,
+        adoFetch,
+        getHeaderCandidates,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
     };
-}
 
-const { server, __test } = createAzureDevOpsServer();
+    return server;
+}
 
 if (require.main === module) {
+    const serverInstance = createAzureDevOpsServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).catch(console.error);
+    serverInstance.connect(transport).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
 }
 
-module.exports = { createAzureDevOpsServer, __test };
+module.exports = { createAzureDevOpsServer };

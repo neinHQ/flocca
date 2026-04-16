@@ -4,121 +4,59 @@ const { z } = require('zod');
 
 const SERVER_INFO = { name: 'figma-mcp', version: '2.0.0' };
 
-let sessionConfig = {
-    token: process.env.FIGMA_TOKEN || process.env.FIGMA_ACCESS_TOKEN,
-    default_file_key: process.env.FIGMA_DEFAULT_FILE_KEY,
-    proxy_url: process.env.FLOCCA_PROXY_URL,
-    user_id: process.env.FLOCCA_USER_ID
-};
-
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    const code = err.code || 'FIGMA_ERROR';
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message: msg, code, status: err.http_status } }) }] };
-}
-
-async function figmaFetch(url, { query, method = 'GET', body } = {}) {
-    let targetUrl = url;
-    let reqHeaders = {};
-
-    if (sessionConfig.proxy_url && sessionConfig.user_id) {
-        const path = url.replace('https://api.figma.com', '');
-        targetUrl = `${sessionConfig.proxy_url}${path}`;
-        reqHeaders = {
-            'Content-Type': 'application/json',
-            'X-Flocca-User-ID': sessionConfig.user_id
-        };
-    } else {
-        if (!sessionConfig.token) throw { message: 'Figma token not configured', code: 'AUTH_FAILED' };
-        reqHeaders = { 'X-Figma-Token': sessionConfig.token };
-    }
-
-    const u = new URL(targetUrl);
-    if (query) Object.entries(query).forEach(([k, v]) => { if (v !== undefined && v !== null) u.searchParams.append(k, v); });
-
-    const resp = await fetch(u.toString(), {
-        method,
-        headers: reqHeaders,
-        body: body ? JSON.stringify(body) : undefined
-    });
-
-    let data = {};
-    try { data = await resp.json(); } catch (_) { data = {}; }
-
-    if (!resp.ok || data.err) {
-        let code = 'FIGMA_ERROR';
-        if (resp.status === 401 || resp.status === 403) code = 'AUTH_FAILED';
-        if (resp.status === 429) code = 'RATE_LIMITED';
-        throw { message: data.err || resp.statusText || 'Figma request failed', code, http_status: resp.status };
-    }
-    return data;
-}
-
-// --- Extraction Logic ---
-
-function flattenNodes(node, acc = []) {
-    if (!node) return acc;
-    acc.push(node);
-    if (node.children) node.children.forEach((c) => flattenNodes(c, acc));
-    return acc;
-}
-
-function isFrame(node) {
-    return node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE';
-}
-
-function extractFrameSpec(frame) {
-    const spec = { id: frame.id, name: frame.name, type: frame.type, inputs: [], buttons: [], toggles: [], texts: [], variants: frame.componentPropertyReferences || {}, components: [] };
-    const nodes = flattenNodes(frame, []);
-    nodes.forEach((n) => {
-        if (n.type === 'TEXT' && n.characters) {
-            spec.texts.push({ id: n.id, text: n.characters, name: n.name });
-            if (/required|error|invalid|warning/i.test(n.characters)) {
-                spec.components.push({ id: n.id, hint: 'validation_text', text: n.characters });
-            }
-        }
-        if (n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'INSTANCE' || n.type === 'COMPONENT') {
-            if (/button|cta|submit/i.test(n.name)) spec.buttons.push({ id: n.id, name: n.name });
-            if (/toggle|switch|checkbox/i.test(n.name)) spec.toggles.push({ id: n.id, name: n.name });
-            if (/input|field|textbox|email|password/i.test(n.name)) spec.inputs.push({ id: n.id, name: n.name, placeholder: n.characters });
-        }
-    });
-    return spec;
-}
-
-function suggestScenarios(frameSpec) {
-    const scenarios = [];
-    if (frameSpec.inputs.some((i) => /email/i.test(i.name || ''))) {
-        scenarios.push('Email is required', 'Invalid email shows error');
-    }
-    if (frameSpec.buttons.length) {
-        scenarios.push('Submit disabled until valid', 'Loading prevents double submit');
-    }
-    scenarios.push('Keyboard navigation works');
-    return scenarios;
-}
-
-function generateSelectors(frameSpec) {
-    const selectors = [];
-    frameSpec.buttons.forEach((b) => selectors.push({ node_id: b.id, strategy: 'id', value: b.id }));
-    frameSpec.inputs.forEach((i) => {
-        selectors.push({ node_id: i.id, strategy: 'id', value: i.id });
-        selectors.push({ node_id: i.id, strategy: 'name', value: i.name });
-    });
-    return selectors;
-}
-
-// --- Server Definition ---
-
 function createFigmaServer() {
+    let sessionConfig = {
+        token: process.env.FIGMA_TOKEN || process.env.FIGMA_ACCESS_TOKEN,
+        default_file_key: process.env.FIGMA_DEFAULT_FILE_KEY,
+        proxy_url: process.env.FLOCCA_PROXY_URL,
+        user_id: process.env.FLOCCA_USER_ID
+    };
+
+    async function figmaFetch(url, { query, method = 'GET', body } = {}) {
+        let targetUrl = url;
+        let reqHeaders = {};
+
+        if (sessionConfig.proxy_url && sessionConfig.user_id) {
+            const path = url.replace('https://api.figma.com', '');
+            targetUrl = `${sessionConfig.proxy_url}${path}`;
+            reqHeaders = {
+                'Content-Type': 'application/json',
+                'X-Flocca-User-ID': sessionConfig.user_id
+            };
+        } else {
+            if (!sessionConfig.token) throw { message: 'Figma token not configured', code: 'AUTH_FAILED' };
+            reqHeaders = { 'X-Figma-Token': sessionConfig.token };
+        }
+
+        const u = new URL(targetUrl);
+        if (query) Object.entries(query).forEach(([k, v]) => { if (v !== undefined && v !== null) u.searchParams.append(k, v); });
+
+        const resp = await fetch(u.toString(), {
+            method,
+            headers: reqHeaders,
+            body: body ? JSON.stringify(body) : undefined
+        });
+
+        let data = {};
+        try { data = await resp.json(); } catch (_) { data = {}; }
+
+        if (!resp.ok || data.err) {
+            let code = 'FIGMA_ERROR';
+            if (resp.status === 401 || resp.status === 403) code = 'AUTH_FAILED';
+            if (resp.status === 429) code = 'RATE_LIMITED';
+            throw { message: data.err || resp.statusText || 'Figma request failed', code, http_status: resp.status };
+        }
+        return data;
+    }
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     async function ensureConnected() {
         if (!sessionConfig.token && !(sessionConfig.proxy_url && sessionConfig.user_id)) {
             // Re-check environment variables in case they were set after module load
-            sessionConfig.token = process.env.FIGMA_TOKEN || process.env.FIGMA_ACCESS_TOKEN;
-            sessionConfig.proxy_url = process.env.FLOCCA_PROXY_URL;
-            sessionConfig.user_id = process.env.FLOCCA_USER_ID;
+            sessionConfig.token = process.env.FIGMA_TOKEN || process.env.FIGMA_ACCESS_TOKEN || sessionConfig.token;
+            sessionConfig.proxy_url = process.env.FLOCCA_PROXY_URL || sessionConfig.proxy_url;
+            sessionConfig.user_id = process.env.FLOCCA_USER_ID || sessionConfig.user_id;
             
             if (!sessionConfig.token && !(sessionConfig.proxy_url && sessionConfig.user_id)) {
                 throw { message: 'Figma not configured. Provide FIGMA_TOKEN or call figma_configure.', code: 'AUTH_FAILED' };
@@ -262,6 +200,15 @@ function createFigmaServer() {
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        figmaFetch,
+        extractFrameSpec,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

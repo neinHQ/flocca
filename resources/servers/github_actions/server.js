@@ -5,45 +5,33 @@ const { Octokit } = require("@octokit/rest");
 
 const SERVER_INFO = { name: 'github-actions-mcp', version: '2.0.0' };
 
-let config = {
-    token: process.env.GITHUB_TOKEN,
-    owner: process.env.GITHUB_OWNER,
-    repo: process.env.GITHUB_REPO,
-    apiUrl: process.env.GITHUB_API_URL
-};
-
-function normalizeGitHubApiUrl(url) {
-    if (!url) return undefined;
-    const trimmed = url.replace(/\/+$/, '');
-    if (/\/api\/v3$/i.test(trimmed) || trimmed.includes('api.github.com')) return trimmed;
-    return `${trimmed}/api/v3`;
-}
-
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: `GitHub Error: ${msg}` }] };
-}
-
 function createGitHubActionsServer() {
+    let sessionConfig = {
+        token: process.env.GITHUB_TOKEN,
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        apiUrl: process.env.GITHUB_API_URL
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let kit = null;
 
     async function ensureConnected() {
-        if (!config.token) {
+        if (!sessionConfig.token) {
             // Re-check env vars
-            config.token = process.env.GITHUB_TOKEN;
-            config.owner = process.env.GITHUB_OWNER;
-            config.repo = process.env.GITHUB_REPO;
-            config.apiUrl = process.env.GITHUB_API_URL;
+            sessionConfig.token = process.env.GITHUB_TOKEN || sessionConfig.token;
+            sessionConfig.owner = process.env.GITHUB_OWNER || sessionConfig.owner;
+            sessionConfig.repo = process.env.GITHUB_REPO || sessionConfig.repo;
+            sessionConfig.apiUrl = process.env.GITHUB_API_URL || sessionConfig.apiUrl;
             
-            if (!config.token) {
+            if (!sessionConfig.token) {
                 throw new Error("GitHub Actions not configured. Provide GITHUB_TOKEN or call github_actions_configure.");
             }
         }
         if (!kit) {
             kit = new Octokit({
-                auth: config.token,
-                baseUrl: normalizeGitHubApiUrl(config.apiUrl)
+                auth: sessionConfig.token,
+                baseUrl: normalizeGitHubApiUrl(sessionConfig.apiUrl)
             });
         }
         return kit;
@@ -52,9 +40,9 @@ function createGitHubActionsServer() {
     server.tool('github_actions_health', {}, async () => {
         try {
             const k = await ensureConnected();
-            if (!config.owner || !config.repo) throw new Error("Owner and Repo must be configured for health check.");
-            await k.repos.get({ owner: config.owner, repo: config.repo });
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, owner: config.owner, repo: config.repo }) }] };
+            if (!sessionConfig.owner || !sessionConfig.repo) throw new Error("Owner and Repo must be configured for health check.");
+            await k.repos.get({ owner: sessionConfig.owner, repo: sessionConfig.repo });
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, owner: sessionConfig.owner, repo: sessionConfig.repo }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
@@ -67,16 +55,16 @@ function createGitHubActionsServer() {
         },
         async (args) => {
             try {
-                config.token = args.token;
-                config.owner = args.owner;
-                config.repo = args.repo;
-                config.apiUrl = args.api_url;
+                sessionConfig.token = args.token;
+                sessionConfig.owner = args.owner;
+                sessionConfig.repo = args.repo;
+                sessionConfig.apiUrl = args.api_url;
                 kit = null; // force re-init
                 const k = await ensureConnected();
-                await k.repos.get({ owner: config.owner, repo: config.repo });
+                await k.repos.get({ owner: sessionConfig.owner, repo: sessionConfig.repo });
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: 'authenticated' }) }] };
             } catch (e) {
-                config.token = undefined;
+                sessionConfig.token = undefined;
                 kit = null;
                 return normalizeError(e);
             }
@@ -86,7 +74,7 @@ function createGitHubActionsServer() {
     server.tool('github_actions_list_workflows', {}, async () => {
         try {
             const k = await ensureConnected();
-            const res = await k.actions.listRepoWorkflows({ owner: config.owner, repo: config.repo });
+            const res = await k.actions.listRepoWorkflows({ owner: sessionConfig.owner, repo: sessionConfig.repo });
             return { content: [{ type: 'text', text: JSON.stringify(res.data.workflows, null, 2) }] };
         } catch (e) { return normalizeError(e); }
     });
@@ -98,9 +86,9 @@ function createGitHubActionsServer() {
                 const k = await ensureConnected();
                 let res;
                 if (args.workflow_id) {
-                    res = await k.actions.listWorkflowRuns({ owner: config.owner, repo: config.repo, workflow_id: args.workflow_id });
+                    res = await k.actions.listWorkflowRuns({ owner: sessionConfig.owner, repo: sessionConfig.repo, workflow_id: args.workflow_id });
                 } else {
-                    res = await k.actions.listWorkflowRunsForRepo({ owner: config.owner, repo: config.repo });
+                    res = await k.actions.listWorkflowRunsForRepo({ owner: sessionConfig.owner, repo: sessionConfig.repo });
                 }
                 return { content: [{ type: 'text', text: JSON.stringify(res.data.workflow_runs, null, 2) }] };
             } catch (e) { return normalizeError(e); }
@@ -121,8 +109,8 @@ function createGitHubActionsServer() {
                 }
                 const k = await ensureConnected();
                 await k.actions.createWorkflowDispatch({
-                    owner: config.owner,
-                    repo: config.repo,
+                    owner: sessionConfig.owner,
+                    repo: sessionConfig.repo,
                     workflow_id: args.workflow_id,
                     ref: args.ref,
                     inputs: args.inputs || {}
@@ -138,14 +126,21 @@ function createGitHubActionsServer() {
             try {
                 const k = await ensureConnected();
                 const res = await k.actions.downloadWorkflowRunLogs({
-                    owner: config.owner,
-                    repo: config.repo,
+                    owner: sessionConfig.owner,
+                    repo: sessionConfig.repo,
                     run_id: Number(args.run_id)
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ url: res.url || 'Log download initiated' }) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); kit = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

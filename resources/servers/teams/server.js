@@ -6,40 +6,35 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 
 const SERVER_INFO = { name: 'teams-mcp', version: '2.0.0' };
 
-let config = {
-    token: process.env.TEAMS_TOKEN,
-    proxyUrl: process.env.FLOCCA_PROXY_URL,
-    userId: process.env.FLOCCA_USER_ID
-};
-
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: `Teams API Error: ${msg}` }] };
-}
-
 function createTeamsServer() {
+    let sessionConfig = {
+        token: process.env.TEAMS_TOKEN,
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let api = null;
 
     async function ensureConnected() {
-        if (!config.token && !(config.proxyUrl && config.userId)) {
+        if (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
             // Re-read env for dynamic updates
-            config.token = process.env.TEAMS_TOKEN;
-            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
-            config.userId = process.env.FLOCCA_USER_ID;
+            sessionConfig.token = process.env.TEAMS_TOKEN || sessionConfig.token;
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL || sessionConfig.proxyUrl;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID || sessionConfig.userId;
 
-            if (!config.token && !(config.proxyUrl && config.userId)) {
+            if (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
                 throw new Error("Teams Not Configured. Provide TEAMS_TOKEN or use Proxy.");
             }
         }
 
         if (!api) {
-            if (config.proxyUrl && config.userId) {
+            if (sessionConfig.proxyUrl && sessionConfig.userId) {
                 const customFetch = async (url, options) => {
-                    const dest = url.toString().replace('https://graph.microsoft.com', config.proxyUrl.replace(/\/$/, ''));
+                    const dest = url.toString().replace('https://graph.microsoft.com', sessionConfig.proxyUrl.replace(/\/$/, ''));
                     const headers = { ...(options.headers || {}) };
                     delete headers['Authorization'];
-                    headers['X-Flocca-User-ID'] = config.userId;
+                    headers['X-Flocca-User-ID'] = sessionConfig.userId;
                     return fetch(dest, { ...options, headers });
                 };
                 api = Client.init({
@@ -48,7 +43,7 @@ function createTeamsServer() {
                 });
             } else {
                 api = Client.init({
-                    authProvider: (done) => done(null, config.token)
+                    authProvider: (done) => done(null, sessionConfig.token)
                 });
             }
         }
@@ -59,7 +54,7 @@ function createTeamsServer() {
         try {
             const client = await ensureConnected();
             const me = await client.api('/me').get();
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, user: me.displayName, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, user: me.displayName, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
@@ -71,7 +66,7 @@ function createTeamsServer() {
         },
         async (args) => {
             try {
-                config.token = args.token;
+                sessionConfig.token = args.token;
                 api = null; // Reset client
                 const client = await ensureConnected();
                 const me = await client.api('/me').get();
@@ -218,6 +213,13 @@ function createTeamsServer() {
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); api = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

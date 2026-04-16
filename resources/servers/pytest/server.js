@@ -5,22 +5,28 @@ const { spawn } = require('child_process');
 
 const SERVER_INFO = { name: 'pytest-mcp', version: '2.0.0' };
 
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: `Pytest Error: ${msg}` }] };
-}
-
 function createPytestServer() {
+    let sessionConfig = {
+        cwd: process.cwd(),
+        env: { ...process.env }
+    };
+
+    function normalizeError(err) {
+        const msg = err.message || JSON.stringify(err);
+        return { isError: true, content: [{ type: 'text', text: `Pytest Error: ${msg}` }] };
+    }
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     async function runPytestCmd(args) {
         return new Promise((resolve) => {
-            const extraArgs = process.env.PYTEST_ARGS ? process.env.PYTEST_ARGS.split(/\s+/) : [];
+            const extraArgs = sessionConfig.env.PYTEST_ARGS ? sessionConfig.env.PYTEST_ARGS.split(/\s+/) : [];
             const finalArgs = [...args, ...extraArgs].filter(Boolean);
 
             const child = spawn('pytest', finalArgs, {
                 shell: true,
-                env: process.env
+                cwd: sessionConfig.cwd,
+                env: sessionConfig.env
             });
 
             let stdout = '';
@@ -98,13 +104,21 @@ function createPytestServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        runPytestCmd,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createPytestServer();
+    const serverInstance = createPytestServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('Pytest MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

@@ -7,38 +7,24 @@ const path = require('path');
 
 const SERVER_INFO = { name: 'slack-mcp', version: '2.0.0' };
 
-let config = {
-    token: process.env.SLACK_BOT_TOKEN,
-    proxyUrl: process.env.FLOCCA_PROXY_URL,
-    userId: process.env.FLOCCA_USER_ID
-};
-
-function normalizeError(err) {
-    const data = err.response?.data || {};
-    const msg = data.error || err.message || JSON.stringify(data);
-    const retryAfter = err.response?.headers?.['retry-after'];
-    
-    return {
-        isError: true,
-        content: [{
-            type: 'text',
-            text: `Slack Error: ${msg}${retryAfter ? ` (Retry after ${retryAfter}s)` : ''}`
-        }]
-    };
-}
-
 function createSlackServer() {
+    let sessionConfig = {
+        token: process.env.SLACK_BOT_TOKEN,
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let api = null;
 
     async function ensureConnected() {
-        if (!config.token && !(config.proxyUrl && config.userId)) {
+        if (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
             // Re-read env for dynamic updates
-            config.token = process.env.SLACK_BOT_TOKEN;
-            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
-            config.userId = process.env.FLOCCA_USER_ID;
+            sessionConfig.token = process.env.SLACK_BOT_TOKEN || sessionConfig.token;
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL || sessionConfig.proxyUrl;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID || sessionConfig.userId;
 
-            if (!config.token && !(config.proxyUrl && config.userId)) {
+            if (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
                 throw new Error("Slack Not Configured. Provide SLACK_BOT_TOKEN or use Proxy.");
             }
         }
@@ -47,11 +33,11 @@ function createSlackServer() {
             const headers = { 'Content-Type': 'application/json; charset=utf-8' };
             let baseURL = 'https://slack.com/api';
 
-            if (config.proxyUrl && config.userId) {
-                baseURL = config.proxyUrl.replace(/\/$/, '') + '/api';
-                headers['X-Flocca-User-ID'] = config.userId;
+            if (sessionConfig.proxyUrl && sessionConfig.userId) {
+                baseURL = sessionConfig.proxyUrl.replace(/\/$/, '') + '/api';
+                headers['X-Flocca-User-ID'] = sessionConfig.userId;
             } else {
-                headers['Authorization'] = `Bearer ${config.token}`;
+                headers['Authorization'] = `Bearer ${sessionConfig.token}`;
             }
 
             api = axios.create({ baseURL, headers });
@@ -92,7 +78,7 @@ function createSlackServer() {
     server.tool('slack_health', {}, async () => {
         try {
             await slackReq('POST', 'auth.test');
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
@@ -241,6 +227,15 @@ function createSlackServer() {
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        slackReq,
+        resolveChannel,
+        setConfig: (next) => { Object.assign(sessionConfig, next); api = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

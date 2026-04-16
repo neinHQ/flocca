@@ -5,46 +5,41 @@ const { Client } = require("@notionhq/client");
 
 const SERVER_INFO = { name: 'notion-mcp', version: '2.0.0' };
 
-let config = {
-    token: process.env.NOTION_TOKEN,
-    proxyUrl: process.env.FLOCCA_PROXY_URL,
-    userId: process.env.FLOCCA_USER_ID
-};
-
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: `Notion Error: ${msg}` }] };
-}
-
 function createNotionServer() {
+    let sessionConfig = {
+        token: process.env.NOTION_TOKEN,
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let notionClient = null;
 
     async function ensureConnected() {
-        if (!config.token && !(config.proxyUrl && config.userId)) {
+        if (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
             // Re-check env vars
-            config.token = process.env.NOTION_TOKEN;
-            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
-            config.userId = process.env.FLOCCA_USER_ID;
+            sessionConfig.token = process.env.NOTION_TOKEN || sessionConfig.token;
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL || sessionConfig.proxyUrl;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID || sessionConfig.userId;
 
-            if (!config.token && !(config.proxyUrl && config.userId)) {
+            if (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
                 throw new Error("Notion Not Configured. Provide NOTION_TOKEN or FLOCCA_PROXY_URL.");
             }
         }
 
         if (!notionClient) {
-            if (config.proxyUrl && config.userId) {
+            if (sessionConfig.proxyUrl && sessionConfig.userId) {
                 notionClient = new Client({
-                    baseUrl: config.proxyUrl,
+                    baseUrl: sessionConfig.proxyUrl,
                     auth: 'dummy',
                     fetch: async (url, init) => {
-                        init.headers = { ...(init.headers || {}), 'X-Flocca-User-ID': config.userId };
+                        init.headers = { ...(init.headers || {}), 'X-Flocca-User-ID': sessionConfig.userId };
                         delete init.headers['Authorization'];
                         return fetch(url, init);
                     }
                 });
             } else {
-                notionClient = new Client({ auth: config.token });
+                notionClient = new Client({ auth: sessionConfig.token });
             }
         }
         return notionClient;
@@ -54,7 +49,7 @@ function createNotionServer() {
         try {
             const client = await ensureConnected();
             await client.users.me();
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
@@ -62,13 +57,13 @@ function createNotionServer() {
         { token: z.string().describe('Notion Integration Token') },
         async (args) => {
             try {
-                config.token = args.token;
+                sessionConfig.token = args.token;
                 notionClient = null; // force re-init
                 const client = await ensureConnected();
                 await client.users.me();
                 return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: 'authenticated' }) }] };
             } catch (e) {
-                config.token = undefined;
+                sessionConfig.token = undefined;
                 notionClient = null;
                 return normalizeError(e);
             }
@@ -140,6 +135,13 @@ function createNotionServer() {
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); notionClient = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

@@ -4,25 +4,21 @@ const { z } = require('zod');
 
 const SERVER_INFO = { name: 'grafana-mcp', version: '1.0.0' };
 
-let config = {
-    url: process.env.GRAFANA_URL,
-    token: process.env.GRAFANA_TOKEN
-};
-
-function normalizeError(message, details) {
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message, details } }) }] };
-}
-
 function createGrafanaServer() {
+    let sessionConfig = {
+        url: process.env.GRAFANA_URL,
+        token: process.env.GRAFANA_TOKEN
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     async function ensureConnected() {
-        if (!config.url) {
-            config.url = process.env.GRAFANA_URL;
-            config.token = process.env.GRAFANA_TOKEN;
-            if (!config.url) throw new Error("Grafana Not Configured. Provide GRAFANA_URL.");
+        if (!sessionConfig.url) {
+            sessionConfig.url = process.env.GRAFANA_URL || sessionConfig.url;
+            sessionConfig.token = process.env.GRAFANA_TOKEN || sessionConfig.token;
+            if (!sessionConfig.url) throw new Error("Grafana Not Configured. Provide GRAFANA_URL.");
         }
-        return config;
+        return sessionConfig;
     }
 
     async function grafFetch(pathPart, { method = 'GET', query, body } = {}) {
@@ -99,6 +95,14 @@ function createGrafanaServer() {
             } catch (e) { return normalizeError(e.message); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        grafFetch,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

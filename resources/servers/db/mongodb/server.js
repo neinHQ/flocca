@@ -5,22 +5,30 @@ const { MongoClient } = require('mongodb');
 
 const SERVER_INFO = { name: 'mongodb-mcp', version: '1.0.0' };
 
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.code || 'MONGO_ERROR' }) }] };
-}
-
 function createMongoServer() {
+    let sessionConfig = {
+        uri: process.env.MONGO_URI,
+        database: process.env.MONGO_DATABASE
+    };
+
+    function normalizeError(err) {
+        const msg = err.message || JSON.stringify(err);
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.code || 'MONGO_ERROR' }) }] };
+    }
+
     let mongoClient = null;
     let db = null;
 
     async function ensureConnected() {
         if (!db) {
-            const uri = process.env.MONGO_URI;
-            if (uri) {
-                client = new MongoClient(uri);
-                await client.connect();
-                db = client.db(process.env.MONGO_DATABASE);
+            // Re-read env
+            sessionConfig.uri = process.env.MONGO_URI || sessionConfig.uri;
+            sessionConfig.database = process.env.MONGO_DATABASE || sessionConfig.database;
+
+            if (sessionConfig.uri) {
+                mongoClient = new MongoClient(sessionConfig.uri);
+                await mongoClient.connect();
+                db = mongoClient.db(sessionConfig.database);
             } else {
                 throw new Error('Database not connected. Provide environment variables or call mongo_connect first.');
             }
@@ -40,6 +48,7 @@ function createMongoServer() {
         async (args) => {
             try {
                 if (mongoClient) await mongoClient.close().catch(() => {});
+                sessionConfig = { ...args };
                 mongoClient = new MongoClient(args.uri);
                 await mongoClient.connect();
                 db = mongoClient.db(args.database);
@@ -171,13 +180,21 @@ function createMongoServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); db = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createMongoServer();
+    const serverInstance = createMongoServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('MongoDB MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

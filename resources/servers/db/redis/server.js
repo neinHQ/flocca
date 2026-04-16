@@ -5,23 +5,35 @@ const Redis = require('ioredis');
 
 const SERVER_INFO = { name: 'redis-mcp', version: '1.0.0' };
 
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.code || 'REDIS_ERROR' }) }] };
-}
-
 function createRedisServer() {
+    let sessionConfig = {
+        host: process.env.REDIS_HOST,
+        port: parseInt(process.env.REDIS_PORT || '6379', 10),
+        password: process.env.REDIS_PASSWORD || undefined,
+        db: parseInt(process.env.REDIS_DB || '0', 10)
+    };
+
+    function normalizeError(err) {
+        const msg = err.message || JSON.stringify(err);
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.code || 'REDIS_ERROR' }) }] };
+    }
+
     let redis = null;
 
     async function ensureConnected() {
         if (!redis || redis.status === 'end') {
-            const host = process.env.REDIS_HOST;
-            if (host) {
+            // Re-read env
+            sessionConfig.host = process.env.REDIS_HOST || sessionConfig.host;
+            sessionConfig.port = parseInt(process.env.REDIS_PORT || '6379', 10);
+            sessionConfig.password = process.env.REDIS_PASSWORD || sessionConfig.password;
+            sessionConfig.db = parseInt(process.env.REDIS_DB || '0', 10);
+
+            if (sessionConfig.host) {
                 redis = new Redis({
-                    host: host,
-                    port: parseInt(process.env.REDIS_PORT || '6379', 10),
-                    password: process.env.REDIS_PASSWORD || undefined,
-                    db: parseInt(process.env.REDIS_DB || '0', 10),
+                    host: sessionConfig.host,
+                    port: sessionConfig.port,
+                    password: sessionConfig.password,
+                    db: sessionConfig.db,
                     lazyConnect: true
                 });
                 await redis.connect();
@@ -46,6 +58,7 @@ function createRedisServer() {
         async (args) => {
             try {
                 if (redis) redis.disconnect();
+                sessionConfig = { ...args };
                 redis = new Redis({ host: args.host, port: args.port, password: args.password, db: args.db, lazyConnect: true });
                 await redis.connect();
                 return { content: [{ type: 'text', text: `Successfully connected to Redis at ${args.host}:${args.port} db=${args.db}.` }] };
@@ -221,13 +234,21 @@ function createRedisServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); redis = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createRedisServer();
+    const serverInstance = createRedisServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('Redis MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

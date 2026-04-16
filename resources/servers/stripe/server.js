@@ -5,30 +5,24 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 
 const SERVER_INFO = { name: 'stripe-mcp', version: '2.0.0' };
 
-let config = {
-    key: process.env.STRIPE_SECRET_KEY,
-    proxyUrl: process.env.FLOCCA_PROXY_URL,
-    userId: process.env.FLOCCA_USER_ID
-};
-
-function normalizeError(err) {
-    const data = err.response?.data || {};
-    const msg = data.error?.message || err.message || JSON.stringify(data);
-    return { isError: true, content: [{ type: 'text', text: `Stripe Error: ${msg}` }] };
-}
-
 function createStripeServer() {
+    let sessionConfig = {
+        key: process.env.STRIPE_SECRET_KEY,
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let api = null;
 
     async function ensureConnected() {
-        if (!config.key && !(config.proxyUrl && config.userId)) {
+        if (!sessionConfig.key && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
             // Re-read env for dynamic updates
-            config.key = process.env.STRIPE_SECRET_KEY;
-            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
-            config.userId = process.env.FLOCCA_USER_ID;
+            sessionConfig.key = process.env.STRIPE_SECRET_KEY || sessionConfig.key;
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL || sessionConfig.proxyUrl;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID || sessionConfig.userId;
 
-            if (!config.key && !(config.proxyUrl && config.userId)) {
+            if (!sessionConfig.key && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
                 throw new Error("Stripe Not Configured. Provide STRIPE_SECRET_KEY or use Proxy.");
             }
         }
@@ -37,11 +31,11 @@ function createStripeServer() {
             const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
             let baseURL = 'https://api.stripe.com';
 
-            if (config.proxyUrl && config.userId) {
-                baseURL = config.proxyUrl.replace(/\/$/, '');
-                headers['X-Flocca-User-ID'] = config.userId;
+            if (sessionConfig.proxyUrl && sessionConfig.userId) {
+                baseURL = sessionConfig.proxyUrl.replace(/\/$/, '');
+                headers['X-Flocca-User-ID'] = sessionConfig.userId;
             } else {
-                headers['Authorization'] = `Bearer ${config.key}`;
+                headers['Authorization'] = `Bearer ${sessionConfig.key}`;
             }
 
             api = axios.create({ baseURL, headers });
@@ -53,7 +47,7 @@ function createStripeServer() {
         try {
             const client = await ensureConnected();
             await client.get('/v1/balance');
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
@@ -97,6 +91,13 @@ function createStripeServer() {
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); api = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

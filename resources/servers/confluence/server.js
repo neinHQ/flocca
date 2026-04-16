@@ -8,7 +8,7 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const SERVER_INFO = { name: 'confluence-mcp', version: '2.0.0' };
 
 function createConfluenceServer() {
-    let config = {
+    let sessionConfig = {
         username: process.env.CONFLUENCE_USERNAME,
         token: process.env.CONFLUENCE_TOKEN,
         baseUrl: process.env.CONFLUENCE_BASE_URL,
@@ -18,45 +18,63 @@ function createConfluenceServer() {
     };
 
     function normalizeBaseUrl(url) {
-        const trimmed = (url || '').replace(/\/+$/, '');
+        let trimmed = (url || '').trim().replace(/\/+$/, '');
+        if (!trimmed) return trimmed;
+        if (!/^https?:\/\//i.test(trimmed)) trimmed = `https://${trimmed}`;
         return trimmed.replace(/\/wiki$/i, '');
     }
-    config.baseUrl = normalizeBaseUrl(config.baseUrl);
+    sessionConfig.baseUrl = normalizeBaseUrl(sessionConfig.baseUrl);
 
     function apiPathCandidates(pathPart) {
         const suffix = pathPart.replace(/^\/+/, '');
         const cloudPath = `/wiki/rest/api/${suffix}`;
         const serverPath = `/rest/api/${suffix}`;
-        if (config.deploymentMode === 'server' || config.deploymentMode === 'self_hosted') return [serverPath, cloudPath];
+        if (sessionConfig.deploymentMode === 'server' || sessionConfig.deploymentMode === 'self_hosted') return [serverPath, cloudPath];
         return [cloudPath, serverPath];
     }
 
     function getHeaderCandidates() {
-        if (config.proxyUrl && config.userId) {
-            return [{ 'Content-Type': 'application/json', 'X-Flocca-User-ID': config.userId }];
+        if (sessionConfig.proxyUrl && sessionConfig.userId) {
+            return [{ 'Content-Type': 'application/json', 'X-Flocca-User-ID': sessionConfig.userId }];
         }
-        if (!config.token || (!config.baseUrl && !config.proxyUrl)) throw new Error("Confluence not configured.");
-
+        
         const baseHeaders = { 'Content-Type': 'application/json' };
         const candidates = [];
-        const bearer = { ...baseHeaders, 'Authorization': `Bearer ${config.token}` };
-        const basic = config.username ? { ...baseHeaders, 'Authorization': `Basic ${Buffer.from(`${config.username}:${config.token}`).toString('base64')}` } : null;
+        const bearer = sessionConfig.token ? { ...baseHeaders, 'Authorization': `Bearer ${sessionConfig.token}` } : null;
+        const basic = sessionConfig.username && sessionConfig.token ? { ...baseHeaders, 'Authorization': `Basic ${Buffer.from(`${sessionConfig.username}:${sessionConfig.token}`).toString('base64')}` } : null;
 
-        if (config.deploymentMode === 'server' || config.deploymentMode === 'self_hosted') {
-            candidates.push(bearer);
+        if (sessionConfig.deploymentMode === 'server' || sessionConfig.deploymentMode === 'self_hosted') {
+            if (bearer) candidates.push(bearer);
             if (basic) candidates.push(basic);
         } else {
             if (basic) candidates.push(basic);
-            candidates.push(bearer);
+            if (bearer) candidates.push(bearer);
         }
         return candidates;
     }
 
+    async function ensureConfigured() {
+        const headers = getHeaderCandidates();
+        if (!sessionConfig.baseUrl || headers.length === 0) {
+            // Re-read env for dynamic updates
+            sessionConfig.username = process.env.CONFLUENCE_USERNAME;
+            sessionConfig.token = process.env.CONFLUENCE_TOKEN;
+            sessionConfig.baseUrl = normalizeBaseUrl(process.env.CONFLUENCE_BASE_URL);
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID;
+            
+            if (!sessionConfig.baseUrl || getHeaderCandidates().length === 0) {
+                throw new Error("Confluence not configured. Provide Base URL and Token (or Proxy).");
+            }
+        }
+    }
+
     async function confluenceRequest(method, pathPart, body, options = {}) {
+        await ensureConfigured();
         let lastError;
         const headerCandidates = getHeaderCandidates();
         const paths = apiPathCandidates(pathPart);
-        const baseURL = normalizeBaseUrl(config.proxyUrl && config.userId ? config.proxyUrl : config.baseUrl);
+        const baseURL = normalizeBaseUrl(sessionConfig.proxyUrl && sessionConfig.userId ? sessionConfig.proxyUrl : sessionConfig.baseUrl);
 
         for (const apiPath of paths) {
             for (const headers of headerCandidates) {
@@ -111,19 +129,18 @@ function createConfluenceServer() {
 
     tool('confluence_configure', ['confluence.configure'], {
         username: z.string().optional(),
-        token: z.string(),
-        base_url: z.string(),
-        deployment_mode: z.string().optional()
+        token: z.string().optional(),
+        base_url: z.string().optional(),
+        deployment_mode: z.enum(['cloud', 'server']).optional()
     }, async (args) => {
-        config.token = args.token;
-        config.baseUrl = normalizeBaseUrl(args.base_url);
-        if (args.deployment_mode) config.deploymentMode = args.deployment_mode.toLowerCase();
-        if (args.username) config.username = args.username;
+        if (args.token) sessionConfig.token = args.token;
+        if (args.base_url) sessionConfig.baseUrl = normalizeBaseUrl(args.base_url);
+        if (args.username) sessionConfig.username = args.username;
+        if (args.deployment_mode) sessionConfig.deploymentMode = args.deployment_mode.toLowerCase();
         try {
             await confluenceRequest('get', 'user/current');
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, status: 'authenticated' }) }] };
         } catch (e) {
-            config.token = undefined;
             return normalizeError(e);
         }
     });
@@ -241,26 +258,25 @@ function createConfluenceServer() {
     });
 
     server.__test = {
+        sessionConfig,
         normalizeBaseUrl,
         apiPathCandidates,
         confluenceRequest,
         normalizeError,
-        setConfig: (next) => { config = { ...config, ...next }; },
-        getConfig: () => ({ ...config })
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
     };
 
     return server;
 }
 
-const server = createConfluenceServer();
-
 if (require.main === module) {
+    const serverInstance = createConfluenceServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).catch(console.error);
+    serverInstance.connect(transport).catch((error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
 }
 
-module.exports = {
-    main: async () => server,
-    createConfluenceServer,
-    __test: server.__test
-};
+module.exports = { createConfluenceServer };

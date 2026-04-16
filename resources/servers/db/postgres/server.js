@@ -5,25 +5,39 @@ const { Client } = require('pg');
 
 const SERVER_INFO = { name: 'postgres-mcp', version: '1.2.0' };
 
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.code || 'DB_ERROR' }) }] };
-}
-
 function createPostgresServer() {
+    let sessionConfig = {
+        host: process.env.POSTGRES_HOST || process.env.DB_HOST,
+        port: parseInt(process.env.POSTGRES_PORT || process.env.DB_PORT || '5432', 10),
+        user: process.env.POSTGRES_USER || process.env.DB_USER,
+        password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD,
+        database: process.env.POSTGRES_DATABASE || process.env.DB_NAME
+    };
+
+    function normalizeError(err) {
+        const msg = err.message || JSON.stringify(err);
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.code || 'DB_ERROR' }) }] };
+    }
+
     let client = null;
 
     async function ensureConnected() {
         if (!client) {
-            const host = process.env.POSTGRES_HOST || process.env.DB_HOST;
-            if (host) {
+            // Re-read env
+            sessionConfig.host = process.env.POSTGRES_HOST || process.env.DB_HOST || sessionConfig.host;
+            sessionConfig.port = parseInt(process.env.POSTGRES_PORT || process.env.DB_PORT || '5432', 10);
+            sessionConfig.user = process.env.POSTGRES_USER || process.env.DB_USER || sessionConfig.user;
+            sessionConfig.password = process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD || sessionConfig.password;
+            sessionConfig.database = process.env.POSTGRES_DATABASE || process.env.DB_NAME || sessionConfig.database;
+
+            if (sessionConfig.host) {
                 client = new Client({
-                    host: host,
-                    port: parseInt(process.env.POSTGRES_PORT || process.env.DB_PORT || '5432', 10),
-                    user: process.env.POSTGRES_USER || process.env.DB_USER,
-                    password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD,
-                    database: process.env.POSTGRES_DATABASE || process.env.DB_NAME,
-                    ssl: host.includes('localhost') ? false : { rejectUnauthorized: false }
+                    host: sessionConfig.host,
+                    port: sessionConfig.port,
+                    user: sessionConfig.user,
+                    password: sessionConfig.password,
+                    database: sessionConfig.database,
+                    ssl: sessionConfig.host.includes('localhost') ? false : { rejectUnauthorized: false }
                 });
                 await client.connect();
             } else {
@@ -48,6 +62,7 @@ function createPostgresServer() {
         async (args) => {
             try {
                 if (client) await client.end().catch(() => {});
+                sessionConfig = { ...args };
                 client = new Client({
                     host: args.host,
                     port: args.port,
@@ -151,13 +166,21 @@ function createPostgresServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); client = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createPostgresServer();
+    const serverInstance = createPostgresServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('Postgres MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

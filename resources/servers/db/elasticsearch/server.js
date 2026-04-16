@@ -5,23 +5,39 @@ const { Client } = require('@elastic/elasticsearch');
 
 const SERVER_INFO = { name: 'elasticsearch-mcp', version: '1.0.0' };
 
-function normalizeError(err) {
-    const msg = err.message || err.meta?.body?.error?.reason || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.meta?.statusCode || 'ELASTIC_ERROR' }) }] };
-}
-
 function createElasticsearchServer() {
+    let sessionConfig = {
+        node: process.env.ELASTIC_NODE,
+        apiKey: process.env.ELASTIC_API_KEY,
+        username: process.env.ELASTIC_USERNAME,
+        password: process.env.ELASTIC_PASSWORD,
+        tlsSkipVerify: process.env.ELASTIC_TLS_SKIP_VERIFY === 'true'
+    };
+
+    function normalizeError(err) {
+        const msg = err.message || err.meta?.body?.error?.reason || JSON.stringify(err);
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.meta?.statusCode || 'ELASTIC_ERROR' }) }] };
+    }
+
     let esClient = null;
 
     async function ensureConnected() {
         if (!esClient) {
-            const node = process.env.ELASTIC_NODE;
-            if (node) {
-                const config = { node: node };
-                if (process.env.ELASTIC_API_KEY) {
-                    config.auth = { apiKey: process.env.ELASTIC_API_KEY };
-                } else if (process.env.ELASTIC_USERNAME) {
-                    config.auth = { username: process.env.ELASTIC_USERNAME, password: process.env.ELASTIC_PASSWORD };
+            // Re-read env
+            sessionConfig.node = process.env.ELASTIC_NODE || sessionConfig.node;
+            sessionConfig.apiKey = process.env.ELASTIC_API_KEY || sessionConfig.apiKey;
+            sessionConfig.username = process.env.ELASTIC_USERNAME || sessionConfig.username;
+            sessionConfig.password = process.env.ELASTIC_PASSWORD || sessionConfig.password;
+
+            if (sessionConfig.node) {
+                const config = { node: sessionConfig.node };
+                if (sessionConfig.apiKey) {
+                    config.auth = { apiKey: sessionConfig.apiKey };
+                } else if (sessionConfig.username) {
+                    config.auth = { username: sessionConfig.username, password: sessionConfig.password };
+                }
+                if (sessionConfig.tlsSkipVerify) {
+                    config.tls = { rejectUnauthorized: false };
                 }
                 esClient = new Client(config);
             } else {
@@ -45,6 +61,13 @@ function createElasticsearchServer() {
         },
         async (args) => {
             try {
+                sessionConfig = {
+                    node: args.node,
+                    apiKey: args.api_key,
+                    username: args.username,
+                    password: args.password,
+                    tlsSkipVerify: args.tls_skip_verify
+                };
                 const config = { node: args.node };
                 if (args.api_key) {
                     config.auth = { apiKey: args.api_key };
@@ -155,13 +178,21 @@ function createElasticsearchServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); esClient = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createElasticsearchServer();
+    const serverInstance = createElasticsearchServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('Elasticsearch MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

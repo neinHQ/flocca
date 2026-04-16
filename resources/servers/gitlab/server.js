@@ -5,66 +5,122 @@ const axios = require('axios');
 
 const SERVER_INFO = { name: 'gitlab-mcp', version: '2.0.0' };
 
-let config = {
-    token: process.env.GITLAB_TOKEN,
-    baseUrl: process.env.GITLAB_BASE_URL || 'https://gitlab.com/api/v4',
-    proxyUrl: process.env.FLOCCA_PROXY_URL,
-    userId: process.env.FLOCCA_USER_ID
-};
-
 function normalizeGitLabBaseUrl(url) {
     if (!url) return 'https://gitlab.com/api/v4';
     const trimmed = url.replace(/\/+$/, '');
     if (/\/api\/v4$/i.test(trimmed)) return trimmed;
+    // Handle enterprise paths
     return `${trimmed}/api/v4`;
 }
 
-function normalizeError(err) {
-    const msg = err.response ? `${err.response.status} - ${JSON.stringify(err.response.data)}` : (err.message || JSON.stringify(err));
-    return { isError: true, content: [{ type: 'text', text: `GitLab Error: ${msg}` }] };
-}
-
 function createGitLabServer() {
+    let sessionConfig = {
+        token: process.env.GITLAB_TOKEN,
+        baseUrl: process.env.GITLAB_BASE_URL || 'https://gitlab.com',
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let api = null;
 
-    async function ensureConnected() {
-        if (!config.token && !(config.proxyUrl && config.userId)) {
-            // Re-check env vars
-            config.token = process.env.GITLAB_TOKEN;
-            config.baseUrl = process.env.GITLAB_BASE_URL || config.baseUrl;
-            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
-            config.userId = process.env.FLOCCA_USER_ID;
+    function getHeaderCandidates() {
+        const candidates = [];
+        const { token, proxyUrl, userId } = sessionConfig;
 
-            if (!config.token && !(config.proxyUrl && config.userId)) {
+        if (proxyUrl && userId) {
+            candidates.push({ 'X-Flocca-User-ID': userId });
+        }
+
+        if (token) {
+            // GitLab supports both Private-Token and Bearer (Oauth/PAT)
+            candidates.push({ 'Private-Token': token });
+            candidates.push({ 'Authorization': `Bearer ${token}` });
+        }
+
+        return candidates;
+    }
+
+    function getBaseUrlCandidates() {
+        const candidates = [];
+        const { proxyUrl, baseUrl } = sessionConfig;
+
+        if (proxyUrl) {
+            candidates.push(proxyUrl.replace(/\/+$/, '') + '/api/v4');
+        }
+
+        const normalized = normalizeGitLabBaseUrl(baseUrl);
+        candidates.push(normalized);
+        
+        // Potential fallback for sub-paths if /api/v4 is already in baseUrl
+        if (baseUrl.includes('/api/v4')) {
+            candidates.push(baseUrl.replace(/\/+$/, ''));
+        }
+
+        return [...new Set(candidates)];
+    }
+
+    async function ensureConnected() {
+        const headers = getHeaderCandidates();
+        const urls = getBaseUrlCandidates();
+
+        if (headers.length === 0) {
+            // Re-check env vars
+            sessionConfig.token = process.env.GITLAB_TOKEN;
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID;
+            if (getHeaderCandidates().length === 0) {
                 throw new Error("GitLab Not Configured. Provide GITLAB_TOKEN or FLOCCA_PROXY_URL.");
             }
         }
 
         if (!api) {
-            let finalBaseUrl = normalizeGitLabBaseUrl(config.baseUrl);
-            const headers = {};
-
-            if (config.proxyUrl && config.userId) {
-                finalBaseUrl = `${config.proxyUrl.replace(/\/+$/, '')}/api/v4`;
-                headers['X-Flocca-User-ID'] = config.userId;
-            } else {
-                headers['Private-Token'] = config.token;
-            }
-
+            // Standardizing on the first valid candidate for initialization
             api = axios.create({
-                baseURL: finalBaseUrl,
-                headers: headers
+                baseURL: urls[0],
+                headers: headers[0],
+                timeout: 10000
             });
         }
         return api;
     }
 
+    async function gitlabRequest(config) {
+        const client = await ensureConnected();
+        const headers = getHeaderCandidates();
+        const urls = getBaseUrlCandidates();
+        
+        let lastError;
+        for (const url of urls) {
+            for (const header of headers) {
+                try {
+                    const res = await axios({
+                        ...config,
+                        baseURL: url,
+                        headers: { ...config.headers, ...header },
+                        timeout: config.timeout || 10000
+                    });
+                    return res;
+                } catch (e) {
+                    lastError = e;
+                    if (e.response?.status === 401 || e.response?.status === 404) continue;
+                    throw e;
+                }
+            }
+        }
+        throw lastError;
+    }
+
+    function normalizeError(err) {
+        const msg = err.response ? `${err.response.status} - ${JSON.stringify(err.response.data)}` : (err.message || JSON.stringify(err));
+        return { isError: true, content: [{ type: 'text', text: `GitLab Error: ${msg}` }] };
+    }
+
+    // --- TOOLS ---
     server.tool('gitlab_health', {}, async () => {
         try {
-            const client = await ensureConnected();
-            const res = await client.get('/user');
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, user: res.data.username, mode: config.proxyUrl ? 'proxy' : 'direct' }) }] };
+            const res = await gitlabRequest({ method: 'GET', url: '/user' });
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, user: res.data.username, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
@@ -75,15 +131,12 @@ function createGitLabServer() {
         },
         async (args) => {
             try {
-                config.token = args.token;
-                if (args.base_url) config.baseUrl = args.base_url;
+                if (args.token) sessionConfig.token = args.token;
+                if (args.base_url) sessionConfig.baseUrl = args.base_url;
                 api = null; // force re-init
-                const client = await ensureConnected();
-                await client.get('/user');
-                return { content: [{ type: 'text', text: "GitLab configuration updated and verified." }] };
+                const res = await gitlabRequest({ method: 'GET', url: '/user' });
+                return { content: [{ type: 'text', text: `GitLab configuration updated and verified for user: ${res.data.username}` }] };
             } catch (e) {
-                config.token = undefined;
-                api = null;
                 return normalizeError(e);
             }
         }
@@ -96,10 +149,9 @@ function createGitLabServer() {
         },
         async (args) => {
             try {
-                const client = await ensureConnected();
                 const params = { simple: true, membership: args.membership_only };
                 if (args.search) params.search = args.search;
-                const res = await client.get('/projects', { params });
+                const res = await gitlabRequest({ method: 'GET', url: '/projects', params });
                 return {
                     content: [{
                         type: 'text',
@@ -124,9 +176,8 @@ function createGitLabServer() {
         },
         async (args) => {
             try {
-                const client = await ensureConnected();
                 const treeParams = { ref: args.ref, path: args.path, recursive: args.recursive };
-                const res = await client.get(`/projects/${encodeURIComponent(args.project_id)}/repository/tree`, { params: treeParams });
+                const res = await gitlabRequest({ method: 'GET', url: `/projects/${encodeURIComponent(args.project_id)}/repository/tree`, params: treeParams });
                 return { content: [{ type: 'text', text: JSON.stringify(res.data, null, 2) }] };
             } catch (e) { return normalizeError(e); }
         }
@@ -140,10 +191,11 @@ function createGitLabServer() {
         },
         async (args) => {
             try {
-                const client = await ensureConnected();
                 const encodedPath = encodeURIComponent(args.file_path);
-                const res = await client.get(`/projects/${encodeURIComponent(args.project_id)}/repository/files/${encodedPath}`, {
-                    params: { ref: args.ref }
+                const res = await gitlabRequest({ 
+                    method: 'GET', 
+                    url: `/projects/${encodeURIComponent(args.project_id)}/repository/files/${encodedPath}`, 
+                    params: { ref: args.ref } 
                 });
                 const content = Buffer.from(res.data.content, 'base64').toString('utf-8');
                 return { content: [{ type: 'text', text: content }] };
@@ -161,8 +213,9 @@ function createGitLabServer() {
         async (args) => {
             try {
                 if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Create branch "${args.branch_name}" from "${args.ref}"? Set confirm: true to proceed.` }] };
-                const client = await ensureConnected();
-                const res = await client.post(`/projects/${encodeURIComponent(args.project_id)}/repository/branches`, null, {
+                const res = await gitlabRequest({
+                    method: 'POST',
+                    url: `/projects/${encodeURIComponent(args.project_id)}/repository/branches`,
                     params: { branch: args.branch_name, ref: args.ref }
                 });
                 return { content: [{ type: 'text', text: `Branch created: ${res.data.name}` }] };
@@ -182,12 +235,15 @@ function createGitLabServer() {
         async (args) => {
             try {
                 if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Create Merge Request "${args.title}" from "${args.source_branch}" to "${args.target_branch}"? Set confirm: true to proceed.` }] };
-                const client = await ensureConnected();
-                const res = await client.post(`/projects/${encodeURIComponent(args.project_id)}/merge_requests`, {
-                    source_branch: args.source_branch,
-                    target_branch: args.target_branch,
-                    title: args.title,
-                    description: args.description
+                const res = await gitlabRequest({
+                    method: 'POST',
+                    url: `/projects/${encodeURIComponent(args.project_id)}/merge_requests`,
+                    data: {
+                        source_branch: args.source_branch,
+                        target_branch: args.target_branch,
+                        title: args.title,
+                        description: args.description
+                    }
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, iid: res.data.iid, web_url: res.data.web_url }, null, 2) }] };
             } catch (e) { return normalizeError(e); }
@@ -202,10 +258,9 @@ function createGitLabServer() {
         },
         async (args) => {
             try {
-                const client = await ensureConnected();
                 const params = { state: args.state, scope: 'all' };
                 if (args.author_id) params.author_id = args.author_id;
-                const res = await client.get(`/projects/${encodeURIComponent(args.project_id)}/merge_requests`, { params });
+                const res = await gitlabRequest({ method: 'GET', url: `/projects/${encodeURIComponent(args.project_id)}/merge_requests`, params });
                 return {
                     content: [{
                         type: 'text',
@@ -231,8 +286,9 @@ function createGitLabServer() {
         async (args) => {
             try {
                 if (!args.confirm) return { isError: true, content: [{ type: 'text', text: `CONFIRMATION_REQUIRED: Trigger pipeline on ref "${args.ref}" for project ${args.project_id}? Set confirm: true to proceed.` }] };
-                const client = await ensureConnected();
-                const res = await client.post(`/projects/${encodeURIComponent(args.project_id)}/pipeline`, null, {
+                const res = await gitlabRequest({
+                    method: 'POST',
+                    url: `/projects/${encodeURIComponent(args.project_id)}/pipeline`,
                     params: { ref: args.ref }
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, status: res.data.status, web_url: res.data.web_url }, null, 2) }] };
@@ -247,20 +303,29 @@ function createGitLabServer() {
         },
         async (args) => {
             try {
-                const client = await ensureConnected();
-                const res = await client.get(`/projects/${encodeURIComponent(args.project_id)}/pipelines/${args.pipeline_id}`);
+                const res = await gitlabRequest({ method: 'GET', url: `/projects/${encodeURIComponent(args.project_id)}/pipelines/${args.pipeline_id}` });
                 return { content: [{ type: 'text', text: JSON.stringify({ id: res.data.id, status: res.data.status, web_url: res.data.web_url }, null, 2) }] };
             } catch (e) { return normalizeError(e); }
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        ensureConnected,
+        gitlabRequest,
+        getHeaderCandidates,
+        getBaseUrlCandidates,
+        setConfig: (next) => { sessionConfig = { ...sessionConfig, ...next }; api = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createGitLabServer();
+    const serverInstance = createGitLabServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('GitLab MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

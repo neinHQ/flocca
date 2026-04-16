@@ -15,25 +15,38 @@ const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
 
 const SERVER_INFO = { name: 'dynamodb-mcp', version: '1.0.0' };
 
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.name || 'DYNAMO_ERROR' }) }] };
-}
-
 function createDynamoServer() {
+    let sessionConfig = {
+        region: process.env.AWS_REGION,
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        endpoint: process.env.DYNAMODB_ENDPOINT // Custom env for DynamoDB local
+    };
+
+    function normalizeError(err) {
+        const msg = err.message || JSON.stringify(err);
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg, code: err.name || 'DYNAMO_ERROR' }) }] };
+    }
+
     let dynamo = null;
 
     async function ensureConnected() {
         if (!dynamo) {
-            const region = process.env.AWS_REGION;
+            // Re-read env if not explicitly set
+            sessionConfig.region = process.env.AWS_REGION || sessionConfig.region;
+            sessionConfig.accessKeyId = process.env.AWS_ACCESS_KEY_ID || sessionConfig.accessKeyId;
+            sessionConfig.secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || sessionConfig.secretAccessKey;
+            
+            const region = sessionConfig.region;
             if (region) {
                 const config = { region: region };
-                if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+                if (sessionConfig.accessKeyId && sessionConfig.secretAccessKey) {
                     config.credentials = {
-                        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-                        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+                        accessKeyId: sessionConfig.accessKeyId,
+                        secretAccessKey: sessionConfig.secretAccessKey
                     };
                 }
+                if (sessionConfig.endpoint) config.endpoint = sessionConfig.endpoint;
                 dynamo = new DynamoDBClient(config);
             } else {
                 throw new Error('DynamoDB not connected. Provide environment variables or call dynamo_connect first.');
@@ -56,10 +69,16 @@ function createDynamoServer() {
         async (args) => {
             try {
                 const config = { region: args.region };
+                sessionConfig.region = args.region;
                 if (args.access_key_id && args.secret_access_key) {
+                    sessionConfig.accessKeyId = args.access_key_id;
+                    sessionConfig.secretAccessKey = args.secret_access_key;
                     config.credentials = { accessKeyId: args.access_key_id, secretAccessKey: args.secret_access_key };
                 }
-                if (args.endpoint) config.endpoint = args.endpoint;
+                if (args.endpoint) {
+                    sessionConfig.endpoint = args.endpoint;
+                    config.endpoint = args.endpoint;
+                }
                 dynamo = new DynamoDBClient(config);
                 // Verify connectivity with a lightweight list call
                 await dynamo.send(new ListTablesCommand({ Limit: 1 }));
@@ -74,7 +93,7 @@ function createDynamoServer() {
     server.tool('dynamo_health', {}, async () => {
         try {
             const d = await ensureConnected();
-            const res = await d.send(new ListTablesCommand({ Limit: 1 }));
+            await d.send(new ListTablesCommand({ Limit: 1 }));
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, connected: true }) }] };
         } catch (e) { return normalizeError(e); }
     });
@@ -204,13 +223,21 @@ function createDynamoServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); dynamo = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createDynamoServer();
+    const serverInstance = createDynamoServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('DynamoDB MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

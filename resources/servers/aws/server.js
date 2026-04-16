@@ -30,7 +30,8 @@ const { SFNClient, StartExecutionCommand } = require('@aws-sdk/client-sfn');
 const SERVER_INFO = { name: 'aws-mcp', version: '2.0.0' };
 
 function createAwsServer() {
-    let config = {
+function createAwsServer() {
+    let sessionConfig = {
         region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
         credentials: (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ? {
             accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -52,30 +53,30 @@ function createAwsServer() {
     }
 
     async function ensureConnected(serviceKey, Factory) {
-        if (!config.region || (!config.credentials && !(config.proxyUrl && config.userId))) {
+        if (!sessionConfig.region || (!sessionConfig.credentials && !(sessionConfig.proxyUrl && sessionConfig.userId))) {
             // Re-read env for dynamic updates
-            config.region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
-            config.credentials = (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ? {
+            sessionConfig.region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
+            sessionConfig.credentials = (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ? {
                 accessKeyId: process.env.AWS_ACCESS_KEY_ID,
                 secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
                 sessionToken: process.env.AWS_SESSION_TOKEN
             } : undefined;
-            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
-            config.userId = process.env.FLOCCA_USER_ID;
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID;
 
-            if (!config.credentials && !(config.proxyUrl && config.userId)) {
+            if (!sessionConfig.credentials && !(sessionConfig.proxyUrl && sessionConfig.userId)) {
                 throw new Error("AWS Not Configured. Provide Credentials or use Proxy.");
             }
         }
 
-        const cacheKey = `${serviceKey}:${config.region}`;
+        const cacheKey = `${serviceKey}:${sessionConfig.region}`;
         if (!clients[cacheKey]) {
-            const clientConfig = { region: config.region, credentials: config.credentials };
+            const clientConfig = { region: sessionConfig.region, credentials: sessionConfig.credentials };
 
-            if (config.proxyUrl && config.userId) {
+            if (sessionConfig.proxyUrl && sessionConfig.userId) {
                 clientConfig.endpoint = async () => {
-                    const targetHost = `${serviceKey}.${config.region}.amazonaws.com`;
-                    const proxyEndpoint = `${config.proxyUrl.replace(/\/$/, '')}/${targetHost}`;
+                    const targetHost = `${serviceKey}.${sessionConfig.region}.amazonaws.com`;
+                    const proxyEndpoint = `${sessionConfig.proxyUrl.replace(/\/$/, '')}/${targetHost}`;
                     const urlObj = new URL(proxyEndpoint);
                     return {
                         protocol: urlObj.protocol.replace(':', ''),
@@ -89,11 +90,11 @@ function createAwsServer() {
 
             const clientInstance = new Factory(clientConfig);
 
-            if (config.proxyUrl && config.userId) {
+            if (sessionConfig.proxyUrl && sessionConfig.userId) {
                 clientInstance.middlewareStack.add(
                     (next) => async (args) => {
                         const { request } = args;
-                        if (request.headers) request.headers['x-flocca-user-id'] = config.userId;
+                        if (request.headers) request.headers['x-flocca-user-id'] = sessionConfig.userId;
                         return next(args);
                     },
                     { step: "build", name: "floccaProxyMiddleware", priority: "high" }
@@ -105,8 +106,8 @@ function createAwsServer() {
     }
 
     function isAllowed(service) {
-        if (!config.allowedServices || config.allowedServices.length === 0) return true;
-        return config.allowedServices.includes(service) || config.allowedServices.includes('*');
+        if (!sessionConfig.allowedServices || sessionConfig.allowedServices.length === 0) return true;
+        return sessionConfig.allowedServices.includes(service) || sessionConfig.allowedServices.includes('*');
     }
 
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
@@ -116,13 +117,13 @@ function createAwsServer() {
         try {
             const sts = await ensureConnected('sts', STSClient);
             const resp = await sts.send(new GetCallerIdentityCommand({}));
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, identity: resp.Arn, region: config.region }) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, identity: resp.Arn, region: sessionConfig.region, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
     server.tool('aws_configure',
         {
-            region: z.string(),
+            region: z.string().optional(),
             credentials: z.object({
                 access_key_id: z.string(),
                 secret_access_key: z.string(),
@@ -132,21 +133,21 @@ function createAwsServer() {
         },
         async (args) => {
             try {
-                config.region = args.region;
+                if (args.region) sessionConfig.region = args.region;
                 if (args.credentials) {
-                    config.credentials = {
+                    sessionConfig.credentials = {
                         accessKeyId: args.credentials.access_key_id,
                         secretAccessKey: args.credentials.secret_access_key,
                         sessionToken: args.credentials.session_token
                     };
                 }
-                config.allowedServices = args.services;
+                if (args.services) sessionConfig.allowedServices = args.services;
                 // Clear clients cache
                 Object.keys(clients).forEach(k => delete clients[k]);
                 
                 const sts = await ensureConnected('sts', STSClient);
                 const resp = await sts.send(new GetCallerIdentityCommand({}));
-                return { content: [{ type: 'text', text: `AWS configured as ${resp.Arn}` }] };
+                return { content: [{ type: 'text', text: `AWS configured and verified as ${resp.Arn}` }] };
             } catch (e) { return normalizeError(e); }
         }
     );
@@ -408,6 +409,15 @@ function createAwsServer() {
             return { content: [{ type: 'text', text: JSON.stringify({ events }) }] };
         } catch (e) { return normalizeError(e); }
     });
+
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        isAllowed,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

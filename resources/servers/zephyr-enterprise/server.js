@@ -41,14 +41,16 @@ function createZephyrEnterpriseServer() {
     }
 
     async function ensureConnected() {
-        if (!sessionConfig.base_url && !sessionConfig.proxyUrl) {
+        if (!sessionConfig.base_url || getHeaderCandidates().length === 0) {
             sessionConfig.base_url = normalizeBaseUrl(process.env.ZEPHYR_ENT_BASE_URL);
             sessionConfig.username = process.env.ZEPHYR_ENT_USERNAME;
             sessionConfig.token = process.env.ZEPHYR_ENT_TOKEN;
             sessionConfig.password = process.env.ZEPHYR_ENT_PASSWORD;
             sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL;
             sessionConfig.userId = process.env.FLOCCA_USER_ID;
-            if (!sessionConfig.base_url && !sessionConfig.proxyUrl) throw new Error('Zephyr Enterprise Not Configured.');
+            if (!sessionConfig.base_url || getHeaderCandidates().length === 0) {
+                throw new Error('Zephyr Enterprise Not Configured. Provide Base URL and Credentials (or Proxy).');
+            }
         }
 
         if (!sessionConfig.api_family) {
@@ -83,9 +85,9 @@ function createZephyrEnterpriseServer() {
                     body: body ? JSON.stringify(body) : undefined
                 });
                 if (!resp.ok) {
+                    if (resp.status === 401 && candidates.length > 1) continue;
                     const text = await resp.text();
                     const err = { message: text || resp.statusText, http_status: resp.status };
-                    if (resp.status === 401 && candidates.length > 1) continue;
                     throw err;
                 }
                 return resp.status === 204 ? {} : await resp.json();
@@ -114,23 +116,31 @@ function createZephyrEnterpriseServer() {
 
     // --- SYSTEM ---
     server.tool('zephyr_enterprise_health', {}, async () => {
-        try { await ensureConnected(); return { content: [{ type: 'text', text: JSON.stringify({ ok: true, identity: sessionConfig.identity, api_family: sessionConfig.api_family }) }] }; }
-        catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
+        try { 
+            await ensureConnected(); 
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, identity: sessionConfig.identity, api_family: sessionConfig.api_family, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] }; 
+        } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
     });
 
     server.tool('zephyr_enterprise_configure', {
-        base_url: z.string(),
-        username: z.string(),
+        base_url: z.string().optional(),
+        username: z.string().optional(),
         token: z.string().optional(),
-        password: z.string().optional()
+        password: z.string().optional(),
+        project_id: z.number().optional()
     }, async (args) => {
-        sessionConfig.base_url = normalizeBaseUrl(args.base_url);
-        sessionConfig.username = args.username;
-        sessionConfig.token = args.token;
-        sessionConfig.password = args.password;
+        if (args.base_url) sessionConfig.base_url = normalizeBaseUrl(args.base_url);
+        if (args.username) sessionConfig.username = args.username;
+        if (args.token) sessionConfig.token = args.token;
+        if (args.password) sessionConfig.password = args.password;
+        if (args.project_id) sessionConfig.project_id = args.project_id;
         sessionConfig.api_family = undefined; // Trigger re-detection
-        await ensureConnected();
-        return { content: [{ type: 'text', text: JSON.stringify({ ok: true, identity: sessionConfig.identity }) }] };
+        try {
+            await ensureConnected();
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, identity: sessionConfig.identity }) }] };
+        } catch (e) {
+            return { isError: true, content: [{ type: 'text', text: e.message }] };
+        }
     });
 
     server.tool('zephyr_enterprise_get_context', {}, async () => {

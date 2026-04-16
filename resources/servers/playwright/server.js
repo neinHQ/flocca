@@ -7,19 +7,25 @@ const fs = require('fs');
 
 const SERVER_INFO = { name: 'playwright-mcp', version: '2.0.0' };
 
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    return { isError: true, content: [{ type: 'text', text: `Playwright Error: ${msg}` }] };
-}
-
 function createPlaywrightServer() {
+    let sessionConfig = {
+        cwd: process.cwd(),
+        env: { ...process.env }
+    };
+
+    function normalizeError(err) {
+        const msg = err.message || JSON.stringify(err);
+        return { isError: true, content: [{ type: 'text', text: `Playwright Error: ${msg}` }] };
+    }
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     async function runPlaywrightCmd(args) {
         return new Promise((resolve) => {
             const child = spawn('npx', ['playwright', ...args], {
                 shell: true,
-                env: process.env
+                cwd: sessionConfig.cwd,
+                env: sessionConfig.env
             });
 
             let stdout = '';
@@ -96,13 +102,21 @@ function createPlaywrightServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        runPlaywrightCmd,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createPlaywrightServer();
+    const serverInstance = createPlaywrightServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('Playwright MCP server running on stdio');
     }).catch((error) => {
         console.error('Server error:', error);

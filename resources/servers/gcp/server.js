@@ -4,75 +4,91 @@ const { z } = require('zod');
 
 const SERVER_INFO = { name: 'gcp-mcp', version: '2.0.0' };
 
-let sessionConfig = {
-    project_id: process.env.GCP_PROJECT_ID,
-    token: process.env.GCP_ACCESS_TOKEN,
-    default_region: process.env.GCP_REGION,
-    default_zone: process.env.GCP_ZONE,
-    identity: undefined
-};
-
-function normalizeError(err) {
-    const msg = err.message || JSON.stringify(err);
-    const code = err.code || 'GCP_ERROR';
-    return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message: msg, code, status: err.http_status, details: err.details } }) }] };
-}
-
-async function gcpFetch(url, { method = 'GET', query, body, headers } = {}) {
-    const u = new URL(url);
-    if (query) {
-        Object.entries(query).forEach(([k, v]) => {
-            if (v !== undefined && v !== null) u.searchParams.append(k, v);
-        });
-    }
-
-    if (!sessionConfig.token) throw { message: 'GCP access token not configured', code: 'AUTH_FAILED' };
-
-    const resp = await fetch(u.toString(), {
-        method,
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionConfig.token}`,
-            ...(headers || {})
-        },
-        body: body ? JSON.stringify(body) : undefined
-    });
-
-    let data = {};
-    try { data = await resp.json(); } catch (_) { data = {}; }
-
-    if (!resp.ok || data.error) {
-        const err = data.error || {};
-        throw { message: err.message || resp.statusText || 'GCP request failed', code: err.status || 'GCP_ERROR', details: err, http_status: resp.status };
-    }
-    return data;
-}
-
-function parseRelativeNow(expr) {
-    if (!expr || expr === 'now') return new Date();
-    const m = expr.match(/^now-(\d+)([smhd])$/);
-    if (!m) return new Date(expr);
-    const value = Number(m[1]);
-    const unit = m[2];
-    const map = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
-    return new Date(Date.now() - value * map[unit]);
-}
-
 function createGcpServer() {
+    let sessionConfig = {
+        project_id: process.env.GCP_PROJECT_ID,
+        token: process.env.GCP_ACCESS_TOKEN,
+        default_region: process.env.GCP_REGION,
+        default_zone: process.env.GCP_ZONE,
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID,
+        identity: undefined
+    };
+
+    function normalizeError(err) {
+        const msg = err.message || JSON.stringify(err);
+        const code = err.code || 'GCP_ERROR';
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: { message: msg, code, status: err.http_status, details: err.details } }) }] };
+    }
+
+    function parseRelativeNow(expr) {
+        if (!expr || expr === 'now') return new Date();
+        const m = expr.match(/^now-(\d+)([smhd])$/);
+        if (!m) return new Date(expr);
+        const value = Number(m[1]);
+        const unit = m[2];
+        const map = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+        return new Date(Date.now() - value * map[unit]);
+    }
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
 
     async function ensureConnected() {
-        if (!sessionConfig.project_id || !sessionConfig.token) {
-            // Re-check environment variables in case they were set later
+        if (!sessionConfig.project_id || (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId))) {
+            // Re-check environment variables for dynamic updates
             sessionConfig.project_id = process.env.GCP_PROJECT_ID;
             sessionConfig.token = process.env.GCP_ACCESS_TOKEN;
             sessionConfig.default_region = process.env.GCP_REGION;
             sessionConfig.default_zone = process.env.GCP_ZONE;
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID;
 
-            if (!sessionConfig.project_id || !sessionConfig.token) {
-                throw { message: 'GCP not configured. Provide GCP_PROJECT_ID and GCP_ACCESS_TOKEN.', code: 'AUTH_FAILED' };
+            if (!sessionConfig.project_id || (!sessionConfig.token && !(sessionConfig.proxyUrl && sessionConfig.userId))) {
+                throw { message: 'GCP not configured. Provide GCP_PROJECT_ID and Token (or Proxy).', code: 'AUTH_FAILED' };
             }
         }
+    }
+
+    async function gcpFetch(url, { method = 'GET', query, body, headers } = {}) {
+        await ensureConnected();
+        
+        let finalUrl = url;
+        const currentHeaders = {
+            'Content-Type': 'application/json',
+            ...(headers || {})
+        };
+
+        if (sessionConfig.proxyUrl && sessionConfig.userId) {
+            const urlObj = new URL(url);
+            const targetHost = urlObj.hostname;
+            finalUrl = `${sessionConfig.proxyUrl.replace(/\/$/, '')}/${targetHost}${urlObj.pathname}`;
+            currentHeaders['X-Flocca-User-ID'] = sessionConfig.userId;
+        } else {
+            if (!sessionConfig.token) throw { message: 'GCP access token missing', code: 'AUTH_FAILED' };
+            currentHeaders['Authorization'] = `Bearer ${sessionConfig.token}`;
+        }
+
+        const u = new URL(finalUrl);
+        if (query) {
+            Object.entries(query).forEach(([k, v]) => {
+                if (v !== undefined && v !== null) u.searchParams.append(k, v);
+            });
+        }
+
+        const resp = await fetch(u.toString(), {
+            method,
+            headers: currentHeaders,
+            body: body ? JSON.stringify(body) : undefined
+        });
+
+        let data = {};
+        try { data = await resp.json(); } catch (_) { data = {}; }
+
+        if (!resp.ok || data.error) {
+            const err = data.error || {};
+            throw { message: err.message || resp.statusText || 'GCP request failed', code: err.status || 'GCP_ERROR', details: err, http_status: resp.status };
+        }
+        return data;
     }
 
     // --- Core & Config ---
@@ -81,28 +97,28 @@ function createGcpServer() {
         try {
             await ensureConnected();
             const info = await gcpFetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${sessionConfig.project_id}`);
-            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, project_id: sessionConfig.project_id, project_number: info.projectNumber }) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ ok: true, project_id: sessionConfig.project_id, project_number: info.projectNumber, mode: sessionConfig.proxyUrl ? 'proxy' : 'direct' }) }] };
         } catch (e) { return normalizeError(e); }
     });
 
     server.tool('gcp_configure',
         {
-            project_id: z.string().describe('GCP Project ID'),
-            token: z.string().describe('GCP Access Token'),
+            project_id: z.string().optional().describe('GCP Project ID'),
+            token: z.string().optional().describe('GCP Access Token'),
             default_region: z.string().optional(),
             default_zone: z.string().optional()
         },
         async (args) => {
             try {
-                sessionConfig.project_id = args.project_id;
-                sessionConfig.token = args.token;
-                sessionConfig.default_region = args.default_region;
-                sessionConfig.default_zone = args.default_zone;
+                if (args.project_id) sessionConfig.project_id = args.project_id;
+                if (args.token) sessionConfig.token = args.token;
+                if (args.default_region) sessionConfig.default_region = args.default_region;
+                if (args.default_zone) sessionConfig.default_zone = args.default_zone;
 
-                const info = await gcpFetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${args.project_id}`);
-                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, project_id: args.project_id, message: "Successfully configured GCP." }) }] };
+                await ensureConnected();
+                const info = await gcpFetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${sessionConfig.project_id}`);
+                return { content: [{ type: 'text', text: JSON.stringify({ ok: true, project_id: sessionConfig.project_id, message: "Successfully configured and verified GCP." }) }] };
             } catch (e) {
-                sessionConfig.token = undefined;
                 return normalizeError(e);
             }
         }
@@ -312,6 +328,15 @@ function createGcpServer() {
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        gcpFetch,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }

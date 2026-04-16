@@ -5,34 +5,34 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 
 const SERVER_INFO = { name: 'circleci-mcp', version: '1.0.0' };
 
-let config = {
-    token: process.env.CIRCLECI_TOKEN,
-    baseUrl: 'https://circleci.com/api/v2'
-};
-
-function normalizeError(err) {
-    const data = err.response?.data || {};
-    const msg = data.message || err.message || JSON.stringify(data);
-    return { isError: true, content: [{ type: 'text', text: `CircleCI Error: ${msg}` }] };
-}
-
 function createCircleCiServer() {
+    let sessionConfig = {
+        token: process.env.CIRCLECI_TOKEN,
+        baseUrl: 'https://circleci.com/api/v2'
+    };
+
+    function normalizeError(err) {
+        const data = err.response?.data || {};
+        const msg = data.message || err.message || JSON.stringify(data);
+        return { isError: true, content: [{ type: 'text', text: `CircleCI Error: ${msg}` }] };
+    }
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
     let api = null;
 
     async function ensureConnected() {
-        if (!config.token) {
-            config.token = process.env.CIRCLECI_TOKEN;
-            if (!config.token) {
+        if (!sessionConfig.token) {
+            sessionConfig.token = process.env.CIRCLECI_TOKEN;
+            if (!sessionConfig.token) {
                 throw new Error("CircleCI Not Configured. Set CIRCLECI_TOKEN environment variable.");
             }
         }
 
         if (!api) {
             api = axios.create({
-                baseURL: config.baseUrl,
+                baseURL: sessionConfig.baseUrl,
                 headers: {
-                    'Circle-Token': config.token,
+                    'Circle-Token': sessionConfig.token,
                     'Accept': 'application/json',
                     'Content-Type': 'application/json'
                 }
@@ -172,13 +172,21 @@ function createCircleCiServer() {
         }
     );
 
+    server.__test = {
+        sessionConfig,
+        normalizeError,
+        ensureConnected,
+        setConfig: (next) => { Object.assign(sessionConfig, next); api = null; },
+        getConfig: () => ({ ...sessionConfig })
+    };
+
     return server;
 }
 
 if (require.main === module) {
-    const server = createCircleCiServer();
+    const serverInstance = createCircleCiServer();
     const transport = new StdioServerTransport();
-    server.connect(transport).then(() => {
+    serverInstance.connect(transport).then(() => {
         console.error('CircleCI MCP server running on stdio');
     }).catch(error => {
         console.error('Server error:', error);
