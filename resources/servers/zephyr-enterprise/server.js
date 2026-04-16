@@ -195,8 +195,9 @@ function createZephyrEnterpriseServer() {
                 const testCaseId = (Array.isArray(data) && data[0]?.testcase?.id) || data.id || data.testcase?.id;
 
                 if (args.steps && args.steps.length > 0 && testCaseId) {
+                    const stepPath = sessionConfig.api_family === API_FAMILY.FLEX ? `flex/services/rest/latest/teststep/${testCaseId}` : `public/rest/api/1.0/teststep/${testCaseId}`;
                     const stepsRes = await Promise.all(args.steps.map(s => 
-                        zFetch(`public/rest/api/1.0/teststep/${testCaseId}`, { 
+                        zFetch(stepPath, { 
                             method: 'POST', 
                             body: { step: s.step, data: s.data || '', result: s.result || '' } 
                         }).catch(e => ({ error: e.message }))
@@ -226,8 +227,9 @@ function createZephyrEnterpriseServer() {
             }
 
             if (args.steps && args.steps.length > 0) {
+                const stepPath = sessionConfig.api_family === API_FAMILY.FLEX ? `flex/services/rest/latest/teststep/${args.id}` : `public/rest/api/1.0/teststep/${args.id}`;
                 const stepsRes = await Promise.all(args.steps.map(s => 
-                    zFetch(`public/rest/api/1.0/teststep/${args.id}`, { 
+                    zFetch(stepPath, { 
                         method: 'POST', 
                         body: { step: s.step, data: s.data || '', result: s.result || '' } 
                     }).catch(e => ({ error: e.message }))
@@ -328,7 +330,8 @@ function createZephyrEnterpriseServer() {
     server.tool('zephyr_enterprise_update_test_step', { test_step_id: z.number(), step: z.string(), confirm: z.boolean() }, async (args) => {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED" }] };
         try {
-            const data = await zFetch(`public/rest/api/1.0/teststep/${args.test_step_id}`, { method: 'PUT', body: { step: args.step } });
+            const stepPath = sessionConfig.api_family === API_FAMILY.FLEX ? `flex/services/rest/latest/teststep/${args.test_step_id}` : `public/rest/api/1.0/teststep/${args.test_step_id}`;
+            const data = await zFetch(stepPath, { method: 'PUT', body: { step: args.step } });
             return { content: [{ type: 'text', text: JSON.stringify(data) }] };
         } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
     });
@@ -343,7 +346,8 @@ function createZephyrEnterpriseServer() {
         if (!args.confirm) return { isError: true, content: [{ type: 'text', text: "CONFIRMATION_REQUIRED" }] };
         try {
             const body = { step: args.step, data: args.data || '', result: args.result || '' };
-            const data = await zFetch(`public/rest/api/1.0/teststep/${args.test_case_id}`, { method: 'POST', body });
+            const stepPath = sessionConfig.api_family === API_FAMILY.FLEX ? `flex/services/rest/latest/teststep/${args.test_case_id}` : `public/rest/api/1.0/teststep/${args.test_case_id}`;
+            const data = await zFetch(stepPath, { method: 'POST', body });
             return { content: [{ type: 'text', text: JSON.stringify(data) }] };
         } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
     });
