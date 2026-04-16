@@ -17,9 +17,20 @@ describe('Jira MCP Logic', () => {
             get: jest.fn().mockResolvedValue({ data: {} }),
             post: jest.fn().mockResolvedValue({ data: {} }),
             put: jest.fn().mockResolvedValue({ data: {} }),
-            request: jest.fn().mockResolvedValue({ data: {} })
+            request: jest.fn().mockImplementation((cfg) => {
+                // If the test mocks request, return that. Otherwise return default.
+                return Promise.resolve({ data: {} });
+            }),
+            delete: jest.fn().mockResolvedValue({ data: {} })
         };
+        
+        // Mock axios as a function (used by jiraReq)
+        axios.mockImplementation((cfg) => mockAxios.request(cfg));
+        
+        // Mock axios.create
         axios.create.mockReturnValue(mockAxios);
+        
+        // Factory now returns the server directly with __test property
         server = createJiraServer();
     });
 
@@ -31,11 +42,11 @@ describe('Jira MCP Logic', () => {
 
     describe('jira_health', () => {
         it('should verify connection', async () => {
-            mockAxios.get.mockResolvedValue({ data: { name: 'User' } });
+            mockAxios.request.mockResolvedValue({ data: { name: 'User' } });
             const res = await callTool('jira_health');
             const data = JSON.parse(res.content[0].text);
             expect(data.ok).toBe(true);
-            expect(mockAxios.get).toHaveBeenCalledWith(expect.stringContaining('myself'));
+            expect(mockAxios.request).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining('myself') }));
         });
     });
 

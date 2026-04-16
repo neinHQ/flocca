@@ -11,8 +11,10 @@ function createConfluenceServer() {
     let config = {
         username: process.env.CONFLUENCE_USERNAME,
         token: process.env.CONFLUENCE_TOKEN,
-        baseUrl: process.env.FLOCCA_PROXY_URL || process.env.CONFLUENCE_BASE_URL,
-        deploymentMode: (process.env.CONFLUENCE_DEPLOYMENT_MODE || 'cloud').toLowerCase()
+        baseUrl: process.env.CONFLUENCE_BASE_URL,
+        deploymentMode: (process.env.CONFLUENCE_DEPLOYMENT_MODE || 'cloud').toLowerCase(),
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
     };
 
     function normalizeBaseUrl(url) {
@@ -30,27 +32,22 @@ function createConfluenceServer() {
     }
 
     function getHeaderCandidates() {
-        if (process.env.FLOCCA_PROXY_URL && process.env.FLOCCA_USER_ID) {
-            return [{
-                'X-Flocca-User-ID': process.env.FLOCCA_USER_ID,
-                'Content-Type': 'application/json'
-            }];
+        if (config.proxyUrl && config.userId) {
+            return [{ 'Content-Type': 'application/json', 'X-Flocca-User-ID': config.userId }];
         }
-        if (!config.token || !config.baseUrl) throw new Error("Confluence not configured.");
+        if (!config.token || (!config.baseUrl && !config.proxyUrl)) throw new Error("Confluence not configured.");
 
         const baseHeaders = { 'Content-Type': 'application/json' };
         const candidates = [];
-        const bearerCandidate = { ...baseHeaders, 'Authorization': `Bearer ${config.token}` };
-        const basicCandidate = config.username
-            ? { ...baseHeaders, 'Authorization': `Basic ${Buffer.from(`${config.username}:${config.token}`).toString('base64')}` }
-            : undefined;
+        const bearer = { ...baseHeaders, 'Authorization': `Bearer ${config.token}` };
+        const basic = config.username ? { ...baseHeaders, 'Authorization': `Basic ${Buffer.from(`${config.username}:${config.token}`).toString('base64')}` } : null;
 
         if (config.deploymentMode === 'server' || config.deploymentMode === 'self_hosted') {
-            candidates.push(bearerCandidate);
-            if (basicCandidate) candidates.push(basicCandidate);
+            candidates.push(bearer);
+            if (basic) candidates.push(basic);
         } else {
-            if (basicCandidate) candidates.push(basicCandidate);
-            candidates.push(bearerCandidate);
+            if (basic) candidates.push(basic);
+            candidates.push(bearer);
         }
         return candidates;
     }
@@ -59,16 +56,17 @@ function createConfluenceServer() {
         let lastError;
         const headerCandidates = getHeaderCandidates();
         const paths = apiPathCandidates(pathPart);
+        const baseURL = normalizeBaseUrl(config.proxyUrl && config.userId ? config.proxyUrl : config.baseUrl);
 
         for (const apiPath of paths) {
             for (const headers of headerCandidates) {
                 try {
                     return await axios({
                         method,
-                        url: `${config.baseUrl}${apiPath}`,
+                        url: `${baseURL}${apiPath}`,
                         data: body,
                         ...options,
-                        headers: { ...(options.headers || {}), ...headers }
+                        headers: { ...(options.headers || {}), ...headers, 'X-Atlassian-Token': 'nocheck' }
                     });
                 } catch (err) {
                     lastError = err;
@@ -242,20 +240,19 @@ function createConfluenceServer() {
         } catch (e) { return normalizeError(e); }
     });
 
-    return {
-        server,
-        __test: {
-            normalizeBaseUrl,
-            apiPathCandidates,
-            confluenceRequest,
-            normalizeError,
-            setConfig: (next) => { config = { ...config, ...next }; },
-            getConfig: () => ({ ...config })
-        }
+    server.__test = {
+        normalizeBaseUrl,
+        apiPathCandidates,
+        confluenceRequest,
+        normalizeError,
+        setConfig: (next) => { config = { ...config, ...next }; },
+        getConfig: () => ({ ...config })
     };
+
+    return server;
 }
 
-const { server, __test } = createConfluenceServer();
+const server = createConfluenceServer();
 
 if (require.main === module) {
     const transport = new StdioServerTransport();
@@ -265,5 +262,5 @@ if (require.main === module) {
 module.exports = {
     main: async () => server,
     createConfluenceServer,
-    __test
+    __test: server.__test
 };

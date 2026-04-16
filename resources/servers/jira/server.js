@@ -5,15 +5,6 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 
 const SERVER_INFO = { name: 'jira-mcp', version: '2.0.0' };
 
-let config = {
-    email: process.env.JIRA_EMAIL,
-    token: process.env.JIRA_API_TOKEN || process.env.JIRA_TOKEN,
-    url: process.env.JIRA_SITE_URL || process.env.JIRA_URL,
-    deploymentMode: (process.env.JIRA_DEPLOYMENT_MODE || 'cloud').toLowerCase(),
-    proxyUrl: process.env.FLOCCA_PROXY_URL,
-    userId: process.env.FLOCCA_USER_ID
-};
-
 function normalizeBaseUrl(url) {
     const trimmed = (url || '').trim().replace(/\/+$/, '');
     if (!trimmed) return trimmed;
@@ -28,69 +19,92 @@ function normalizeError(err) {
 }
 
 function createJiraServer() {
+    let config = {
+        email: process.env.JIRA_EMAIL,
+        token: process.env.JIRA_API_TOKEN || process.env.JIRA_TOKEN,
+        url: process.env.JIRA_SITE_URL || process.env.JIRA_URL,
+        deploymentMode: (process.env.JIRA_DEPLOYMENT_MODE || 'cloud').toLowerCase(),
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
+    };
+
     const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
-    let api = null;
 
-    async function ensureConnected() {
-        if (!config.token && !(config.proxyUrl && config.userId)) {
-            // Re-read env
-            config.email = process.env.JIRA_EMAIL;
-            config.token = process.env.JIRA_API_TOKEN || process.env.JIRA_TOKEN;
-            config.url = process.env.JIRA_SITE_URL || process.env.JIRA_URL;
-            config.proxyUrl = process.env.FLOCCA_PROXY_URL;
-            config.userId = process.env.FLOCCA_USER_ID;
-
-            if (!config.token && !(config.proxyUrl && config.userId)) {
-                throw new Error("Jira Not Configured. Provide JIRA_API_TOKEN/EMAIL/URL or use Proxy.");
-            }
+    function getHeaderCandidates() {
+        if (config.proxyUrl && config.userId) {
+            return [{ 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Flocca-User-ID': config.userId }];
         }
+        if (!config.token || !config.url) throw new Error("Jira Not Configured. Missing token or url.");
+        const baseHeaders = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+        const candidates = [];
+        const basic = config.email ? { ...baseHeaders, 'Authorization': `Basic ${Buffer.from(`${config.email}:${config.token}`).toString('base64')}` } : null;
+        const bearer = { ...baseHeaders, 'Authorization': `Bearer ${config.token}` };
 
-        if (!api) {
-            const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
-            let baseURL = normalizeBaseUrl(config.url);
-
-            if (config.proxyUrl && config.userId) {
-                baseURL = normalizeBaseUrl(config.proxyUrl);
-                headers['X-Flocca-User-ID'] = config.userId;
-            } else if (config.email) {
-                const auth = Buffer.from(`${config.email}:${config.token}`).toString('base64');
-                headers['Authorization'] = `Basic ${auth}`;
-            } else {
-                headers['Authorization'] = `Bearer ${config.token}`;
-            }
-
-            api = axios.create({ baseURL, headers });
+        if (config.deploymentMode === 'server' || config.deploymentMode === 'self_hosted') {
+            candidates.push(bearer);
+            if (basic) candidates.push(basic);
+        } else {
+            if (basic) candidates.push(basic);
+            candidates.push(bearer);
         }
-        return api;
+        return candidates;
     }
 
     async function jiraReq(method, pathPart, options = {}) {
-        const client = await ensureConnected();
-        const versions = (config.deploymentMode === 'server') ? ['2', '3'] : ['3', '2'];
+        const versions = (config.deploymentMode === 'server' || config.deploymentMode === 'self_hosted') ? ['2', '3'] : ['3', '2'];
+        const headers = getHeaderCandidates();
+        const baseURL = normalizeBaseUrl(config.proxyUrl && config.userId ? config.proxyUrl : config.url);
         let lastErr;
 
         for (const v of versions) {
-            try {
-                const url = `/rest/api/${v}/${pathPart.replace(/^\/+/, '')}`;
-                return await client.request({ method, url, ...options });
-            } catch (err) {
-                lastErr = err;
-                if ([404, 405].includes(err.response?.status)) continue;
-                throw err;
+            for (const h of headers) {
+                try {
+                    const url = `${baseURL}/rest/api/${v}/${pathPart.replace(/^\/+/, '')}`;
+                    const res = await axios({
+                        method,
+                        url,
+                        ...options,
+                        headers: { ...(options.headers || {}), ...h, 'X-Atlassian-Token': 'no-check' }
+                    });
+                    return res;
+                } catch (err) {
+                    lastErr = err;
+                    const status = err.response?.status;
+                    if (status === 401 && headers.length > 1) continue;
+                    if ([404, 405].includes(status)) break;
+                    throw err;
+                }
             }
         }
         throw lastErr;
     }
 
     async function jiraAgileReq(method, pathPart, options = {}) {
-        const client = await ensureConnected();
-        return await client.request({ method, url: `/rest/agile/1.0/${pathPart.replace(/^\/+/, '')}`, ...options });
+        const headers = getHeaderCandidates();
+        const baseURL = normalizeBaseUrl(config.proxyUrl && config.userId ? config.proxyUrl : config.url);
+        let lastErr;
+
+        for (const h of headers) {
+            try {
+                const url = `${baseURL}/rest/agile/1.0/${pathPart.replace(/^\/+/, '')}`;
+                return await axios({
+                    method,
+                    url,
+                    ...options,
+                    headers: { ...(options.headers || {}), ...h }
+                });
+            } catch (err) {
+                lastErr = err;
+                if (err.response?.status === 401 && headers.length > 1) continue;
+                throw err;
+            }
+        }
+        throw lastErr;
     }
 
     server.tool('jira_health', {}, async () => {
         try {
-            const client = await ensureConnected();
-            await client.get('/rest/api/3/myself').catch(() => client.get('/rest/api/2/myself'));
+            await jiraReq('GET', 'myself');
             return { content: [{ type: 'text', text: JSON.stringify({ ok: true, mode: config.proxyUrl ? 'proxy' : 'direct', deployment: config.deploymentMode }) }] };
         } catch (e) { return normalizeError(e); }
     });
@@ -108,9 +122,7 @@ function createJiraServer() {
                 config.token = args.token;
                 config.url = args.url;
                 config.deploymentMode = args.deployment_mode;
-                api = null;
-                const client = await ensureConnected();
-                await client.get('/rest/api/3/myself').catch(() => client.get('/rest/api/2/myself'));
+                await jiraReq('GET', 'myself');
                 return { content: [{ type: 'text', text: "Jira configured successfully." }] };
             } catch (e) { return normalizeError(e); }
         }
@@ -312,6 +324,15 @@ function createJiraServer() {
             } catch (e) { return normalizeError(e); }
         }
     );
+
+    server.__test = {
+        normalizeBaseUrl,
+        normalizeError,
+        getHeaderCandidates,
+        jiraReq,
+        setConfig: (next) => { config = { ...config, ...next }; },
+        getConfig: () => ({ ...config })
+    };
 
     return server;
 }

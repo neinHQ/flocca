@@ -7,16 +7,32 @@ const SERVER_INFO = { name: 'zephyr-enterprise-mcp', version: '2.0.0' };
 const API_FAMILY = { PUBLIC: 'public', FLEX: 'flex' };
 
 function createZephyrEnterpriseServer() {
-    const sessionConfig = {
-        base_url: process.env.ZEPHYR_ENT_BASE_URL || undefined,
+    let sessionConfig = {
+        base_url: process.env.ZEPHYR_ENT_BASE_URL,
         username: process.env.ZEPHYR_ENT_USERNAME,
         token: process.env.ZEPHYR_ENT_TOKEN,
         password: process.env.ZEPHYR_ENT_PASSWORD,
         project_id: process.env.ZEPHYR_ENT_PROJECT_ID ? parseInt(process.env.ZEPHYR_ENT_PROJECT_ID) : undefined,
         api_family: undefined,
         release_id: process.env.ZEPHYR_ENT_RELEASE_ID ? parseInt(process.env.ZEPHYR_ENT_RELEASE_ID) : undefined,
-        identity: undefined
+        identity: undefined,
+        proxyUrl: process.env.FLOCCA_PROXY_URL,
+        userId: process.env.FLOCCA_USER_ID
     };
+
+    function getHeaderCandidates() {
+        if (sessionConfig.proxyUrl && sessionConfig.userId) {
+            return [{ 'Content-Type': 'application/json', 'X-Flocca-User-ID': sessionConfig.userId }];
+        }
+        const baseHeaders = { 'Content-Type': 'application/json' };
+        const candidates = [];
+        const bearer = sessionConfig.token ? { ...baseHeaders, 'Authorization': `Bearer ${sessionConfig.token}` } : null;
+        const basic = sessionConfig.username ? { ...baseHeaders, 'Authorization': `Basic ${Buffer.from(`${sessionConfig.username}:${sessionConfig.password || ''}`).toString('base64')}` } : null;
+
+        if (bearer) candidates.push(bearer);
+        if (basic) candidates.push(basic);
+        return candidates;
+    }
 
     function normalizeBaseUrl(baseUrl) {
         const raw = String(baseUrl || '').trim().replace(/\/+$/, '');
@@ -25,18 +41,22 @@ function createZephyrEnterpriseServer() {
     }
 
     async function ensureConnected() {
-        if (!sessionConfig.base_url) {
+        if (!sessionConfig.base_url && !sessionConfig.proxyUrl) {
             sessionConfig.base_url = normalizeBaseUrl(process.env.ZEPHYR_ENT_BASE_URL);
             sessionConfig.username = process.env.ZEPHYR_ENT_USERNAME;
             sessionConfig.token = process.env.ZEPHYR_ENT_TOKEN;
             sessionConfig.password = process.env.ZEPHYR_ENT_PASSWORD;
-            if (!sessionConfig.base_url) throw new Error('ZEPHYR_ENT_BASE_URL not set.');
+            sessionConfig.proxyUrl = process.env.FLOCCA_PROXY_URL;
+            sessionConfig.userId = process.env.FLOCCA_USER_ID;
+            if (!sessionConfig.base_url && !sessionConfig.proxyUrl) throw new Error('Zephyr Enterprise Not Configured.');
         }
+
         if (!sessionConfig.api_family) {
-            const auth = sessionConfig.token ? `Bearer ${sessionConfig.token}` : `Basic ${Buffer.from(`${sessionConfig.username}:${sessionConfig.password}`).toString('base64')}`;
+            const h = getHeaderCandidates();
+            const baseURL = normalizeBaseUrl(sessionConfig.proxyUrl && sessionConfig.userId ? sessionConfig.proxyUrl : sessionConfig.base_url);
             try {
-                const url = `${sessionConfig.base_url.replace(/\/+$/, '')}/public/rest/api/1.0/projects`;
-                const resp = await fetch(url, { headers: { 'Authorization': auth } });
+                const url = `${baseURL}/public/rest/api/1.0/projects`;
+                const resp = await fetch(url, { headers: h[0] });
                 sessionConfig.api_family = resp.ok ? API_FAMILY.PUBLIC : API_FAMILY.FLEX;
                 sessionConfig.identity = sessionConfig.username || 'api_user';
             } catch (e) {
@@ -48,20 +68,34 @@ function createZephyrEnterpriseServer() {
 
     async function zFetch(pathPart, { method = 'GET', query, body, headers } = {}) {
         await ensureConnected();
-        const url = new URL(`${sessionConfig.base_url.replace(/\/+$/, '')}/${pathPart.replace(/^\/+/, '')}`);
+        const baseURL = normalizeBaseUrl(sessionConfig.proxyUrl && sessionConfig.userId ? sessionConfig.proxyUrl : sessionConfig.base_url);
+        const url = new URL(`${baseURL}/${pathPart.replace(/^\/+/, '')}`);
         if (query) Object.entries(query).forEach(([k, v]) => { if (v !== undefined) url.searchParams.set(k, v); });
         
-        const auth = sessionConfig.token ? `Bearer ${sessionConfig.token}` : `Basic ${Buffer.from(`${sessionConfig.username}:${sessionConfig.password}`).toString('base64')}`;
-        const resp = await fetch(url.toString(), {
-            method,
-            headers: { 'Content-Type': 'application/json', 'Authorization': auth, ...(headers || {}) },
-            body: body ? JSON.stringify(body) : undefined
-        });
-        if (!resp.ok) {
-            const text = await resp.text();
-            throw { message: text || resp.statusText, http_status: resp.status };
+        const candidates = getHeaderCandidates();
+        let lastErr;
+
+        for (const h of candidates) {
+            try {
+                const resp = await fetch(url.toString(), {
+                    method,
+                    headers: { ...h, ...(headers || {}) },
+                    body: body ? JSON.stringify(body) : undefined
+                });
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    const err = { message: text || resp.statusText, http_status: resp.status };
+                    if (resp.status === 401 && candidates.length > 1) continue;
+                    throw err;
+                }
+                return resp.status === 204 ? {} : await resp.json();
+            } catch (err) {
+                lastErr = err;
+                if (err.http_status === 401 && candidates.length > 1) continue;
+                throw err;
+            }
         }
-        return resp.status === 204 ? {} : await resp.json();
+        throw lastErr;
     }
 
     async function zFetchWithFallback(pathParts, options = {}) {
@@ -426,6 +460,16 @@ function createZephyrEnterpriseServer() {
             return { content: [{ type: 'text', text: JSON.stringify(data) }] };
         } catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
     });
+
+    server.__test = {
+        sessionConfig,
+        normalizeBaseUrl,
+        getHeaderCandidates,
+        zFetch,
+        zFetchWithFallback,
+        setConfig: (next) => { sessionConfig = { ...sessionConfig, ...next }; },
+        getConfig: () => ({ ...sessionConfig })
+    };
 
     return server;
 }
