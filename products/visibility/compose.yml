@@ -1,0 +1,48 @@
+services:
+  database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: flocca_visibility
+      POSTGRES_USER: visibility
+      POSTGRES_PASSWORD: ${VISIBILITY_DB_PASSWORD:?Set a database password}
+    volumes:
+      - visibility_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U visibility -d flocca_visibility"]
+      interval: 5s
+      retries: 10
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      VISIBILITY_DATABASE_URL: postgresql://visibility:${VISIBILITY_DB_PASSWORD}@database:5432/flocca_visibility
+    command: ["node", "scripts/manage.js", "migrate"]
+    depends_on:
+      database:
+        condition: service_healthy
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      VISIBILITY_DATABASE_URL: postgresql://visibility:${VISIBILITY_DB_PASSWORD}@database:5432/flocca_visibility
+      HOST: 0.0.0.0
+      NODE_ENV: production
+    ports: ["127.0.0.1:4100:4100"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  worker:
+    build: .
+    restart: unless-stopped
+    init: true
+    shm_size: 1gb
+    env_file: .env
+    environment:
+      VISIBILITY_DATABASE_URL: postgresql://visibility:${VISIBILITY_DB_PASSWORD}@database:5432/flocca_visibility
+    command: ["node", "src/worker.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+volumes:
+  visibility_data:

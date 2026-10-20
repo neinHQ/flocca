@@ -35,3 +35,7 @@ resources/**/node_modules/**
 resources/backend/node_modules/**
 resources/**/tests/**
 resources/**/__pycache__/**
+
+# Separate Flocca services are not extension assets
+products/**
+.github/**

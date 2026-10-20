@@ -46,3 +46,10 @@ Use Flocca to:
 ---
 
 [Website](https://flocca.app) | [Documentation](https://flocca.app/docs) | [Issues](https://github.com/neinHQ/flocca-vscode/issues)
+
+## Flocca AI Visibility
+
+The separate internal AI visibility and citation monitoring product lives in
+[`products/visibility`](products/visibility/README.md). It includes website audits,
+OpenAI and Perplexity API adapters, tenant-scoped reports, and a monitoring worker.
+See its setup guide and Phase 1 acceptance record before running live samples.

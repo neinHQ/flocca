@@ -11,3 +11,6 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+
+# Visibility browser verification
+products/visibility/test-results/

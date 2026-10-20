@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Flocca Visibility · Internal</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <a href="/" class="wordmark">flocca<span>Visibility</span></a
+      ><span class="badge">INTERNAL PREVIEW</span>
+      <div id="account" hidden>
+        <label
+          >Organization
+          <select id="tenant"></select></label
+        ><button id="logout" class="quiet">Sign out</button>
+      </div>
+    </header>
+    <main>
+      <div id="notice" role="status" aria-live="polite"></div>
+      <section id="login-panel" class="login card">
+        <span class="eyebrow">AI VISIBILITY & CITATIONS</span>
+        <h1>See where your business appears.</h1>
+        <p>Evidence from AI search, with a clear path to improvement.</p>
+        <form id="login">
+          <label
+            >Email<input
+              name="email"
+              type="email"
+              autocomplete="username"
+              required /></label
+          ><label
+            >Password<input
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required /></label
+          ><button>Sign in</button>
+        </form>
+        <p class="muted">
+          Access is provisioned by your internal administrator.
+        </p>
+      </section>
+      <div id="workspace" hidden>
+        <div class="intro">
+          <div>
+            <span class="eyebrow">YOUR AI SEARCH OBSERVATORY</span>
+            <h1>Visibility, backed by evidence.</h1>
+            <p>Monitor mentions. Inspect sources. Make informed changes.</p>
+          </div>
+          <div id="budget" class="card"></div>
+        </div>
+        <section aria-labelledby="coverage-title">
+          <h2 id="coverage-title">Provider coverage</h2>
+          <div id="providers" class="provider-grid"></div>
+          <p class="muted">
+            Official API samples are separate from consumer app rankings.
+            Configured providers still require live validation.
+          </p>
+        </section>
+        <div class="toolbar">
+          <label>Brand<select id="brand"></select></label
+          ><button id="audit">Audit website</button
+          ><button id="run">Run active prompts</button
+          ><button id="refresh" class="quiet">Refresh</button
+          ><button id="export" class="quiet">Export CSV</button>
+        </div>
+        <details class="card admin">
+          <summary>Create or edit a brand</summary>
+          <form id="brand-form">
+            <input type="hidden" name="id" />
+            <div class="form-grid">
+              <label>Name<input name="name" required maxlength="100" /></label
+              ><label
+                >Canonical domain<input
+                  name="domain"
+                  placeholder="example.com"
+                  required /></label
+              ><label
+                >Language<input name="language" value="en" required /></label
+              ><label>Region<input name="region" value="US" required /></label>
+            </div>
+            <label
+              >Canonical page URLs, separated by commas<input
+                name="canonicalUrls"
+                placeholder="https://example.com/product" /></label
+            ><label>Aliases, separated by commas<input name="aliases" /></label
+            ><label
+              >Ambiguous aliases, separated by commas<input
+                name="ambiguousAliases" /></label
+            ><label
+              >Competitors (JSON array: name, domain, aliases)<textarea
+                name="competitors"
+                rows="3"
+              >
+[]</textarea></label
+            ><button>Save brand</button
+            ><button id="edit-brand" type="button" class="quiet">
+              Load selected brand</button
+            ><button type="reset" class="quiet">Clear</button>
+          </form>
+        </details>
+        <details class="card admin">
+          <summary>Manage prompt library</summary>
+          <form id="prompt-form">
+            <input type="hidden" name="id" /><label
+              >Question<textarea
+                name="text"
+                required
+                rows="2"
+                maxlength="4000"
+              ></textarea>
+            </label>
+            <div class="form-grid">
+              <label
+                >Category<input
+                  name="category"
+                  value="unbranded"
+                  required /></label
+              ><label
+                >Language<input name="language" value="en" required /></label
+              ><label>Region<input name="region" value="US" required /></label
+              ><label
+                >Schedule in minutes (blank for manual)<input
+                  name="intervalMinutes"
+                  type="number"
+                  min="60"
+                  max="525600"
+              /></label>
+            </div>
+            <fieldset>
+              <legend>Providers</legend>
+              <div id="prompt-providers"></div>
+            </fieldset>
+            <button>Save prompt</button
+            ><button type="reset" class="quiet">Clear</button>
+          </form>
+          <h3>Import a prompt set</h3>
+          <form id="import-form">
+            <label
+              >JSON array of prompts<textarea
+                name="prompts"
+                rows="3"
+                required
+                placeholder='[{"text":"Which tools help with…?","providers":["openai"],"language":"en","region":"US"}]'
+              ></textarea></label
+            ><button class="quiet">Import</button>
+          </form>
+          <div id="prompts"></div>
+        </details>
+        <div id="report-area" hidden>
+          <div class="toolbar">
+            <h2>Observation cohorts</h2>
+            <label
+              >Provider<select id="filter-provider">
+                <option value="">All</option>
+              </select></label
+            ><label>From<input id="filter-from" type="date" /></label
+            ><label>Through<input id="filter-to" type="date" /></label
+            ><button id="filter" class="quiet">Apply</button>
+          </div>
+          <p class="muted">
+            Each row keeps prompt version, model and locale separate. Rates
+            exclude failed, ungrounded and uncertain matches. Zero samples
+            display as unavailable.
+          </p>
+          <div id="cohorts" class="table-wrap"></div>
+          <section class="card">
+            <h2>Daily observations</h2>
+            <div id="trends"></div>
+          </section>
+          <section class="card">
+            <h2>Audit findings & recommendations</h2>
+            <p id="audit-method" class="muted"></p>
+            <div id="findings"></div>
+          </section>
+          <details class="card admin">
+            <summary>Record a deployed improvement</summary>
+            <form id="change-form">
+              <label
+                >Finding<select
+                  name="findingId"
+                  id="finding-select"
+                  required
+                ></select></label
+              ><label
+                >What changed?<textarea
+                  name="description"
+                  required
+                ></textarea></label
+              ><label
+                >Deployed change / pull request URL<input
+                  type="url"
+                  name="link"
+                  required /></label
+              ><label
+                >Deployment time<input
+                  type="datetime-local"
+                  name="deployedAt"
+                  required /></label
+              ><button>Record change</button>
+            </form>
+          </details>
+          <section class="card">
+            <h2>Changes & subsequent observations</h2>
+            <p class="muted">
+              Matching cohorts use seven-day windows before and after
+              deployment. Timeline comparisons describe observed differences;
+              they do not establish that a change caused them.
+            </p>
+            <div id="changes"></div>
+            <div id="comparisons"></div>
+          </section>
+          <section class="card">
+            <h2>Answer evidence</h2>
+            <div id="runs"></div>
+            <pre id="evidence" hidden tabindex="0"></pre>
+          </section>
+          <details class="card admin">
+            <summary>Import aggregated referral analytics</summary>
+            <p>
+              Import each source/date batch once. Known AI referrers are
+              separate from direct or unattributed traffic. No personal event
+              data.
+            </p>
+            <form id="referral-form">
+              <label
+                >Source or export reference<input
+                  name="source"
+                  required /></label
+              ><label
+                >Rows (JSON: date, referrer, count)<textarea
+                  name="rows"
+                  required
+                  rows="3"
+                  placeholder='[{"date":"2026-10-20","referrer":"https://perplexity.ai/","count":12}]'
+                ></textarea></label
+              ><button>Import</button>
+            </form>
+          </details>
+          <section class="card">
+            <h2>Referral traffic</h2>
+            <div id="referrals"></div>
+          </section>
+        </div>
+        <section class="card">
+          <h2>Run queue</h2>
+          <div id="jobs"></div>
+        </section>
+        <section class="card">
+          <h2>Provider usage & costs</h2>
+          <div id="usage"></div>
+        </section>
+        <details class="card">
+          <summary>Administrative events</summary>
+          <div id="events"></div>
+        </details>
+        <footer>
+          Internal research tool · No guaranteed citations, rankings, traffic or
+          sales.
+        </footer>
+      </div>
+    </main>
+  </body>
+</html>

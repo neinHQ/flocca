@@ -390,7 +390,10 @@
     "openvsx:publish": "npx ovsx publish -p $OPEN_VSX_TOKEN",
     "openvsx:publish:patch": "npx ovsx publish patch -p $OPEN_VSX_TOKEN",
     "openvsx:publish:minor": "npx ovsx publish minor -p $OPEN_VSX_TOKEN",
-    "openvsx:publish:major": "npx ovsx publish major -p $OPEN_VSX_TOKEN"
+    "openvsx:publish:major": "npx ovsx publish major -p $OPEN_VSX_TOKEN",
+    "visibility:start": "npm --prefix products/visibility start",
+    "visibility:worker": "npm --prefix products/visibility run worker",
+    "visibility:test": "npm --prefix products/visibility test"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
