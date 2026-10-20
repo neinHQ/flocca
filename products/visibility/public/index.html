@@ -217,6 +217,7 @@
             <h2>Answer evidence</h2>
             <div id="runs"></div>
             <pre id="evidence" hidden tabindex="0"></pre>
+            <div id="evidence-suggestions"></div>
           </section>
           <details class="card admin">
             <summary>Import aggregated referral analytics</summary>
@@ -245,6 +246,320 @@
             <div id="referrals"></div>
           </section>
         </div>
+        <section id="validation-panel" class="card" hidden>
+          <span class="eyebrow">PHASE 2 · INTERNAL VALIDATION</span>
+          <h2>Controlled studies</h2>
+          <p>
+            Freeze a prompt set before the baseline. Review real responses,
+            verify deployed improvements, and record an evidence-based decision.
+          </p>
+          <details class="admin">
+            <summary>Create a frozen study</summary>
+            <form id="study-create">
+              <label
+                >Study name<input name="name" required maxlength="150"
+              /></label>
+              <fieldset>
+                <legend>Prompts to freeze</legend>
+                <div id="study-prompts"></div>
+              </fieldset>
+              <div class="form-grid">
+                <label
+                  >Reviews per provider<input
+                    name="minReviewedPerProvider"
+                    type="number"
+                    min="1"
+                    value="3"
+                    required /></label
+                ><label
+                  >Answers per provider / stage<input
+                    name="minCompletedPerStage"
+                    type="number"
+                    min="1"
+                    value="10"
+                    required /></label
+                ><label
+                  >Minimum precision<input
+                    name="minPrecision"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step=".01"
+                    value=".95"
+                    required /></label
+                ><label
+                  >Minimum recall<input
+                    name="minRecall"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step=".01"
+                    value=".95"
+                    required /></label
+                ><label
+                  >Maximum failure rate<input
+                    name="maxFailureRate"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step=".01"
+                    value=".1"
+                    required /></label
+                ><label
+                  >Maximum uncertain rate<input
+                    name="maxUncertainRate"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step=".01"
+                    value=".05"
+                    required /></label
+                ><label
+                  >Maximum USD / 1,000 answers<input
+                    name="maxCostPer1000Usd"
+                    type="number"
+                    min=".01"
+                    step=".01"
+                    value="50"
+                    required
+                /></label>
+              </div>
+              <p class="muted">
+                These starting thresholds are proposed, not established accuracy
+                claims. Once saved they cannot be edited.
+              </p>
+              <button>Freeze study</button>
+            </form>
+          </details>
+          <div class="toolbar">
+            <label>Study<select id="study-select"></select></label
+            ><button id="study-refresh" class="quiet">Refresh study</button
+            ><button id="study-export" class="quiet">
+              Export validation CSV
+            </button>
+          </div>
+          <div id="study-detail" hidden>
+            <p id="study-status" role="status"></p>
+            <details>
+              <summary>Frozen methodology and manifest</summary>
+              <pre id="study-manifest"></pre>
+            </details>
+            <h3>Release evidence checks</h3>
+            <div id="study-gates"></div>
+            <h3>Extraction accuracy and sample size</h3>
+            <div id="study-quality"></div>
+            <h3>Matching baseline and follow-up cohorts</h3>
+            <div id="study-comparisons"></div>
+            <h3>Cost and worker reliability</h3>
+            <pre id="study-operations"></pre>
+            <details class="admin">
+              <summary>Queue a controlled batch</summary>
+              <form id="study-batch">
+                <div class="form-grid">
+                  <label
+                    >Stage<select name="stage">
+                      <option value="baseline">Baseline</option>
+                      <option value="followup">
+                        Follow-up after deployment
+                      </option>
+                    </select></label
+                  ><label
+                    >Repetitions per prompt/provider<input
+                      name="repetitions"
+                      type="number"
+                      min="1"
+                      max="20"
+                      value="1"
+                      required
+                  /></label>
+                </div>
+                <fieldset>
+                  <legend>Deployed changes for follow-up</legend>
+                  <div id="study-change-list"></div>
+                </fieldset>
+                <button>Queue batch</button>
+              </form>
+            </details>
+            <h3>Human extraction review</h3>
+            <p id="study-sampling" class="muted"></p>
+            <label
+              ><input type="checkbox" id="study-show-reviewed" /> Show
+              previously reviewed samples for correction</label
+            >
+            <div id="study-review-queue"></div>
+            <pre id="study-raw" hidden tabindex="0"></pre>
+            <div id="study-suggestions"></div>
+            <div class="admin">
+              <form id="study-review" hidden>
+                <input name="executionId" type="hidden" /><label
+                  >Expected citation URLs, one per line<textarea
+                    name="citationUrls"
+                    rows="3"
+                  ></textarea></label
+                ><label
+                  >Expected mentioned brand/competitor domains, one per
+                  line<textarea
+                    name="mentionDomains"
+                    rows="2"
+                  ></textarea></label
+                ><label
+                  ><input name="reviewedRaw" type="checkbox" required /> I
+                  inspected the raw response and labeled its citations and
+                  mentions independently.</label
+                ><label
+                  >Reviewer notes<textarea
+                    name="notes"
+                    required
+                  ></textarea></label
+                ><button>Save extraction review</button>
+              </form>
+            </div>
+            <details class="admin">
+              <summary>Verify a recommendation</summary>
+              <form id="study-recommendation">
+                <label
+                  >Deployed change<select
+                    name="changeId"
+                    id="study-recommendation-change"
+                    required
+                  ></select></label
+                ><label
+                  >Developer assessment<select name="verdict">
+                    <option value="actionable">Actionable</option>
+                    <option value="verified">Implemented and verified</option>
+                    <option value="not_useful">Not useful</option>
+                  </select></label
+                ><label
+                  >Verification evidence URL<input
+                    name="evidenceUrl"
+                    type="url"
+                    required /></label
+                ><label
+                  >Developer notes<textarea
+                    name="notes"
+                    required
+                  ></textarea></label
+                ><button>Record assessment</button>
+              </form>
+            </details>
+            <details class="admin">
+              <summary>
+                Record or resolve an operational drill / incident
+              </summary>
+              <form id="study-incident">
+                <label
+                  >Existing incident (blank for new)<select
+                    name="incidentId"
+                    id="study-incident-id"
+                  ></select></label
+                ><label
+                  >Type<select name="type">
+                    <option value="drill">Drill</option>
+                    <option value="production">Production incident</option>
+                  </select></label
+                ><label
+                  >Scenario<input
+                    name="scenario"
+                    required
+                    placeholder="Provider outage, schema change, budget stop…" /></label
+                ><label
+                  >Status<select name="status">
+                    <option value="open">Open</option>
+                    <option value="resolved">Resolved</option>
+                  </select></label
+                ><label
+                  >Evidence URL<input
+                    name="evidenceUrl"
+                    type="url"
+                    required /></label
+                ><label
+                  >What happened and how it was handled<textarea
+                    name="notes"
+                    required
+                  ></textarea></label
+                ><button>Record incident evidence</button>
+              </form>
+            </details>
+            <details class="owner">
+              <summary>Owner phase gate decision</summary>
+              <form id="study-decision">
+                <label
+                  >Decision<select name="outcome">
+                    <option value="hold">Hold for more evidence</option>
+                    <option value="approve_beta" id="study-approve">
+                      Approve private beta scope
+                    </option>
+                  </select></label
+                ><label
+                  >Decision notes<textarea name="notes" required></textarea>
+                </label>
+                <p class="muted">
+                  Approval records this evidence snapshot. It does not enable
+                  signup, billing, deployment or advance phases automatically.
+                </p>
+                <button>Record owner decision</button>
+              </form>
+            </details>
+          </div>
+        </section>
+        <details class="card admin">
+          <summary>Provider validation dispositions</summary>
+          <p>
+            Mark each provider validated with successful raw-response evidence,
+            blocked with a reason, or pending to reopen testing. Configuration
+            alone is not validation.
+          </p>
+          <form id="provider-check">
+            <label
+              >Provider<select
+                name="provider"
+                id="provider-check-provider"
+              ></select></label
+            ><label
+              >Status<select name="status">
+                <option value="pending">Pending validation</option>
+                <option value="validated">
+                  Validated against current configuration
+                </option>
+                <option value="blocked">Blocked</option>
+              </select></label
+            ><label
+              >Evidence execution IDs, separated by commas<input
+                name="evidenceExecutionIds" /></label
+            ><label
+              >Review notes<textarea name="notes" required></textarea></label
+            ><button>Record disposition</button>
+          </form>
+        </details>
+        <details class="card owner">
+          <summary>Reconcile provider usage</summary>
+          <form id="usage-reconcile">
+            <label
+              >Usage attempt<select
+                name="usageId"
+                id="reconcile-usage"
+                required
+              ></select></label
+            ><label
+              >Actual billed USD<input
+                name="actualUsd"
+                type="number"
+                min="0"
+                step=".000001"
+                required /></label
+            ><label
+              >Billing evidence URL<input
+                name="evidenceUrl"
+                type="url"
+                required /></label
+            ><label
+              >Reconciliation notes<textarea
+                name="notes"
+                required
+              ></textarea></label
+            ><button>Record actual charge</button>
+          </form>
+        </details>
         <section class="card">
           <h2>Run queue</h2>
           <div id="jobs"></div>

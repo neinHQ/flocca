@@ -1,3 +1,8 @@
+import {
+  validationRoute,
+  tenantValidationRoute,
+} from "./validation-service.js";
+import { snapshot, fingerprint } from "./providers.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
@@ -18,6 +23,7 @@ const assets = new Map([
   ["/", "index.html"],
   ["/app.js", "app.js"],
   ["/style.css", "style.css"],
+  ["/validation.js", "validation.js"],
 ]);
 export function app(pool, { env = process.env } = {}) {
   const limits = new Map();
@@ -45,7 +51,7 @@ export function app(pool, { env = process.env } = {}) {
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+      "default-src 'self'; frame-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     );
     try {
       const requestUrl = new URL(req.url, "http://localhost");
@@ -151,11 +157,55 @@ export function app(pool, { env = process.env } = {}) {
             )
           ).rows,
         });
-      const tenant = req.headers["x-visibility-tenant"];
+      const tenant =
+        path === "/api/search-suggestions"
+          ? requestUrl.searchParams.get("tenant")
+          : req.headers["x-visibility-tenant"];
       const member = await membership(pool, user.id, tenant);
       if (!member) return send(403, { error: "Organization access denied" });
       if (req.method !== "GET" && !["OWNER", "ADMIN"].includes(member.role))
         return send(403, { error: "Administrator access required" });
+      if (path === "/api/search-suggestions" && req.method === "GET") {
+        const brandId = requestUrl.searchParams.get("brand"),
+          executionId = requestUrl.searchParams.get("execution");
+        if (!v.uuid(brandId) || !v.uuid(executionId))
+          return send(400, { error: "Invalid evidence reference" });
+        const evidence = (
+          await pool.query(
+            "SELECT data FROM visibility.executions WHERE tenant_id=$1 AND brand_id=$2 AND id=$3",
+            [tenant, brandId, executionId],
+          )
+        ).rows[0];
+        if (!evidence || evidence.data.provider !== "gemini")
+          return send(404, { error: "Suggestions not found" });
+        const html = evidence.data.providerMetadata?.searchSuggestions;
+        if (typeof html !== "string")
+          return send(404, { error: "Suggestions unavailable" });
+        res.setHeader(
+          "Content-Security-Policy",
+          "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-popups allow-popups-to-escape-sandbox",
+        );
+        res.setHeader("X-Frame-Options", "SAMEORIGIN");
+        return send(200, html, "text/html");
+      }
+      try {
+        if (
+          await tenantValidationRoute(pool, {
+            tenant,
+            user,
+            member,
+            path,
+            body,
+            method: req.method,
+            send,
+            env,
+          })
+        )
+          return;
+      } catch (e) {
+        if (e.code) throw e;
+        return send(e.status || 400, { error: e.message });
+      }
       if (path === "/api/state" && req.method === "GET") {
         const [brands, prompts, jobs, usage, events, usageRecords] =
           await Promise.all([
@@ -184,6 +234,12 @@ export function app(pool, { env = process.env } = {}) {
               [tenant],
             ),
           ]);
+        const checks = (
+          await pool.query(
+            "SELECT * FROM visibility.provider_checks WHERE tenant_id=$1 ORDER BY created_at,id",
+            [tenant],
+          )
+        ).rows;
         return send(200, {
           brands: brands.rows,
           prompts: prompts.rows,
@@ -191,7 +247,24 @@ export function app(pool, { env = process.env } = {}) {
           budget: usage.rows[0],
           events: events.rows,
           usage: usageRecords.rows,
-          providers: coverage(env),
+          providers: coverage(env).map((p) => {
+            const check = checks.filter((c) => c.provider === p.id).at(-1);
+            const valid =
+              check?.data.status === "validated" &&
+              check.data.configurationFingerprint ===
+                fingerprint(snapshot(p.id, env));
+            return {
+              ...p,
+              ready: p.ready && check?.data.status !== "blocked",
+              status:
+                check?.data.status === "blocked"
+                  ? `blocked: ${check.data.notes}`
+                  : valid && p.ready
+                    ? "live evidence validated"
+                    : p.status,
+              validation: check?.data || null,
+            };
+          }),
           role: member.role,
         });
       }
@@ -223,6 +296,25 @@ export function app(pool, { env = process.env } = {}) {
         )
       ).rows[0];
       if (!row) return send(404, { error: "Brand not found" });
+      if (action === "studies" || action.startsWith("studies/")) {
+        try {
+          return await validationRoute(pool, {
+            tenant,
+            user,
+            member,
+            brand: row,
+            action,
+            body,
+            method: req.method,
+            send,
+            env,
+            key: req.headers["idempotency-key"] || randomUUID(),
+          });
+        } catch (e) {
+          if (e.code) throw e;
+          return send(e.status || 400, { error: e.message });
+        }
+      }
       if (!action && req.method === "PUT") {
         let data;
         try {

@@ -51,5 +51,5 @@ Use Flocca to:
 
 The separate internal AI visibility and citation monitoring product lives in
 [`products/visibility`](products/visibility/README.md). It includes website audits,
-OpenAI and Perplexity API adapters, tenant-scoped reports, and a monitoring worker.
-See its setup guide and Phase 1 acceptance record before running live samples.
+six provider API adapters, tenant-scoped reports, a monitoring worker, and controlled validation studies.
+See its setup guide and phase acceptance records before running live samples.

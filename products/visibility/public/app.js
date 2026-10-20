@@ -1,3 +1,4 @@
+import { validationUI } from "/validation.js";
 const $ = (id) => document.getElementById(id);
 let state,
   report,
@@ -106,10 +107,32 @@ function options(select, items, value) {
   }
   if (value) select.value = value;
 }
+const validation = validationUI({
+  api,
+  path,
+  node,
+  button,
+  table,
+  options,
+  date,
+  rate,
+  guard,
+  notice,
+  getTenant: () => tenant,
+  getBrand: () => brand,
+  getState: () => state,
+  getReport: () => report,
+  refresh: () => refresh(),
+});
 async function loadReport() {
   if (!brand) {
     $("report-area").hidden = true;
     return;
+  }
+  if (report?.brand?.id !== brand) {
+    $("evidence").hidden = true;
+    $("evidence").textContent = "";
+    $("evidence-suggestions").replaceChildren();
   }
   const q = new URLSearchParams();
   if ($("filter-provider").value) q.set("provider", $("filter-provider").value);
@@ -244,6 +267,20 @@ async function loadReport() {
           button("Inspect", async () => {
             const raw = await api(path(`evidence/${r.id}`));
             $("evidence").textContent = JSON.stringify(raw, null, 2);
+            $("evidence-suggestions").replaceChildren();
+            if (
+              raw.provider === "gemini" &&
+              raw.providerMetadata?.searchSuggestions
+            ) {
+              const frame = node("iframe");
+              frame.title = "Google Search Suggestions";
+              frame.src = `/api/search-suggestions?${new URLSearchParams({ tenant, brand, execution: r.id })}`;
+              frame.setAttribute(
+                "sandbox",
+                "allow-popups allow-popups-to-escape-sandbox",
+              );
+              $("evidence-suggestions").append(frame);
+            }
             $("evidence").hidden = false;
             $("evidence").focus();
           }),
@@ -391,6 +428,7 @@ async function refresh() {
     $(id).disabled = !brand || state.role === "MEMBER";
   $("export").disabled = !brand;
   await loadReport();
+  await validation.load();
 }
 async function init() {
   const me = await api("me");

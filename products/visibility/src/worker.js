@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { database, transaction, enqueue, event, reserve } from "./db.js";
-import { coverage, config, execute } from "./providers.js";
+import {
+  coverage,
+  config,
+  execute,
+  executionConfig,
+  snapshot,
+  fingerprint,
+  ADAPTER_VERSION,
+} from "./providers.js";
 import { mentions } from "./metrics.js";
 import { audit } from "./crawler.js";
 import { seal } from "./secrets.js";
@@ -132,15 +140,27 @@ export async function processOne(
       }
       if (!coverage(env).find((x) => x.id === p.provider)?.ready)
         throw new Error("Provider not configured or terms not approved");
+      const disposition = (
+        await pool.query(
+          "SELECT data FROM visibility.provider_checks WHERE tenant_id=$1 AND provider=$2 ORDER BY created_at DESC,id DESC LIMIT 1",
+          [tenant, p.provider],
+        )
+      ).rows[0];
+      if (disposition?.data.status === "blocked")
+        throw new Error(
+          "Provider is blocked by the internal validation review",
+        );
       // Encryption validation happens before a potentially charged request.
       seal({ check: true }, tenant, env);
-      const c = config(p.provider, env);
+      const c = executionConfig(p.provider, p, env);
       const inputBound =
         Buffer.byteLength(
           `${p.text}\n\nRequested answer language: ${p.language}. Geographic context: ${p.region}.`,
         ) * c.input;
       const conservative = Math.ceil(
-        inputBound + 1200 * c.output + c.search * 1e6,
+        inputBound +
+          c.maxOutputTokens * c.output +
+          c.searchAllowance * c.search * 1e6,
       );
       if (c.reservation < conservative)
         throw new Error(
@@ -185,7 +205,22 @@ export async function processOne(
         prompt: p.text,
         language: p.language,
         region: p.region,
-        parameters: { ...output.request, input: undefined },
+        parameters: {
+          ...output.request,
+          input: undefined,
+          contents: undefined,
+          messages: undefined,
+        },
+        executionConfig: p.executionConfig || snapshot(p.provider, env),
+        configurationFingerprint: fingerprint(
+          p.executionConfig || snapshot(p.provider, env),
+        ),
+        extractionVersion: ADAPTER_VERSION,
+        studyId: job.study_id,
+        batchId: job.batch_id,
+        studyStage: p.studyStage,
+        providerMetadata: output.providerMetadata || null,
+        searchCalls: output.searchCalls ?? null,
         brandSnapshot: p.brand,
         text: output.text,
         citations: output.citations,
@@ -266,6 +301,14 @@ export async function processOne(
               job.brand_id,
               {
                 status,
+                studyId: job.study_id,
+                batchId: job.batch_id,
+                studyStage: p.studyStage,
+                brandSnapshot: p.brand,
+                parameters: p.executionConfig || null,
+                configurationFingerprint: fingerprint(
+                  p.executionConfig || snapshot(p.provider, env),
+                ),
                 provider: p.provider,
                 model: config(p.provider, env).model || null,
                 promptId: p.promptId,

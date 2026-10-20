@@ -355,3 +355,36 @@ label {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+#study-gates,
+#study-quality,
+#study-comparisons,
+#study-review-queue {
+  overflow-x: auto;
+  max-width: 100%;
+}
+#study-prompts label,
+#study-change-list label {
+  display: block;
+}
+#study-review input[type="checkbox"],
+#study-change-list input,
+#study-prompts input {
+  width: auto;
+  margin-right: 8px;
+}
+#study-suggestions iframe {
+  width: 100%;
+  min-height: 160px;
+  border: 1px solid #dce4de;
+  border-radius: 8px;
+}
+#study-show-reviewed {
+  width: auto;
+  margin: 0 8px 0 0;
+}
+#evidence-suggestions iframe {
+  width: 100%;
+  min-height: 160px;
+  border: 1px solid #dce4de;
+  border-radius: 8px;
+}

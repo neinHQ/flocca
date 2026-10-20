@@ -1,6 +1,6 @@
 # Flocca Visibility
 
-Internal website auditing and AI citation monitoring, separate from Flocca's MCP extension. Phase 1 provides a web dashboard, PostgreSQL API and durable worker. It has no public registration, checkout or pricing UI. Existing extension authentication and billing routes are not mounted.
+Internal website auditing and AI citation monitoring, separate from Flocca's MCP extension. The internal product provides a web dashboard, PostgreSQL API, durable worker and controlled validation studies. It has no public registration, checkout or pricing UI. Existing extension authentication and billing routes are not mounted.
 
 ## Local setup
 
@@ -35,12 +35,17 @@ This is an infrastructure-admin command, not a public endpoint. Members can read
 
 ## Provider configuration
 
-Only OpenAI Search API and Perplexity Agent API have Phase 1 adapters. Claude, Gemini, Grok and Meta Muse Spark appear as planned and cannot execute. No adapter is advertised as live-validated by configuration alone.
+Phase 2 adds Claude Search, Gemini Search Grounding, Grok Search and Meta Muse Spark adapters to the existing OpenAI and Perplexity adapters. All six remain disabled until their access, model, terms and rates are explicitly configured. No adapter is advertised as live-validated by configuration alone. See [Phase 2 acceptance](PHASE2_ACCEPTANCE.md) for the remaining operational gates.
 
 For each implemented provider, supply its API key, exact model, explicit terms approval, three current USD rates and per-execution reservation ceiling in `.env`. Every field is required; explicit zero rates are permitted, blank rates are not. Terms approval means the operator has reviewed account access, prompt/response storage, retention and display rights. Model selection is explicit; there is no hidden fallback. No keys are returned to browsers or placed in logs.
 
 - OpenAI: POST `https://api.openai.com/v1/responses`, `web_search`, at most one tool call, 1,200 output tokens, `store:false`.
 - Perplexity: POST `https://api.perplexity.ai/v1/agent`, explicit model, `web_search`, at most one tool call, 1,200 output tokens. This uses the current Agent API rather than legacy Sonar Chat Completions.
+
+- Claude: POST `https://api.anthropic.com/v1/messages`, basic `web_search_20250305`, `max_uses:1`, 1,200 output tokens. Search errors inside HTTP 200 and paused/truncated turns fail closed.
+- Gemini: POST `https://generativelanguage.googleapis.com/v1beta/models/MODEL:generateContent`, `google_search`, one candidate, 1,200 output tokens. Set `GEMINI_SEARCH_RESERVE_CALLS` explicitly. This is a reservation allowance, not an enforced search-query ceiling. Grounding supports determine citations; thought parts and unused grounding chunks are excluded.
+- Grok: POST `https://api.x.ai/v1/responses`, `web_search`, at most one tool call. Encountered source lists are not counted as answer citations.
+- Meta: POST `https://api.meta.ai/v1/responses`, `web_search`, at most one tool call. Labels refer to the Model API, not the Muse consumer app.
 
 The model may decline to search. Successful ungrounded answers remain visible but are excluded from citation/mention rate denominators. Region/language are prompt context, not guaranteed geographic emulation. Responses are samples from the named API, not consumer-app rankings or personalized-agent observations.
 
@@ -48,6 +53,11 @@ Contracts checked against official documentation on 20 October 2026:
 
 - [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search)
 - [Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart)
+- [Claude web search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool)
+- [Gemini grounding](https://ai.google.dev/gemini-api/docs/generate-content/google-search)
+- [Gemini current terms](https://ai.google.dev/gemini-api/terms)
+- [Grok citations](https://docs.x.ai/developers/tools/citations)
+- [Meta search grounding](https://dev.meta.ai/docs/cookbook/search-grounding)
 - [Perplexity migration guidance](https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview)
 
 ### Costs and recovery
@@ -113,3 +123,40 @@ Before staging: restrict network access to the internal team, enable database en
 Deploy dev/stage/prod with separate databases, secrets and provider keys. Migrations run transactionally under an advisory lock and record applied versions. Back up with `pg_dump` and test restoration into a separate database. Roll back the app image before considering schema rollback; preserve evidence and usage accounting. This first migration is additive in the `visibility` schema. No automatic phase advancement or public deployment occurs.
 
 Phase 1 uses one dispatcher and per-process HTTP rate limiting. Before horizontally scaling API instances or admitting beta customers, add a shared ingress rate limiter, durable alert delivery, full retention/deletion workflows and production-scale pagination. Current launch gate remains internal-only and subject to owner approval.
+
+## Phase 2 internal validation workflow
+
+Apply migrations with `npm run migrate`; migration 002 adds studies, batches, reviews, dispositions, validation evidence and reconciliation history, plus nullable study references on jobs. Existing Phase 1 records are preserved. Restart both API and worker together. Old studies refuse incompatible adapter versions; create a fresh manifest when adapter behavior changes rather than silently mixing results.
+
+1. Configure the providers available to the internal team. Select explicit account-supported models and current rates; review each provider's storage, display and access terms. Register only approved internal sites.
+2. Create consistent branded/unbranded prompts per product. In **Controlled studies**, select prompts and agree review/sample/accuracy/reliability/cost thresholds. Freeze the study. Prompt/model/locale/brand edits afterward do not rewrite the study.
+3. Queue a **baseline** with a documented repetition count. Each batch uses the frozen configuration and server-side deduplication. No missed historical observations are generated. Finish the baseline before deploying selected improvements.
+4. Inspect the raw answers and independently label expected citation URLs and mentioned tracked domains. The review queue uses deterministic hash ordering; it is a convenience sample, not random population coverage. Toggle previously reviewed samples to append corrections. The report uses the latest review per execution while retaining history. Precision and recall with no positive denominator remain unknown.
+5. Audit owned sites, apply selected improvements through ordinary development review, and record the deployed change against an actual finding. Verify the finding with evidence. Follow-up batches require changes deployed after the last grounded baseline observation; baseline is closed after follow-up begins.
+6. Compare matching prompt/configuration cohorts. Resolved model-version drift is flagged even when a requested alias is unchanged. Different provider/model/locale/prompt versions are not pooled as equivalent; missing and unresolved evidence remain visible.
+7. Review **Provider validation dispositions**. Validated requires successful grounded execution IDs matching the current configuration. Blocked prevents further dispatch; pending reopens testing. All six candidates need a validated or blocked disposition for a study's checks, and every measured provider must have matching validation and current access. No credential value is stored in the manifest.
+8. Review per-provider cost per 1,000 eligible answers, aggregate cost per 1,000 attempts and successful executions, retry overhead, unknown charges and timed worker attempts. Owners can reconcile a usage attempt with an actual USD charge and billing evidence URL; previous values remain in reconciliation history and events. Estimated charges retain conservative reservations. Unknown charges prevent the cost gate from passing.
+9. Record staging drills/incidents with scenario, evidence, status and resolution notes. Resolve open incidents. Export the repeatable study CSV and review its quality/cost/reliability evidence.
+10. An owner records **hold** or **approve private beta scope**. Approval is rejected until all study checks pass. The decision stores its evidence fingerprint and checks. New evidence, model/configuration changes or loss of access invalidate its current-snapshot status. It does not enable Phase 3 features or replace the project owner's multi-brand and prerequisite release review.
+
+Gemini answers retain required Search Suggestions. The dashboard displays provider HTML in an authenticated tenant-bound iframe with scripts, forms, base changes and parent access blocked by CSP/sandbox. Operator review of current provider display/storage terms is still required. Opaque Google redirect URLs are preserved as evidence and flagged; citation-rate denominators exclude answers whose cited domains cannot be evaluated. They do not become fabricated negatives or guessed brand matches. Such unresolved domains block the study's release checks.
+
+### Phase 2 API additions
+
+All existing authentication, tenant scoping and administrator-write rules apply. Billing reconciliation and gate decisions require OWNER membership.
+
+| Method     | Path                                                    | Purpose                                                                                                            |
+| ---------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| GET / POST | `/api/brands/:id/studies`                               | List studies / freeze a study manifest                                                                             |
+| GET        | `/api/brands/:id/studies/:studyId`                      | Quality, operations, comparisons and evidence-gate report                                                          |
+| GET        | `/api/brands/:id/studies/:studyId/report.csv`           | Export validation evidence and methodology                                                                         |
+| POST       | `/api/brands/:id/studies/:studyId/batches`              | Queue baseline/follow-up with `stage`, `repetitions`, optional `changeIds` and Idempotency-Key                     |
+| POST       | `/api/brands/:id/studies/:studyId/reviews/:executionId` | Record independent expected `citationUrls`, `mentionDomains`, `reviewedRaw`, `notes` after inspecting raw evidence |
+| POST       | `/api/brands/:id/studies/:studyId/recommendations`      | Developer `verdict`, `changeId`, `evidenceUrl`, `notes`                                                            |
+| POST       | `/api/brands/:id/studies/:studyId/incidents`            | Record drill/incident or update an existing `incidentId`; events retain history                                    |
+| POST       | `/api/brands/:id/studies/:studyId/decision`             | Owner `outcome` (`hold` / `approve_beta`) and `notes`                                                              |
+| POST       | `/api/provider-checks`                                  | `provider`, `status` (`pending` / `validated` / `blocked`), `evidenceExecutionIds`, `notes`                        |
+| POST       | `/api/usage/:usageId/reconcile`                         | Owner actual USD charge plus evidence URL and notes                                                                |
+| GET        | `/api/search-suggestions?tenant=…&brand=…&execution=…`  | Isolated Gemini suggestions document; query tenant is membership-checked                                           |
+
+Controlled-study tests include six synthetic provider loops, version/configuration drift, review corrections, premature gate rejection, blocked dispatch, invoice reconciliation and decision staleness. Real baseline answers, measured accuracy, website improvements and beta approval still require the actual internal trial. No provider keys or live observations are bundled into the application.

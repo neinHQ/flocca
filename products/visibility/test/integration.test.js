@@ -1,3 +1,4 @@
+import { phase2Suite } from "./phase2-suite.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -777,6 +778,16 @@ test("PostgreSQL product integration", { skip: !url }, async (t) => {
         assert.equal(result.contentDependsOnRendering, true);
       },
     );
+    await phase2Suite(t, {
+      pool,
+      call,
+      tenants,
+      users,
+      brands,
+      env,
+      base,
+      password,
+    });
     await t.test("logout revokes session", async () => {
       await call("logout", { method: "POST", body: {} });
       assert.equal((await call("me")).status, 401);

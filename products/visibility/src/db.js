@@ -34,11 +34,21 @@ export async function enqueue(
   kind,
   payload,
   key = randomUUID(),
+  scope = {},
 ) {
   const r = await c.query(
-    `INSERT INTO visibility.jobs(tenant_id,id,brand_id,kind,payload,dedupe_key)
-    VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,dedupe_key) DO NOTHING RETURNING *`,
-    [tenant, randomUUID(), brand, kind, payload, key],
+    `INSERT INTO visibility.jobs(tenant_id,id,brand_id,kind,payload,dedupe_key,study_id,batch_id)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant_id,dedupe_key) DO NOTHING RETURNING *`,
+    [
+      tenant,
+      randomUUID(),
+      brand,
+      kind,
+      payload,
+      key,
+      scope.studyId || null,
+      scope.batchId || null,
+    ],
   );
   return (
     r.rows[0] ||

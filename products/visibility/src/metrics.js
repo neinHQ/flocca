@@ -1,4 +1,4 @@
-import { normalizedUrl } from "./providers.js";
+import { normalizedUrl, canonical } from "./providers.js";
 export function domainMatch(url, domain) {
   try {
     const host = new URL(url).hostname.toLowerCase();
@@ -8,6 +8,10 @@ export function domainMatch(url, domain) {
   }
 }
 export function mentions(text, brand) {
+  // Citation targets and bare URLs are not prose mentions. Preserve visible link labels.
+  const answerText = text
+    .replace(/!?\[([^\]]*)\]\(https?:\/\/[^)]*\)/gi, "$1")
+    .replace(/https?:\/\/[^\s<>)\]]+/gi, "");
   const entities = [
     {
       name: brand.name,
@@ -26,7 +30,7 @@ export function mentions(text, brand) {
       return new RegExp(
         `(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`,
         "iu",
-      ).test(text.normalize("NFKC"));
+      ).test(answerText.normalize("NFKC"));
     });
     return {
       name: entity.name,
@@ -49,7 +53,10 @@ export function summarize(executions, brand, planned = executions.length) {
       (m) => m.domain === brand.domain && m.mentioned && !m.uncertain,
     ),
   ).length;
-  const cited = eligible.filter((e) =>
+  const citationEligible = eligible.filter(
+    (e) => !e.citations?.some((c) => c.unresolvedRedirect),
+  );
+  const cited = citationEligible.filter((e) =>
     e.citations?.some((c) => domainMatch(c.url, brand.domain)),
   ).length;
   const allMentions = eligible
@@ -64,7 +71,12 @@ export function summarize(executions, brand, planned = executions.length) {
       denominator: n,
       rate: n ? matched / n : null,
     },
-    citation: { numerator: cited, denominator: n, rate: n ? cited / n : null },
+    citation: {
+      numerator: cited,
+      denominator: citationEligible.length,
+      rate: citationEligible.length ? cited / citationEligible.length : null,
+    },
+    unresolvedCitationResponses: n - citationEligible.length,
     shareOfVoice: {
       numerator: matched,
       denominator: allMentions.length,
@@ -77,16 +89,18 @@ export function summarize(executions, brand, planned = executions.length) {
   };
 }
 export function cohortKey(d) {
-  return JSON.stringify([
-    d.provider,
-    d.model,
-    d.promptId,
-    d.promptVersion,
-    d.language,
-    d.region,
-    d.parameters,
-    d.brandSnapshot,
-  ]);
+  return JSON.stringify(
+    canonical([
+      d.provider,
+      d.model,
+      d.promptId,
+      d.promptVersion,
+      d.language,
+      d.region,
+      d.parameters,
+      d.brandSnapshot,
+    ]),
+  );
 }
 export function cohorts(rows, brand) {
   const groups = new Map();
